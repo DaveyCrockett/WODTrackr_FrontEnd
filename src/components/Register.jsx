@@ -1,9 +1,11 @@
 import "../CSS/login.css"
 import axios from "axios"
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
 
 function Register() {
+  const navigate = useNavigate()
   const [formValues, setFormValues] = useState({
     username: "",
     email: "",
@@ -27,12 +29,14 @@ function Register() {
     setErrorMessage("")
 
     try {
+      console.log("Submitting registration with values:", formValues)
       await axios.post("http://127.0.0.1:8000/api/users/auth/register/", {
         username: formValues.username,
         email: formValues.email,
         password: formValues.password,
         password2: formValues.password2,
       })
+      navigate("/login")
     } catch (error) {
       const message =
         error?.response?.data?.detail ||

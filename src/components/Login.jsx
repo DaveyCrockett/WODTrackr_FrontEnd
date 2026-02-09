@@ -1,16 +1,18 @@
 import "../CSS/login.css"
 import axios from "axios"
 import { useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
 
 function Login() {
+  const navigate = useNavigate()
   const [formValues, setFormValues] = useState({
     username: "",
     password: "",
     remember_me: false,
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isGuestSubmitting, setIsGuestSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
 
   const handleChange = (event) => {
@@ -27,11 +29,13 @@ function Login() {
     setErrorMessage("")
 
     try {
-          await axios.post("http://127.0.0.1:8000/api/users/auth/login/", {
-            username: formValues.username,
-            password: formValues.password,
-            remember_me: formValues.remember,
+      console.log("Submitting login with values:", formValues)
+      await axios.post("http://127.0.0.1:8000/api/users/auth/login/", {
+        username: formValues.username,
+        password: formValues.password,
+        remember_me: formValues.remember_me,
       })
+      navigate("/profile")
     } catch (error) {
       const message =
         error?.response?.data?.detail ||
@@ -39,6 +43,23 @@ function Login() {
       setErrorMessage(message)
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleGuestLogin = async () => {
+    setIsGuestSubmitting(true)
+    setErrorMessage("")
+
+    try {
+      await axios.post("http://127.0.0.1:8000/api/users/auth/guest/")
+      navigate("/guest")
+    } catch (error) {
+      const message =
+        error?.response?.data?.detail ||
+        "Guest login failed. Please try again."
+      setErrorMessage(message)
+    } finally {
+      setIsGuestSubmitting(false)
     }
   }
 
@@ -96,8 +117,8 @@ function Login() {
             <label className="checkbox">
               <input
                 type="checkbox"
-                name="remember"
-                checked={formValues.remember}
+                name="remember_me"
+                checked={formValues.remember_me}
                 onChange={handleChange}
               />
               Remember me
@@ -114,7 +135,14 @@ function Login() {
           </form>
           <div className="auth-footer">
             <span>Don't have an account?</span>
-            <Link className="link-btn" to="/guest">Guest Login</Link>
+            <button
+              className="link-btn"
+              type="button"
+              onClick={handleGuestLogin}
+              disabled={isGuestSubmitting}
+            >
+              {isGuestSubmitting ? "Starting guest..." : "Guest Login"}
+            </button>
           </div>
         </div>
       </section>
