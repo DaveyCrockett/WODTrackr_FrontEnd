@@ -52,7 +52,7 @@ function Login() {
 
     try {
       await axios.post("http://127.0.0.1:8000/api/users/auth/guest/")
-      navigate("/guest")
+      navigate("/exercises")
     } catch (error) {
       const message =
         error?.response?.data?.detail ||

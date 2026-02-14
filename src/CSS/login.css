@@ -104,7 +104,22 @@
   color: #1f2937;
 }
 
+.field select {
+  border-radius: 12px;
+  border: 1px solid #d0d7e3;
+  padding: 0.85rem 1rem;
+  font-size: 1rem;
+  background: #f8fafc;
+  color: #1f2937;
+}
+
 .field input:focus {
+  outline: none;
+  border-color: #1f2937;
+  box-shadow: 0 0 0 3px rgba(31, 41, 55, 0.15);
+}
+
+.field select:focus {
   outline: none;
   border-color: #1f2937;
   box-shadow: 0 0 0 3px rgba(31, 41, 55, 0.15);
@@ -185,6 +200,41 @@
   gap: 0.4rem;
   align-items: center;
   justify-content: center;
+}
+
+.exercise-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.exercise-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 1rem 1.2rem;
+  background: #ffffff;
+}
+
+.exercise-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.exercise-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.exercise-header span {
+  font-size: 0.85rem;
+  color: #5b6777;
+}
+
+.exercise-meta {
+  margin: 0.35rem 0 0;
+  color: #6b7280;
+  font-size: 0.9rem;
 }
 
 .link-btn {
