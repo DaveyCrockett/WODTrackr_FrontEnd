@@ -1,15 +1,22 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
+import homeIcon from "../assets/HomeIcon.png"
+import exerciseIcon from "../assets/ExerciseIcon.png"
+import calendarIcon from "../assets/CalendarIcon.png"
+import programsIcon from "../assets/ProgramsIconWhite.png"
+import settingsIcon from "../assets/SettingsIcon.png"
+import helpIcon from "../assets/HelpIcon.png"
+import wLogo from "../assets/WLogo.png"
 
 const navItems = [
-  { label: "Home", to: "/", icon: "/HomeIcon.png" },
-  { label: "Exercise", to: "/exercises", icon: "/ExerciseIcon.png" },
-  { label: "Calendar", to: "/calendar", icon: "/CalendarIcon.png" },
-  { label: "Programs", to: "/programs" },
-  { label: "Settings", to: "/settings", icon: "/SettingsIcon.png" },
-  { label: "Help", to: "/help", icon: "/HelpIcon.png" },
+  { label: "Home", to: "/", icon: homeIcon },
+  { label: "Exercise", to: "/exercises", icon: exerciseIcon },
+  { label: "Calendar", to: "/calendar", icon: calendarIcon },
+  { label: "Programs", to: "/programs", icon: programsIcon },
+  { label: "Settings", to: "/settings", icon: settingsIcon },
+  { label: "Help", to: "/help", icon: helpIcon },
 ]
 
-const DEFAULT_AVATAR = "/WLogo.png"
+const DEFAULT_AVATAR = wLogo
 
 const getStoredUser = () => {
   try {
@@ -36,7 +43,7 @@ function Navbar() {
   return (
     <nav className="nav-rail">
       <div className="nav-logo">
-        <img src="/WLogo.png" alt="WODTrackr logo" />
+        <img src={wLogo} alt="WODTrackr logo" />
       </div>
       <div className="nav-links">
         <div className="nav-profile-menu">
