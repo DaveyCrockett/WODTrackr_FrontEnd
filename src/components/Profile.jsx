@@ -1,38 +1,91 @@
-import "../CSS/login.css"
 import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
 
 function Profile() {
   return (
-    <main className="auth-page">
-      <section className="auth-card">
-        <div className="auth-hero">
-          <p className="auth-eyebrow">WODTrackr</p>
-          <h1>Your profile.</h1>
-          <p className="auth-lede">
-            Review your training stats and manage your account.
+    <section className="profile-page">
+      <header className="profile-header">
+        <div>
+          <p className="profile-eyebrow">WODTrackr</p>
+          <h1>Profile</h1>
+          <p className="profile-subtitle">
+            Review your training details and account information.
           </p>
         </div>
-        <div className="auth-form">
-          <div>
+        <button className="profile-edit-btn" type="button">
+          Edit profile
+        </button>
+      </header>
+
+      <div className="profile-grid">
+        <article className="profile-card profile-summary-card">
+          <div className="profile-identity">
             <img src={WODTrackrLogo} alt="WODTrackr Logo" />
-            <p className="auth-subtitle">Welcome back to WODTrackr.</p>
-          </div>
-          <div className="form-grid">
-            <div className="field">
-              <span>Username</span>
-              <span>Guest user</span>
+            <div>
+              <h2>Guest user</h2>
+              <p>Member since Jan 2026</p>
             </div>
-            <div className="field">
-              <span>Member since</span>
-              <span>Just now</span>
-            </div>
-            <button className="primary-btn" type="button">
-              Edit profile
-            </button>
           </div>
-        </div>
-      </section>
-    </main>
+          <dl className="profile-summary-list">
+            <div>
+              <dt>Current Program</dt>
+              <dd>Foundations</dd>
+            </div>
+            <div>
+              <dt>Weekly Goal</dt>
+              <dd>4 sessions</dd>
+            </div>
+            <div>
+              <dt>Streak</dt>
+              <dd>6 days</dd>
+            </div>
+          </dl>
+        </article>
+
+        <article className="profile-card">
+          <h2>Training stats</h2>
+          <div className="profile-stats-grid">
+            <div>
+              <p className="profile-stat-label">Workouts logged</p>
+              <p className="profile-stat-value">28</p>
+            </div>
+            <div>
+              <p className="profile-stat-label">This week</p>
+              <p className="profile-stat-value">3</p>
+            </div>
+            <div>
+              <p className="profile-stat-label">Personal records</p>
+              <p className="profile-stat-value">12</p>
+            </div>
+            <div>
+              <p className="profile-stat-label">Programs completed</p>
+              <p className="profile-stat-value">2</p>
+            </div>
+          </div>
+        </article>
+
+        <article className="profile-card profile-details-card">
+          <h2>Account details</h2>
+          <div className="profile-details-grid">
+            <div className="profile-detail-item">
+              <span>Email</span>
+              <strong>guest@wodtrackr.com</strong>
+            </div>
+            <div className="profile-detail-item">
+              <span>Timezone</span>
+              <strong>UTC -5</strong>
+            </div>
+            <div className="profile-detail-item">
+              <span>Preferred units</span>
+              <strong>LB / miles</strong>
+            </div>
+            <div className="profile-detail-item">
+              <span>Notifications</span>
+              <strong>Enabled</strong>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
   )
 }
 

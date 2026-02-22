@@ -15,6 +15,27 @@ function Login() {
   const [isGuestSubmitting, setIsGuestSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
 
+  const saveUserSession = (data, fallbackUsername) => {
+    const userData = data?.user ?? data ?? {}
+    const avatarUrl =
+      userData?.avatar_url ??
+      userData?.avatarUrl ??
+      userData?.profile_image ??
+      userData?.profileImage ??
+      null
+
+    const username =
+      userData?.username ?? userData?.name ?? fallbackUsername ?? "Guest user"
+
+    localStorage.setItem(
+      "wodtrackrUser",
+      JSON.stringify({
+        username,
+        avatarUrl,
+      })
+    )
+  }
+
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target
     setFormValues((prev) => ({
@@ -30,11 +51,12 @@ function Login() {
 
     try {
       console.log("Submitting login with values:", formValues)
-      await axios.post("http://127.0.0.1:8000/api/users/auth/login/", {
+      const response = await axios.post("http://127.0.0.1:8000/api/users/auth/login/", {
         username: formValues.username,
         password: formValues.password,
         remember_me: formValues.remember_me,
       })
+      saveUserSession(response.data, formValues.username)
       navigate("/profile")
     } catch (error) {
       const message =
@@ -51,7 +73,8 @@ function Login() {
     setErrorMessage("")
 
     try {
-      await axios.post("http://127.0.0.1:8000/api/users/auth/guest/")
+      const response = await axios.post("http://127.0.0.1:8000/api/users/auth/guest/")
+      saveUserSession(response.data, "Guest user")
       navigate("/exercises")
     } catch (error) {
       const message =
