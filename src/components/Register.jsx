@@ -1,8 +1,9 @@
 import "../CSS/login.css"
 import axios from "axios"
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
+import WhiteLeftArrowIcon from "../assets/WhiteLeftArrowIcon.png"
 
 function Register() {
   const navigate = useNavigate()
@@ -54,6 +55,14 @@ function Register() {
           <p className="auth-eyebrow">WODTrackr</p>
           <h1>Start strong.</h1>
           <p className="auth-lede">Create an account to track every PR.</p>
+          <Link to="/login" className="register-back-link">
+            <img
+              src={WhiteLeftArrowIcon}
+              alt="Back arrow"
+              className="register-back-icon"
+            />
+            <span>Back to Login</span>
+          </Link>
         </div>
         <div className="auth-form">
           <div>

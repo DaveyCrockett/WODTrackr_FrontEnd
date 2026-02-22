@@ -18,7 +18,7 @@
 }
 
 .auth-hero {
-  padding: 8rem 3.5rem;
+  padding: 8rem 3.5rem 2rem;
   background: linear-gradient(135deg, #307CEC 0%, #4A34F2 100%);
   color: #f8fafc;
   display: flex;
@@ -245,6 +245,27 @@
   cursor: pointer;
   padding: 0;
   text-decoration: none;
+}
+
+.register-back-link {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #f8fafc;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.register-back-link:hover {
+  text-decoration: underline;
+}
+
+.register-back-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }
 
 @media (max-width: 900px) {
