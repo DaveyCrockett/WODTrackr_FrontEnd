@@ -1,6 +1,20 @@
 import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
+import "../CSS/profile.css"
+
+const getStoredUser = () => {
+  try {
+    const rawValue = localStorage.getItem("wodtrackrUser")
+    return rawValue ? JSON.parse(rawValue) : null
+  } catch {
+    return null
+  }
+}
 
 function Profile() {
+  const user = getStoredUser()
+  const username = user?.username || "Guest user"
+  const avatarUrl = user?.avatarUrl || WODTrackrLogo
+
   return (
     <section className="profile-page">
       <header className="profile-header">
@@ -19,9 +33,16 @@ function Profile() {
       <div className="profile-grid">
         <article className="profile-card profile-summary-card">
           <div className="profile-identity">
-            <img src={WODTrackrLogo} alt="WODTrackr Logo" />
+            <img
+              src={avatarUrl}
+              alt={`${username} avatar`}
+              onError={(event) => {
+                event.currentTarget.onerror = null
+                event.currentTarget.src = WODTrackrLogo
+              }}
+            />
             <div>
-              <h2>Guest user</h2>
+              <h2>{username}</h2>
               <p>Member since Jan 2026</p>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom"
+import { NavLink, useLocation, useNavigate } from "react-router-dom"
 
 const navItems = [
   { label: "Home", to: "/", icon: "/HomeIcon.png" },
@@ -21,9 +21,17 @@ const getStoredUser = () => {
 }
 
 function Navbar() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const user = getStoredUser()
   const profileAvatar = user?.avatarUrl || DEFAULT_AVATAR
   const profileAlt = user?.username ? `${user.username} profile` : "Profile"
+  const isProfileActive = location.pathname.startsWith("/profile")
+
+  const handleLogout = () => {
+    localStorage.removeItem("wodtrackrUser")
+    navigate("/login")
+  }
 
   return (
     <nav className="nav-rail">
@@ -31,21 +39,35 @@ function Navbar() {
         <img src="/WLogo.png" alt="WODTrackr logo" />
       </div>
       <div className="nav-links">
-        <NavLink
-          to="/profile"
-          className={({ isActive }) =>
-            `nav-profile-link${isActive ? " is-active" : ""}`
-          }
-        >
-          <img
-            src={profileAvatar}
-            alt={profileAlt}
-            onError={(event) => {
-              event.currentTarget.onerror = null
-              event.currentTarget.src = DEFAULT_AVATAR
-            }}
-          />
-        </NavLink>
+        <div className="nav-profile-menu">
+          <button
+            className={`nav-profile-link${isProfileActive ? " is-active" : ""}`}
+            type="button"
+            aria-label="Open profile menu"
+          >
+            <img
+              src={profileAvatar}
+              alt={profileAlt}
+              onError={(event) => {
+                event.currentTarget.onerror = null
+                event.currentTarget.src = DEFAULT_AVATAR
+              }}
+            />
+          </button>
+          <div className="nav-profile-dropdown" role="menu" aria-label="Profile menu">
+            <NavLink to="/profile" className="nav-profile-option" role="menuitem">
+              Profile
+            </NavLink>
+            <button
+              type="button"
+              className="nav-profile-option nav-profile-logout"
+              onClick={handleLogout}
+              role="menuitem"
+            >
+              Log out
+            </button>
+          </div>
+        </div>
         {navItems.map((item) => (
           <NavLink
             key={item.to}
