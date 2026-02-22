@@ -5,15 +5,16 @@
 
 .profile-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
     gap: 1.25rem;
+    align-items: start;
 }
 
 .profile-card {
     background: #ffffff;
     border-radius: 18px;
     padding: 1.5rem;
-    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.1);
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.1);;
 }
 
 .profile-card h2 {
@@ -30,6 +31,8 @@
 .profile-weekly-card {
     grid-column: 1;
     grid-row: 1;
+    height: auto; 
+    min-height: 0; 
 }
 
 .profile-tabs-card {
@@ -76,6 +79,7 @@
     margin: 0;
     display: grid;
     gap: 0.85rem;
+    max-height: 220px; overflow: auto;
 }
 
 .profile-summary-list dt,
