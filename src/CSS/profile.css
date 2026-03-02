@@ -14,7 +14,8 @@
     background: #ffffff;
     border-radius: 10px;
     padding: .25rem;
-    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.1);;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.1);
+    padding: 0;
 }
 
 .profile-card h2 {
@@ -22,7 +23,7 @@
     padding-left: 2rem;
     color: #000000;
     background-color: #C8D1D3;
-    border-radius: 5px;
+    border-radius: 5px 5px 0 0;
 }
 
 .profile-card-subtitle {
@@ -36,6 +37,23 @@
     grid-row: 1;
     height: auto; 
     min-height: 0; 
+}
+
+.profile-weekly-card h2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 2rem;
+}
+
+.profile-weekly-card h2 a {
+    padding-top: .5rem;
+}
+
+.profile-weekly-icon {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
 }
 
 .profile-tabs-card {

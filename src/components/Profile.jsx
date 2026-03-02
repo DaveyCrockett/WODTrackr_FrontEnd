@@ -1,5 +1,7 @@
 import { useState } from "react"
+import { Link } from "react-router-dom"
 import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
+import CalendarIconBlack from "../assets/CalendarIconBlack.png"
 import "../CSS/profile.css"
 
 const getStoredUser = () => {
@@ -31,7 +33,12 @@ function Profile() {
     <section className="profile-page">
       <div className="profile-grid">
         <article className="profile-card profile-weekly-card">
-          <h2>Weekly Summary</h2>
+          <h2>
+            <span>Weekly Summary</span>
+            <Link to="/calendar" aria-label="Open calendar">
+              <img src={CalendarIconBlack} alt="" aria-hidden="true" className="profile-weekly-icon" />
+            </Link>
+          </h2>
           <p className="profile-card-subtitle">Calendar preview for this week</p>
           <div className="profile-summary-list">
             <div>

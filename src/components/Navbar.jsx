@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import homeIcon from "../assets/HomeIcon.png"
 import exerciseIcon from "../assets/ExerciseIcon.png"
-import calendarIcon from "../assets/CalendarIcon.png"
+import calendarIcon from "../assets/CalendarIconWhite.png"
 import programsIcon from "../assets/ProgramsIconWhite.png"
 import settingsIcon from "../assets/SettingsIcon.png"
 import helpIcon from "../assets/HelpIcon.png"
