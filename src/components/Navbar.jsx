@@ -37,6 +37,8 @@ function Navbar() {
 
   const handleLogout = () => {
     localStorage.removeItem("wodtrackrUser")
+    localStorage.removeItem("wodtrackrAuthToken")
+    localStorage.removeItem("wodtrackrRefreshToken")
     navigate("/login")
   }
 

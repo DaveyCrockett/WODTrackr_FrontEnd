@@ -17,6 +17,18 @@ function Login() {
 
   const saveUserSession = (data, fallbackUsername) => {
     const userData = data?.user ?? data ?? {}
+    const authToken =
+      data?.access ??
+      data?.token ??
+      data?.key ??
+      data?.auth_token ??
+      userData?.access ??
+      userData?.token ??
+      userData?.key ??
+      userData?.auth_token ??
+      ""
+
+    const refreshToken = data?.refresh ?? userData?.refresh ?? ""
     const avatarUrl =
       userData?.avatar_url ??
       userData?.avatarUrl ??
@@ -32,8 +44,22 @@ function Login() {
       JSON.stringify({
         username,
         avatarUrl,
+        authToken,
+        refreshToken,
       })
     )
+
+    if (authToken) {
+      localStorage.setItem("wodtrackrAuthToken", authToken)
+    } else {
+      localStorage.removeItem("wodtrackrAuthToken")
+    }
+
+    if (refreshToken) {
+      localStorage.setItem("wodtrackrRefreshToken", refreshToken)
+    } else {
+      localStorage.removeItem("wodtrackrRefreshToken")
+    }
   }
 
   const handleChange = (event) => {
@@ -50,12 +76,30 @@ function Login() {
     setErrorMessage("")
 
     try {
-      console.log("Submitting login with values:", formValues)
-      const response = await axios.post("http://127.0.0.1:8000/api/users/auth/login/", {
+      const loginPayload = {
         username: formValues.username,
         password: formValues.password,
         remember_me: formValues.remember_me,
-      })
+      }
+
+      let response
+      try {
+        response = await axios.post(
+          "http://127.0.0.1:8000/api/users/auth/login/",
+          loginPayload,
+          { withCredentials: true },
+        )
+      } catch (primaryError) {
+        if (!primaryError?.response) {
+          response = await axios.post(
+            "http://127.0.0.1:8000/api/users/auth/login/",
+            loginPayload,
+          )
+        } else {
+          throw primaryError
+        }
+      }
+
       saveUserSession(response.data, formValues.username)
       navigate("/profile")
     } catch (error) {
@@ -73,7 +117,21 @@ function Login() {
     setErrorMessage("")
 
     try {
-      const response = await axios.post("http://127.0.0.1:8000/api/users/auth/guest/")
+      let response
+      try {
+        response = await axios.post(
+          "http://127.0.0.1:8000/api/users/auth/guest/",
+          {},
+          { withCredentials: true },
+        )
+      } catch (primaryError) {
+        if (!primaryError?.response) {
+          response = await axios.post("http://127.0.0.1:8000/api/users/auth/guest/")
+        } else {
+          throw primaryError
+        }
+      }
+
       saveUserSession(response.data, "Guest user")
       navigate("/exercises")
     } catch (error) {
