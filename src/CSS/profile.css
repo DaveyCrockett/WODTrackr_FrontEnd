@@ -74,21 +74,24 @@
 }
 
 .profile-identity {
-    display: flex;
-    gap: 1rem;
+    display: grid;
     align-items: center;
     padding-bottom: 1.15rem;
     border-bottom: 1px solid #e2e8f0;
+    
 }
 
 .profile-identity img {
-    width: 68px;
-    height: 68px;
+    width: 150px;
+    height: 150px;
     object-fit: contain;
+    justify-self: center;
 }
 
 .profile-identity h2 {
     margin: 0;
+    background-color: transparent;
+    text-align: center;
 }
 
 .profile-identity p {

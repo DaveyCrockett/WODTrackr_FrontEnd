@@ -78,7 +78,7 @@ function Profile() {
         </article>
 
         <article className="profile-card profile-info-card">
-          <h2>Profile Info</h2>
+          {/* <h2>Profile Info</h2> */}
           <div className="profile-identity">
             <img
               src={avatarUrl}
