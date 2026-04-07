@@ -129,6 +129,16 @@
   padding-right: 0.2rem;
 }
 
+.exercise-load-more {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: center;
+}
+
+.exercise-load-more .exercise-secondary-btn {
+  width: 100%;
+}
+
 .exercise-item {
   border: 1px solid #e2e8f0;
   border-radius: 12px;

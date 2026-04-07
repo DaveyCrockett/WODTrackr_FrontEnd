@@ -185,6 +185,9 @@ function Exercises() {
     mine: "",
   })
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [totalCount, setTotalCount] = useState(0)
+  const [nextUrl, setNextUrl] = useState(null)
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
   const [choicesError, setChoicesError] = useState("")
   const [errorMessage, setErrorMessage] = useState("")
@@ -224,6 +227,7 @@ function Exercises() {
       setIsLoading(true)
       setErrorMessage("")
       setSuccessMessage("")
+      setNextUrl(null)
 
       try {
         const response = await axios.get(API_URL, {
@@ -238,10 +242,17 @@ function Exercises() {
             ...(filters.mine ? { mine: filters.mine } : {}),
           },
         })
-        const payload = Array.isArray(response?.data?.data)
-          ? response.data.data
+        const data = response?.data
+        const results = Array.isArray(data?.results)
+          ? data.results
+          : Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data)
+          ? data
           : []
-        setExercises(payload)
+        setExercises(results)
+        setTotalCount(data?.count ?? results.length)
+        setNextUrl(data?.next ?? null)
       } catch (error) {
         if (error?.response?.status === 401 || error?.response?.status === 403) {
           setErrorMessage("Please log in to load exercises and categories.")
@@ -262,6 +273,29 @@ function Exercises() {
 
     return () => clearTimeout(timer)
   }, [filters, ordering, searchName])
+
+  const handleLoadMore = async () => {
+    if (!nextUrl || isLoadingMore) return
+    setIsLoadingMore(true)
+    try {
+      const response = await axios.get(nextUrl, buildRequestConfig())
+      const data = response?.data
+      const results = Array.isArray(data?.results)
+        ? data.results
+        : Array.isArray(data?.data)
+        ? data.data
+        : []
+      setExercises((prev) => [...prev, ...results])
+      setNextUrl(data?.next ?? null)
+    } catch (error) {
+      const message =
+        error?.response?.data?.detail ||
+        "Unable to load more exercises. Please try again."
+      setErrorMessage(message)
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }
 
   const loadChoices = useCallback(async () => {
     setIsChoicesLoading(true)
@@ -481,8 +515,8 @@ function Exercises() {
             </div>
             <p>Search and review your exercise list.</p>
             <div className="exercise-counts">
-              <span>{exercises.length} total</span>
-              <span>{filteredExercises.length} shown</span>
+              <span>{totalCount} total</span>
+              <span>{exercises.length} shown</span>
             </div>
           </header>
 
@@ -649,6 +683,19 @@ function Exercises() {
               ))
             )}
           </div>
+
+          {nextUrl ? (
+            <div className="exercise-load-more">
+              <button
+                type="button"
+                className="exercise-secondary-btn"
+                onClick={handleLoadMore}
+                disabled={isLoadingMore}
+              >
+                {isLoadingMore ? "Loading..." : `Load more (${exercises.length} of ${totalCount})`}
+              </button>
+            </div>
+          ) : null}
         </section>
 
         <aside className="exercise-detail-panel">
