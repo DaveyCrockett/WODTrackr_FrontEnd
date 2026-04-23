@@ -733,7 +733,7 @@ function Exercises() {
                 </div>
                 <div className="exercise-detail-row">
                   <dt>Muscle Group</dt>
-                  <dd>{selectedExercise.primary_muscle_group || "—"}</dd>
+                  <dd>{selectedExercise.primary_muscle_group ? `${String(selectedExercise.primary_muscle_group).charAt(0).toUpperCase()}${String(selectedExercise.primary_muscle_group).slice(1)}` : "—"}</dd>
                 </div>
                 <div className="exercise-detail-row">
                   <dt>Created By</dt>
