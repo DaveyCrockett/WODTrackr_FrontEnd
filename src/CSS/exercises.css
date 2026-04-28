@@ -4,9 +4,11 @@
 
 .exercise-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(0, 0.75fr) minmax(320px, 1fr);
   gap: 1.25rem;
 }
+
+
 
 .exercise-library-panel,
 .exercise-form-panel {
@@ -26,6 +28,17 @@
 .exercise-panel-header p {
   margin: 0.25rem 0 0;
   color: #475569;
+}
+
+.exercise-panel-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.exercise-header-actions {
+  flex-shrink: 0;
 }
 
 .exercise-counts {
@@ -100,6 +113,12 @@
   margin-top: 0.75rem;
 }
 
+.exercise-list-actions {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: center;
+}
+
 .exercise-secondary-btn {
   border: 1px solid #cbd5e1;
   border-radius: 10px;
@@ -125,6 +144,12 @@
   border-radius: 12px;
   padding: 0.85rem;
   background: #f8fafc;
+  cursor: pointer;
+}
+
+.exercise-item-selected {
+  border-color: #307cec;
+  box-shadow: 0 0 0 3px rgba(48, 124, 236, 0.16);
 }
 
 .exercise-header {
@@ -161,6 +186,17 @@
   gap: 0.75rem;
 }
 
+.exercise-details {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.exercise-details h3 {
+  margin: 0;
+  color: #0f172a;
+}
+
 .exercise-checkbox {
   display: flex;
   gap: 0.5rem;
@@ -188,10 +224,42 @@
   cursor: not-allowed;
 }
 
-.exercise-load-more {
-  margin-top: 0.85rem;
+.exercise-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  z-index: 1000;
+}
+
+.exercise-modal {
+  width: min(560px, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
+  padding: 1.1rem;
+}
+
+.exercise-modal-header {
   display: flex;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.exercise-modal-header h2 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.exercise-modal-header p {
+  margin: 0.25rem 0 0;
+  color: #475569;
 }
 
 @media (max-width: 1080px) {
@@ -201,6 +269,10 @@
 }
 
 @media (max-width: 680px) {
+  .exercise-panel-header-top {
+    flex-direction: column;
+  }
+
   .exercise-search-grid {
     grid-template-columns: 1fr;
   }

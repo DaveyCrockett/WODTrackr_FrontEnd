@@ -172,10 +172,11 @@ function Exercises() {
     category: "",
     equipment: "",
     muscle: "",
-    is_public: "",
-    mine: "",
   })
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const [selectedExerciseId, setSelectedExerciseId] = useState(null)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
@@ -223,8 +224,6 @@ function Exercises() {
             ...(filters.category ? { category: filters.category } : {}),
             ...(filters.equipment ? { equipment: filters.equipment } : {}),
             ...(filters.muscle ? { muscle: filters.muscle } : {}),
-            ...(filters.is_public ? { is_public: filters.is_public } : {}),
-            ...(filters.mine ? { mine: filters.mine } : {}),
           },
         })
         const payload = Array.isArray(response?.data?.data)
@@ -354,6 +353,7 @@ function Exercises() {
         is_public: false,
       })
       setSuccessMessage("Exercise added successfully.")
+      setIsAddModalOpen(false)
     } catch (error) {
       const extractedFieldErrors = getFieldErrorsFromResponse(error?.response?.data)
       if (Object.keys(extractedFieldErrors).length > 0) {
@@ -380,25 +380,46 @@ function Exercises() {
       category: "",
       equipment: "",
       muscle: "",
-      is_public: "",
-      mine: "",
     })
+    setVisibleCount(PAGE_SIZE)
   }
 
-  const filteredExercises = exercises
+  const handleOpenAddModal = () => {
+    setErrorMessage("")
+    setFieldErrors({})
+    setSuccessMessage("")
+    setIsAddModalOpen(true)
+  }
 
-  const displayedExercises = useMemo(
-    () => filteredExercises.slice(0, visibleCount),
-    [filteredExercises, visibleCount]
-  )
-  const hasMore = useMemo(
-    () => filteredExercises.length > visibleCount,
-    [filteredExercises, visibleCount]
-  )
+  const handleCloseAddModal = () => {
+    setIsAddModalOpen(false)
+  }
 
   const handleLoadMore = () => {
     setVisibleCount((prev) => prev + PAGE_SIZE)
   }
+
+  const filteredExercises = exercises
+  const displayedExercises = filteredExercises.slice(0, visibleCount)
+  const hasMoreExercises = filteredExercises.length > displayedExercises.length
+  const selectedExercise = filteredExercises.find((exercise) => (exercise.id ?? null) === selectedExerciseId) || null
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [searchName, ordering, filters])
+
+  useEffect(() => {
+    if (filteredExercises.length === 0) {
+      setSelectedExerciseId(null)
+      return
+    }
+
+    const hasSelectedExercise = filteredExercises.some((exercise) => (exercise.id ?? null) === selectedExerciseId)
+    if (!hasSelectedExercise) {
+      const fallbackId = filteredExercises[0]?.id ?? null
+      setSelectedExerciseId(fallbackId)
+    }
+  }, [filteredExercises, selectedExerciseId])
 
   const categoryLookup = useMemo(
     () => Object.fromEntries(categoryChoices.map((choice) => [choice.value, choice.label])),
@@ -414,8 +435,17 @@ function Exercises() {
       <section className="exercise-shell">
         <section className="exercise-library-panel">
           <header className="exercise-panel-header">
-            <h1>Exercise Library</h1>
-            <p>Search and review your exercise list.</p>
+            <div className="exercise-panel-header-top">
+              <div>
+                <h1>Exercise Library</h1>
+                <p>Search and review your exercise list.</p>
+              </div>
+              <div className="exercise-header-actions">
+                <button type="button" className="exercise-primary-btn" onClick={handleOpenAddModal}>
+                  Add Exercise
+                </button>
+              </div>
+            </div>
             <div className="exercise-counts">
               <span>{exercises.length} total</span>
               <span>{displayedExercises.length} shown</span>
@@ -491,35 +521,6 @@ function Exercises() {
               </select>
             </label>
 
-            <label className="exercise-field">
-              <span>Visibility</span>
-              <select
-                name="is_public"
-                value={filters.is_public}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, is_public: event.target.value }))
-                }
-              >
-                <option value="">All</option>
-                <option value="true">Public only</option>
-                <option value="false">Private only</option>
-              </select>
-            </label>
-
-            <label className="exercise-field">
-              <span>Ownership</span>
-              <select
-                name="mine"
-                value={filters.mine}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, mine: event.target.value }))
-                }
-              >
-                <option value="">All</option>
-                <option value="true">Mine</option>
-              </select>
-            </label>
-
             <label className="exercise-field exercise-field-wide">
               <span>Sort by</span>
               <select
@@ -552,7 +553,19 @@ function Exercises() {
               <p className="exercise-empty">No exercises found.</p>
             ) : (
               displayedExercises.map((exercise, index) => (
-                <article className="exercise-item" key={exercise.id != null ? String(exercise.id) : `exercise-${index}`}>
+                <article
+                  className={`exercise-item ${(exercise.id ?? null) === selectedExerciseId ? "exercise-item-selected" : ""}`}
+                  key={exercise.id ?? index}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedExerciseId(exercise.id ?? null)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault()
+                      setSelectedExerciseId(exercise.id ?? null)
+                    }
+                  }}
+                >
                   <div className="exercise-header">
                     <h3>{exercise.name}</h3>
                     <span>{categoryLookup[exercise.category] || exercise.category}</span>
@@ -571,140 +584,194 @@ function Exercises() {
             )}
           </div>
 
-          {!isLoading && hasMore && (
-            <div className="exercise-load-more">
-              <button
-                type="button"
-                className="exercise-secondary-btn"
-                onClick={handleLoadMore}
-              >
+          {!isLoading && hasMoreExercises ? (
+            <div className="exercise-list-actions">
+              <button type="button" className="exercise-secondary-btn" onClick={handleLoadMore}>
                 Load More
               </button>
             </div>
-          )}
+          ) : null}
         </section>
 
         <aside className="exercise-form-panel">
           <header className="exercise-panel-header">
-            <h2>Add Exercise</h2>
-            <p>Create a new exercise in your library.</p>
+            <h2>Exercise Details</h2>
+            <p>Select an exercise from the library to review details.</p>
           </header>
 
-          <form className="exercise-form" onSubmit={handleSubmit}>
-            {successMessage ? <p className="exercise-success">{successMessage}</p> : null}
-            {errorMessage ? <p className="exercise-error">{errorMessage}</p> : null}
-
-            <label className="exercise-field">
-              <span>Name</span>
-              <input
-                type="text"
-                name="name"
-                value={formValues.name}
-                onChange={handleChange}
-                placeholder="Exercise name"
-                required
-              />
-              {fieldErrors.name ? <small className="exercise-field-error">{fieldErrors.name}</small> : null}
-            </label>
-
-            <label className="exercise-field">
-              <span>Description</span>
-              <input
-                type="text"
-                name="description"
-                value={formValues.description}
-                onChange={handleChange}
-                placeholder="Optional details"
-              />
-              {fieldErrors.description ? <small className="exercise-field-error">{fieldErrors.description}</small> : null}
-            </label>
-
-            <label className="exercise-field">
-              <span>Category</span>
-              <select
-                name="category"
-                value={formValues.category}
-                onChange={handleChange}
-                disabled={isChoicesLoading}
-                required
-              >
-                <option value="">{isChoicesLoading ? "Loading categories..." : "Select category"}</option>
-                {categoryChoices.map((choice) => (
-                  <option key={choice.value} value={choice.value}>
-                    {choice.label}
-                  </option>
-                ))}
-              </select>
-              {fieldErrors.category ? <small className="exercise-field-error">{fieldErrors.category}</small> : null}
-            </label>
-
-            <label className="exercise-field">
-              <span>Equipment</span>
-              <select
-                name="equipment"
-                value={formValues.equipment}
-                onChange={handleChange}
-                disabled={isChoicesLoading}
-                required
-              >
-                <option value="">{isChoicesLoading ? "Loading equipment..." : "Select equipment"}</option>
-                {equipmentChoices.map((choice) => (
-                  <option key={choice.value} value={choice.value}>
-                    {choice.label}
-                  </option>
-                ))}
-              </select>
-              {fieldErrors.equipment ? <small className="exercise-field-error">{fieldErrors.equipment}</small> : null}
-            </label>
-
-            <label className="exercise-field">
-              <span>Created by</span>
-              <input
-                type="text"
-                name="created_by"
-                value={formValues.created_by}
-                onChange={handleChange}
-                placeholder="Coach or athlete"
-              />
-              {fieldErrors.created_by ? <small className="exercise-field-error">{fieldErrors.created_by}</small> : null}
-            </label>
-
-            <label className="exercise-field">
-              <span>Muscle</span>
-              <select
-                name="primary_muscle_group"
-                value={formValues.primary_muscle_group}
-                onChange={handleChange}
-                disabled={isChoicesLoading}
-                required
-              >
-                <option value="">{isChoicesLoading ? "Loading muscle groups..." : "Select muscle group"}</option>
-                {muscleChoices.map((choice) => (
-                  <option key={choice.value} value={choice.value}>
-                    {choice.label}
-                  </option>
-                ))}
-              </select>
-              {fieldErrors.primary_muscle_group ? <small className="exercise-field-error">{fieldErrors.primary_muscle_group}</small> : null}
-            </label>
-
-            <label className="exercise-checkbox">
-              <input
-                type="checkbox"
-                name="is_public"
-                checked={formValues.is_public}
-                onChange={handleChange}
-              />
-              Public exercise
-            </label>
-            {fieldErrors.is_public ? <small className="exercise-field-error">{fieldErrors.is_public}</small> : null}
-
-            <button className="exercise-primary-btn" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving..." : "Add Exercise"}
-            </button>
-          </form>
+          {selectedExercise ? (
+            <section className="exercise-details" aria-live="polite">
+              <h3>{selectedExercise.name}</h3>
+              <p className="exercise-meta">
+                <strong>Category:</strong> {categoryLookup[selectedExercise.category] || selectedExercise.category || "N/A"}
+              </p>
+              <p className="exercise-meta">
+                <strong>Equipment:</strong> {equipmentLookup[selectedExercise.equipment] || selectedExercise.equipment || "N/A"}
+              </p>
+              <p className="exercise-meta">
+                <strong>Muscle:</strong> {selectedExercise.primary_muscle_group || "N/A"}
+              </p>
+              <p className="exercise-meta">
+                <strong>Description:</strong> {selectedExercise.description || "No description provided."}
+              </p>
+              <p className="exercise-meta">
+                <strong>Created by:</strong> {selectedExercise.created_by || "Unknown"}
+              </p>
+              <p className="exercise-meta">
+                <strong>Visibility:</strong> {selectedExercise.is_public ? "Public" : "Private"}
+              </p>
+              <p className="exercise-meta">
+                <strong>Created:</strong> {formatTimestamp(selectedExercise.created_at)}
+              </p>
+              <p className="exercise-meta">
+                <strong>Updated:</strong> {formatTimestamp(selectedExercise.updated_at)}
+              </p>
+            </section>
+          ) : (
+            <p className="exercise-empty">No exercise selected.</p>
+          )}
         </aside>
       </section>
+
+      {isAddModalOpen ? (
+        <div className="exercise-modal-backdrop" role="presentation" onClick={handleCloseAddModal}>
+          <aside
+            className="exercise-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="exercise-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="exercise-modal-header">
+              <div>
+                <h2 id="exercise-modal-title">Add Exercise</h2>
+                <p>Create a new exercise in your library.</p>
+              </div>
+              <button
+                type="button"
+                className="exercise-secondary-btn"
+                onClick={handleCloseAddModal}
+              >
+                Close
+              </button>
+            </header>
+
+            <form className="exercise-form" onSubmit={handleSubmit}>
+              {successMessage ? <p className="exercise-success">{successMessage}</p> : null}
+              {errorMessage ? <p className="exercise-error">{errorMessage}</p> : null}
+
+              <label className="exercise-field">
+                <span>Name</span>
+                <input
+                  type="text"
+                  name="name"
+                  value={formValues.name}
+                  onChange={handleChange}
+                  placeholder="Exercise name"
+                  required
+                />
+                {fieldErrors.name ? <small className="exercise-field-error">{fieldErrors.name}</small> : null}
+              </label>
+
+              <label className="exercise-field">
+                <span>Description</span>
+                <input
+                  type="text"
+                  name="description"
+                  value={formValues.description}
+                  onChange={handleChange}
+                  placeholder="Optional details"
+                />
+                {fieldErrors.description ? <small className="exercise-field-error">{fieldErrors.description}</small> : null}
+              </label>
+
+              <label className="exercise-field">
+                <span>Category</span>
+                <select
+                  name="category"
+                  value={formValues.category}
+                  onChange={handleChange}
+                  disabled={isChoicesLoading}
+                  required
+                >
+                  <option value="">{isChoicesLoading ? "Loading categories..." : "Select category"}</option>
+                  {categoryChoices.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.category ? <small className="exercise-field-error">{fieldErrors.category}</small> : null}
+              </label>
+
+              <label className="exercise-field">
+                <span>Equipment</span>
+                <select
+                  name="equipment"
+                  value={formValues.equipment}
+                  onChange={handleChange}
+                  disabled={isChoicesLoading}
+                  required
+                >
+                  <option value="">{isChoicesLoading ? "Loading equipment..." : "Select equipment"}</option>
+                  {equipmentChoices.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.equipment ? <small className="exercise-field-error">{fieldErrors.equipment}</small> : null}
+              </label>
+
+              <label className="exercise-field">
+                <span>Created by</span>
+                <input
+                  type="text"
+                  name="created_by"
+                  value={formValues.created_by}
+                  onChange={handleChange}
+                  placeholder="Coach or athlete"
+                />
+                {fieldErrors.created_by ? <small className="exercise-field-error">{fieldErrors.created_by}</small> : null}
+              </label>
+
+              <label className="exercise-field">
+                <span>Muscle</span>
+                <select
+                  name="primary_muscle_group"
+                  value={formValues.primary_muscle_group}
+                  onChange={handleChange}
+                  disabled={isChoicesLoading}
+                  required
+                >
+                  <option value="">{isChoicesLoading ? "Loading muscle groups..." : "Select muscle group"}</option>
+                  {muscleChoices.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.primary_muscle_group ? <small className="exercise-field-error">{fieldErrors.primary_muscle_group}</small> : null}
+              </label>
+
+              <label className="exercise-checkbox">
+                <input
+                  type="checkbox"
+                  name="is_public"
+                  checked={formValues.is_public}
+                  onChange={handleChange}
+                />
+                Public exercise
+              </label>
+              {fieldErrors.is_public ? <small className="exercise-field-error">{fieldErrors.is_public}</small> : null}
+
+              <button className="exercise-primary-btn" type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Saving..." : "Add Exercise"}
+              </button>
+            </form>
+          </aside>
+        </div>
+      ) : null}
     </main>
   )
 }
