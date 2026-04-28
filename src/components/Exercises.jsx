@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react"
 const API_URL = "http://127.0.0.1:8000/api/wodtrackr/exercises/"
 const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
+const PAGE_SIZE = 12
 
 const getAuthToken = () => {
   const directToken = localStorage.getItem("wodtrackrAuthToken")
@@ -174,6 +175,7 @@ function Exercises() {
     is_public: "",
     mine: "",
   })
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(false)
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
@@ -210,6 +212,7 @@ function Exercises() {
       setIsLoading(true)
       setErrorMessage("")
       setSuccessMessage("")
+      setVisibleCount(PAGE_SIZE)
 
       try {
         const response = await axios.get(API_URL, {
@@ -384,6 +387,19 @@ function Exercises() {
 
   const filteredExercises = exercises
 
+  const displayedExercises = useMemo(
+    () => filteredExercises.slice(0, visibleCount),
+    [filteredExercises, visibleCount]
+  )
+  const hasMore = useMemo(
+    () => filteredExercises.length > visibleCount,
+    [filteredExercises, visibleCount]
+  )
+
+  const handleLoadMore = () => {
+    setVisibleCount((prev) => prev + PAGE_SIZE)
+  }
+
   const categoryLookup = useMemo(
     () => Object.fromEntries(categoryChoices.map((choice) => [choice.value, choice.label])),
     [categoryChoices]
@@ -402,7 +418,7 @@ function Exercises() {
             <p>Search and review your exercise list.</p>
             <div className="exercise-counts">
               <span>{exercises.length} total</span>
-              <span>{filteredExercises.length} shown</span>
+              <span>{displayedExercises.length} shown</span>
             </div>
           </header>
 
@@ -535,8 +551,8 @@ function Exercises() {
             ) : filteredExercises.length === 0 ? (
               <p className="exercise-empty">No exercises found.</p>
             ) : (
-              filteredExercises.map((exercise, index) => (
-                <article className="exercise-item" key={exercise.id ?? index}>
+              displayedExercises.map((exercise, index) => (
+                <article className="exercise-item" key={exercise.id != null ? String(exercise.id) : `exercise-${index}`}>
                   <div className="exercise-header">
                     <h3>{exercise.name}</h3>
                     <span>{categoryLookup[exercise.category] || exercise.category}</span>
@@ -554,6 +570,18 @@ function Exercises() {
               ))
             )}
           </div>
+
+          {!isLoading && hasMore && (
+            <div className="exercise-load-more">
+              <button
+                type="button"
+                className="exercise-secondary-btn"
+                onClick={handleLoadMore}
+              >
+                Load More
+              </button>
+            </div>
+          )}
         </section>
 
         <aside className="exercise-form-panel">
