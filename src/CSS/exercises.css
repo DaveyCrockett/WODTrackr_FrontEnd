@@ -1,11 +1,14 @@
 .exercise-page {
-  min-height: 100%;
+  height: calc(100dvh - 4rem);
+  overflow: hidden;
 }
 
 .exercise-shell {
   display: grid;
   grid-template-columns: minmax(0, 0.5fr) minmax(280px, 1fr);
   gap: 1.25rem;
+  height: 100%;
+  min-height: 0;
 }
 
 .exercise-library-panel,
@@ -15,6 +18,16 @@
   border-radius: 16px;
   padding: 1.1rem;
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+  min-height: 0;
+}
+
+.exercise-library-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.exercise-detail-panel {
+  overflow: auto;
 }
 
 .exercise-panel-header h1,
@@ -124,7 +137,9 @@
   margin-top: 0.85rem;
   display: grid;
   gap: 0.75rem;
-  max-height: 62vh;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
   overflow: auto;
   padding-right: 0.2rem;
 }
@@ -375,8 +390,20 @@
     grid-template-columns: 1fr;
   }
 
+  .exercise-page {
+    height: auto;
+    min-height: calc(100dvh - 4rem);
+    overflow: visible;
+  }
+
+  .exercise-library-panel,
+  .exercise-detail-panel {
+    overflow: visible;
+  }
+
   .exercise-list {
     max-height: 42vh;
+    flex: unset;
   }
 }
 
@@ -387,5 +414,11 @@
 
   .exercise-field-wide {
     grid-column: span 1;
+  }
+}
+
+@media (max-width: 620px) {
+  .exercise-page {
+    min-height: calc(100dvh - 2rem);
   }
 }

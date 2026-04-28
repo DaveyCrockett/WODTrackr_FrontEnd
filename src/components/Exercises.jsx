@@ -173,16 +173,19 @@ const getFieldErrorsFromResponse = (data) => {
   }, {})
 }
 
+const sortChoicesByLabel = (choices) =>
+  [...choices].sort((a, b) =>
+    String(a?.label || "").localeCompare(String(b?.label || ""), undefined, {
+      sensitivity: "base",
+    })
+  )
+
 function Exercises() {
   const [exercises, setExercises] = useState([])
   const [searchName, setSearchName] = useState("")
-  const [ordering, setOrdering] = useState("name")
   const [filters, setFilters] = useState({
-    category: "",
     equipment: "",
     muscle: "",
-    is_public: "",
-    mine: "",
   })
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
@@ -234,12 +237,9 @@ function Exercises() {
           ...buildRequestConfig(),
           params: {
             ...(searchName ? { search: searchName } : {}),
-            ordering,
-            ...(filters.category ? { category: filters.category } : {}),
+            ordering: "name",
             ...(filters.equipment ? { equipment: filters.equipment } : {}),
             ...(filters.muscle ? { muscle: filters.muscle } : {}),
-            ...(filters.is_public ? { is_public: filters.is_public } : {}),
-            ...(filters.mine ? { mine: filters.mine } : {}),
           },
         })
         const data = response?.data
@@ -272,7 +272,7 @@ function Exercises() {
     }, 300)
 
     return () => clearTimeout(timer)
-  }, [filters, ordering, searchName])
+  }, [filters, searchName])
 
   const handleLoadMore = async () => {
     if (!nextUrl || isLoadingMore) return
@@ -309,8 +309,8 @@ function Exercises() {
 
         if (isCacheFresh && parsedCache?.categoryChoices?.length && parsedCache?.equipmentChoices?.length) {
           setCategoryChoices(parsedCache.categoryChoices)
-          setEquipmentChoices(parsedCache.equipmentChoices)
-          setMuscleChoices(parsedCache?.muscleChoices || [])
+          setEquipmentChoices(sortChoicesByLabel(parsedCache.equipmentChoices))
+          setMuscleChoices(sortChoicesByLabel(parsedCache?.muscleChoices || []))
           setIsChoicesLoading(false)
           return
         }
@@ -330,21 +330,23 @@ function Exercises() {
       const category = getChoicesFromMetadata(response?.data, ["category"])
       const equipment = getChoicesFromMetadata(response?.data, ["equipment"])
       const muscle = getChoicesFromMetadata(response?.data, ["primary_muscle_group", "muscle"])
+      const sortedEquipment = sortChoicesByLabel(equipment)
+      const sortedMuscle = sortChoicesByLabel(muscle)
 
-      if (category.length === 0 && equipment.length === 0 && muscle.length === 0) {
+      if (category.length === 0 && sortedEquipment.length === 0 && sortedMuscle.length === 0) {
         setChoicesError("Dropdown options (category, equipment, muscle) could not be loaded from the API. Ensure the OPTIONS endpoint returns DRF field metadata with choices.")
         return
       }
 
       setCategoryChoices(category)
-      setEquipmentChoices(equipment)
-      setMuscleChoices(muscle)
+      setEquipmentChoices(sortedEquipment)
+      setMuscleChoices(sortedMuscle)
       localStorage.setItem(
         CHOICES_CACHE_KEY,
         JSON.stringify({
           categoryChoices: category,
-          equipmentChoices: equipment,
-          muscleChoices: muscle,
+          equipmentChoices: sortedEquipment,
+          muscleChoices: sortedMuscle,
           cachedAt: Date.now(),
         }),
       )
@@ -460,13 +462,9 @@ function Exercises() {
 
   const handleClearFilters = () => {
     setSearchName("")
-    setOrdering("name")
     setFilters({
-      category: "",
       equipment: "",
       muscle: "",
-      is_public: "",
-      mine: "",
     })
   }
 
@@ -533,25 +531,6 @@ function Exercises() {
             </label>
 
             <label className="exercise-field">
-              <span>Category</span>
-              <select
-                name="category"
-                value={filters.category}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, category: event.target.value }))
-                }
-                disabled={isChoicesLoading}
-              >
-                <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
-                {categoryChoices.map((choice) => (
-                  <option key={choice.value} value={choice.value}>
-                    {choice.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="exercise-field">
               <span>Equipment</span>
               <select
                 name="equipment"
@@ -589,50 +568,6 @@ function Exercises() {
               </select>
             </label>
 
-            <label className="exercise-field">
-              <span>Visibility</span>
-              <select
-                name="is_public"
-                value={filters.is_public}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, is_public: event.target.value }))
-                }
-              >
-                <option value="">All</option>
-                <option value="true">Public only</option>
-                <option value="false">Private only</option>
-              </select>
-            </label>
-
-            <label className="exercise-field">
-              <span>Ownership</span>
-              <select
-                name="mine"
-                value={filters.mine}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, mine: event.target.value }))
-                }
-              >
-                <option value="">All</option>
-                <option value="true">Mine</option>
-              </select>
-            </label>
-
-            <label className="exercise-field exercise-field-wide">
-              <span>Sort by</span>
-              <select
-                name="ordering"
-                value={ordering}
-                onChange={(event) => setOrdering(event.target.value)}
-              >
-                <option value="name">Name (A-Z)</option>
-                <option value="-name">Name (Z-A)</option>
-                <option value="created_at">Created (oldest)</option>
-                <option value="-created_at">Created (newest)</option>
-                <option value="updated_at">Updated (oldest)</option>
-                <option value="-updated_at">Updated (newest)</option>
-              </select>
-            </label>
           </div>
 
           <div className="exercise-search-actions">
