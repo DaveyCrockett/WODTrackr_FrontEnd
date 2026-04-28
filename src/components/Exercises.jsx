@@ -6,6 +6,15 @@ const API_URL = "http://127.0.0.1:8000/api/wodtrackr/exercises/"
 const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 const PAGE_SIZE = 12
+const EMPTY_EXERCISE_FORM_VALUES = {
+  name: "",
+  description: "",
+  category: "",
+  equipment: "",
+  primary_muscle_group: "",
+  created_by: "",
+  is_public: false,
+}
 
 const getAuthToken = () => {
   const directToken = localStorage.getItem("wodtrackrAuthToken")
@@ -17,6 +26,16 @@ const getAuthToken = () => {
     const rawValue = localStorage.getItem("wodtrackrUser")
     const userData = rawValue ? JSON.parse(rawValue) : null
     return userData?.authToken || ""
+  } catch {
+    return ""
+  }
+}
+
+const getStoredUsername = () => {
+  try {
+    const rawValue = localStorage.getItem("wodtrackrUser")
+    const userData = rawValue ? JSON.parse(rawValue) : null
+    return userData?.username || ""
   } catch {
     return ""
   }
@@ -164,6 +183,16 @@ const getFieldErrorsFromResponse = (data) => {
   }, {})
 }
 
+const getExerciseFormValues = (exercise) => ({
+  name: exercise?.name || "",
+  description: exercise?.description || "",
+  category: exercise?.category || "",
+  equipment: exercise?.equipment || "",
+  primary_muscle_group: exercise?.primary_muscle_group || "",
+  created_by: exercise?.created_by_username || exercise?.username || exercise?.created_by || "",
+  is_public: Boolean(exercise?.is_public),
+})
+
 function Exercises() {
   const [exercises, setExercises] = useState([])
   const [searchName, setSearchName] = useState("")
@@ -176,24 +205,21 @@ function Exercises() {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [fieldErrors, setFieldErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [editErrorMessage, setEditErrorMessage] = useState("")
+  const [editFieldErrors, setEditFieldErrors] = useState({})
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false)
   const [categoryChoices, setCategoryChoices] = useState([])
   const [equipmentChoices, setEquipmentChoices] = useState([])
   const [muscleChoices, setMuscleChoices] = useState([])
-  const [formValues, setFormValues] = useState({
-    name: "",
-    description: "",
-    category: "",
-    equipment: "",
-    primary_muscle_group: "",
-    created_by: "",
-    is_public: false,
-  })
+  const [formValues, setFormValues] = useState(EMPTY_EXERCISE_FORM_VALUES)
+  const [editFormValues, setEditFormValues] = useState(EMPTY_EXERCISE_FORM_VALUES)
 
   useEffect(() => {
     if (!successMessage) {
@@ -316,6 +342,14 @@ function Exercises() {
     }))
   }
 
+  const handleEditChange = (event) => {
+    const { name, value, type, checked } = event.target
+    setEditFormValues((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }))
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     setIsSubmitting(true)
@@ -342,15 +376,7 @@ function Exercises() {
         setExercises((prev) => [response.data.data, ...prev])
       }
 
-      setFormValues({
-        name: "",
-        description: "",
-        category: "",
-        equipment: "",
-        primary_muscle_group: "",
-        created_by: "",
-        is_public: false,
-      })
+      setFormValues(EMPTY_EXERCISE_FORM_VALUES)
       setSuccessMessage("Exercise added successfully.")
       setIsAddModalOpen(false)
     } catch (error) {
@@ -394,6 +420,77 @@ function Exercises() {
     setIsAddModalOpen(false)
   }
 
+  const handleOpenEditModal = () => {
+    if (!canEditSelectedExercise) {
+      return
+    }
+
+    setEditErrorMessage("")
+    setEditFieldErrors({})
+    setEditFormValues(getExerciseFormValues(selectedExercise))
+    setIsEditModalOpen(true)
+  }
+
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false)
+  }
+
+  const handleEditSubmit = async (event) => {
+    event.preventDefault()
+    if (!selectedExercise?.id) {
+      return
+    }
+
+    setIsEditSubmitting(true)
+    setEditErrorMessage("")
+    setEditFieldErrors({})
+
+    try {
+      const response = await axios.patch(
+        `${API_URL}${selectedExercise.id}/`,
+        {
+          name: editFormValues.name,
+          description: editFormValues.description,
+          category: editFormValues.category,
+          equipment: editFormValues.equipment,
+          primary_muscle_group: editFormValues.primary_muscle_group,
+          created_by: editFormValues.created_by,
+          is_public: editFormValues.is_public,
+        },
+        buildRequestConfig(),
+      )
+
+      const updatedExercise = response?.data?.data ?? response?.data
+      if (updatedExercise) {
+        setExercises((prev) =>
+          prev.map((exercise) =>
+            exercise.id === updatedExercise.id ? updatedExercise : exercise,
+          ),
+        )
+      }
+
+      setSuccessMessage("Exercise updated successfully.")
+      setIsEditModalOpen(false)
+    } catch (error) {
+      const extractedFieldErrors = getFieldErrorsFromResponse(error?.response?.data)
+      if (Object.keys(extractedFieldErrors).length > 0) {
+        setEditFieldErrors(extractedFieldErrors)
+      }
+
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        setEditErrorMessage("Please log in before editing exercises.")
+        return
+      }
+
+      const message =
+        error?.response?.data?.detail ||
+        "Unable to update exercise. Please check your inputs."
+      setEditErrorMessage(message)
+    } finally {
+      setIsEditSubmitting(false)
+    }
+  }
+
   const handleLoadMore = () => {
     setVisibleCount((prev) => prev + PAGE_SIZE)
   }
@@ -402,6 +499,18 @@ function Exercises() {
   const displayedExercises = filteredExercises.slice(0, visibleCount)
   const hasMoreExercises = filteredExercises.length > displayedExercises.length
   const selectedExercise = filteredExercises.find((exercise) => (exercise.id ?? null) === selectedExerciseId) || null
+  const currentUsername = getStoredUsername()
+  const selectedExerciseOwner =
+    selectedExercise?.created_by_username ||
+    selectedExercise?.username ||
+    selectedExercise?.created_by ||
+    ""
+  const canEditSelectedExercise = Boolean(
+    selectedExercise &&
+    currentUsername &&
+    selectedExerciseOwner &&
+    currentUsername === selectedExerciseOwner,
+  )
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
@@ -573,7 +682,7 @@ function Exercises() {
                     {equipmentLookup[exercise.equipment] || exercise.equipment} · {exercise.primary_muscle_group}
                   </p>
                   <p className="exercise-meta">
-                    Created by {exercise.created_by || "Unknown"} · {exercise.is_public ? "Public" : "Private"}
+                    Created by {exercise.created_by_username || exercise.username || exercise.created_by || "Unknown"} · {exercise.is_public ? "Public" : "Private"}
                   </p>
                   <p className="exercise-meta">
                     Created {formatTimestamp(exercise.created_at)} · Updated {formatTimestamp(exercise.updated_at)}
@@ -594,8 +703,23 @@ function Exercises() {
 
         <aside className="exercise-form-panel">
           <header className="exercise-panel-header">
-            <h2>Exercise Details</h2>
-            <p>Select an exercise from the library to review details.</p>
+            <div className="exercise-panel-header-top">
+              <div>
+                <h2>Exercise Details</h2>
+                <p>Select an exercise from the library to review details.</p>
+              </div>
+              {canEditSelectedExercise ? (
+                <div className="exercise-header-actions">
+                  <button
+                    type="button"
+                    className="exercise-secondary-btn"
+                    onClick={handleOpenEditModal}
+                  >
+                    Edit Exercise
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </header>
 
           {selectedExercise ? (
@@ -614,7 +738,7 @@ function Exercises() {
                 <strong>Description:</strong> {selectedExercise.description || "No description provided."}
               </p>
               <p className="exercise-meta">
-                <strong>Created by:</strong> {selectedExercise.created_by || "Unknown"}
+                <strong>Created by:</strong> {selectedExercise.created_by_username || selectedExercise.username || selectedExercise.created_by || "Unknown"}
               </p>
               <p className="exercise-meta">
                 <strong>Visibility:</strong> {selectedExercise.is_public ? "Public" : "Private"}
@@ -766,6 +890,145 @@ function Exercises() {
 
               <button className="exercise-primary-btn" type="submit" disabled={isSubmitting}>
                 {isSubmitting ? "Saving..." : "Add Exercise"}
+              </button>
+            </form>
+          </aside>
+        </div>
+      ) : null}
+
+      {isEditModalOpen ? (
+        <div className="exercise-modal-backdrop" role="presentation" onClick={handleCloseEditModal}>
+          <aside
+            className="exercise-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="exercise-edit-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="exercise-modal-header">
+              <div>
+                <h2 id="exercise-edit-modal-title">Edit Exercise</h2>
+                <p>Update the selected exercise in your library.</p>
+              </div>
+              <button
+                type="button"
+                className="exercise-secondary-btn"
+                onClick={handleCloseEditModal}
+              >
+                Close
+              </button>
+            </header>
+
+            <form className="exercise-form" onSubmit={handleEditSubmit}>
+              {editErrorMessage ? <p className="exercise-error">{editErrorMessage}</p> : null}
+
+              <label className="exercise-field">
+                <span>Name</span>
+                <input
+                  type="text"
+                  name="name"
+                  value={editFormValues.name}
+                  onChange={handleEditChange}
+                  placeholder="Exercise name"
+                  required
+                />
+                {editFieldErrors.name ? <small className="exercise-field-error">{editFieldErrors.name}</small> : null}
+              </label>
+
+              <label className="exercise-field">
+                <span>Description</span>
+                <input
+                  type="text"
+                  name="description"
+                  value={editFormValues.description}
+                  onChange={handleEditChange}
+                  placeholder="Optional details"
+                />
+                {editFieldErrors.description ? <small className="exercise-field-error">{editFieldErrors.description}</small> : null}
+              </label>
+
+              <label className="exercise-field">
+                <span>Category</span>
+                <select
+                  name="category"
+                  value={editFormValues.category}
+                  onChange={handleEditChange}
+                  disabled={isChoicesLoading}
+                  required
+                >
+                  <option value="">{isChoicesLoading ? "Loading categories..." : "Select category"}</option>
+                  {categoryChoices.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+                {editFieldErrors.category ? <small className="exercise-field-error">{editFieldErrors.category}</small> : null}
+              </label>
+
+              <label className="exercise-field">
+                <span>Equipment</span>
+                <select
+                  name="equipment"
+                  value={editFormValues.equipment}
+                  onChange={handleEditChange}
+                  disabled={isChoicesLoading}
+                  required
+                >
+                  <option value="">{isChoicesLoading ? "Loading equipment..." : "Select equipment"}</option>
+                  {equipmentChoices.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+                {editFieldErrors.equipment ? <small className="exercise-field-error">{editFieldErrors.equipment}</small> : null}
+              </label>
+
+              <label className="exercise-field">
+                <span>Created by</span>
+                <input
+                  type="text"
+                  name="created_by"
+                  value={editFormValues.created_by}
+                  onChange={handleEditChange}
+                  placeholder="Coach or athlete"
+                />
+                {editFieldErrors.created_by ? <small className="exercise-field-error">{editFieldErrors.created_by}</small> : null}
+              </label>
+
+              <label className="exercise-field">
+                <span>Muscle</span>
+                <select
+                  name="primary_muscle_group"
+                  value={editFormValues.primary_muscle_group}
+                  onChange={handleEditChange}
+                  disabled={isChoicesLoading}
+                  required
+                >
+                  <option value="">{isChoicesLoading ? "Loading muscle groups..." : "Select muscle group"}</option>
+                  {muscleChoices.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+                {editFieldErrors.primary_muscle_group ? <small className="exercise-field-error">{editFieldErrors.primary_muscle_group}</small> : null}
+              </label>
+
+              <label className="exercise-checkbox">
+                <input
+                  type="checkbox"
+                  name="is_public"
+                  checked={editFormValues.is_public}
+                  onChange={handleEditChange}
+                />
+                Public exercise
+              </label>
+              {editFieldErrors.is_public ? <small className="exercise-field-error">{editFieldErrors.is_public}</small> : null}
+
+              <button className="exercise-primary-btn" type="submit" disabled={isEditSubmitting}>
+                {isEditSubmitting ? "Saving..." : "Save Changes"}
               </button>
             </form>
           </aside>
