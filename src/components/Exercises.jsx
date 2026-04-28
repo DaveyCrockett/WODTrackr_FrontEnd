@@ -547,7 +547,17 @@ function Exercises() {
 
           <div className="exercise-list">
             {isLoading ? (
-              <p className="exercise-empty">Loading exercises...</p>
+              Array.from({ length: 4 }, (_, i) => (
+                <div className="exercise-skeleton" key={`skeleton-${i}`} aria-hidden="true">
+                  <div className="exercise-skeleton-header">
+                    <div className="exercise-skeleton-line exercise-skeleton-title" />
+                    <div className="exercise-skeleton-line exercise-skeleton-badge" />
+                  </div>
+                  <div className="exercise-skeleton-line exercise-skeleton-meta" />
+                  <div className="exercise-skeleton-line exercise-skeleton-meta" />
+                  <div className="exercise-skeleton-line exercise-skeleton-meta-sm" />
+                </div>
+              ))
             ) : filteredExercises.length === 0 ? (
               <p className="exercise-empty">No exercises found.</p>
             ) : (

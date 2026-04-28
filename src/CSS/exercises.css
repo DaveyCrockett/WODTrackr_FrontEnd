@@ -194,6 +194,59 @@
   justify-content: center;
 }
 
+/* Skeleton loading */
+@keyframes exercise-shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+.exercise-skeleton {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.85rem;
+  background: #f8fafc;
+}
+
+.exercise-skeleton-line {
+  border-radius: 6px;
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 800px 100%;
+  animation: exercise-shimmer 1.4s infinite linear;
+}
+
+.exercise-skeleton-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.exercise-skeleton-title {
+  height: 1rem;
+  width: 55%;
+}
+
+.exercise-skeleton-badge {
+  height: 1rem;
+  width: 20%;
+}
+
+.exercise-skeleton-meta {
+  height: 0.78rem;
+  width: 75%;
+  margin-top: 0.32rem;
+}
+
+.exercise-skeleton-meta-sm {
+  height: 0.78rem;
+  width: 60%;
+  margin-top: 0.32rem;
+}
+
 @media (max-width: 1080px) {
   .exercise-shell {
     grid-template-columns: 1fr;
