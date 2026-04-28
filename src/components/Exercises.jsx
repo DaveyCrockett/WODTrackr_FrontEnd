@@ -6,6 +6,7 @@ const API_URL = "http://127.0.0.1:8000/api/wodtrackr/exercises/"
 const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 const PAGE_SIZE = 12
+const SKELETON_CARD_COUNT = 6
 const EMPTY_EXERCISE_FORM_VALUES = {
   name: "",
   description: "",
@@ -207,6 +208,7 @@ function Exercises() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isSlowLoading, setIsSlowLoading] = useState(false)
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
@@ -232,6 +234,19 @@ function Exercises() {
 
     return () => clearTimeout(timer)
   }, [successMessage])
+
+  useEffect(() => {
+    if (!isLoading) {
+      setIsSlowLoading(false)
+      return undefined
+    }
+
+    const timer = setTimeout(() => {
+      setIsSlowLoading(true)
+    }, 1200)
+
+    return () => clearTimeout(timer)
+  }, [isLoading])
 
   useEffect(() => {
     const loadExercises = async () => {
@@ -652,11 +667,21 @@ function Exercises() {
             </button>
           </div>
 
+          {isLoading && isSlowLoading ? (
+            <p className="exercise-loading-note">Still loading exercises. Thanks for hanging tight.</p>
+          ) : null}
           {errorMessage ? <p className="exercise-error">{errorMessage}</p> : null}
 
           <div className="exercise-list">
             {isLoading ? (
-              <p className="exercise-empty">Loading exercises...</p>
+              Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (
+                <article className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`}>
+                  <div className="exercise-skeleton exercise-skeleton-title" />
+                  <div className="exercise-skeleton exercise-skeleton-line" />
+                  <div className="exercise-skeleton exercise-skeleton-line exercise-skeleton-line-short" />
+                  <div className="exercise-skeleton exercise-skeleton-line" />
+                </article>
+              ))
             ) : filteredExercises.length === 0 ? (
               <p className="exercise-empty">No exercises found.</p>
             ) : (
@@ -750,6 +775,17 @@ function Exercises() {
                 <strong>Updated:</strong> {formatTimestamp(selectedExercise.updated_at)}
               </p>
             </section>
+          ) : isLoading ? (
+            <section className="exercise-details" aria-live="polite">
+              {isSlowLoading ? <p className="exercise-loading-note">Exercise details are still loading.</p> : null}
+              <div className="exercise-skeleton exercise-skeleton-title" />
+              <div className="exercise-skeleton exercise-skeleton-line" />
+              <div className="exercise-skeleton exercise-skeleton-line" />
+              <div className="exercise-skeleton exercise-skeleton-line exercise-skeleton-line-short" />
+              <div className="exercise-skeleton exercise-skeleton-block" />
+            </section>
+          ) : errorMessage ? (
+            <p className="exercise-error">Unable to show exercise details until the library finishes loading.</p>
           ) : (
             <p className="exercise-empty">No exercise selected.</p>
           )}

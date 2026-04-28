@@ -98,6 +98,13 @@
   font-size: 0.92rem;
 }
 
+.exercise-loading-note {
+  margin: 0.8rem 0 0;
+  color: #1d4ed8;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .exercise-success {
   margin: 0;
   border: 1px solid #86efac;
@@ -155,9 +162,51 @@
   cursor: pointer;
 }
 
+.exercise-item-skeleton {
+  cursor: default;
+}
+
 .exercise-item-selected {
   border-color: #307cec;
   box-shadow: 0 0 0 3px rgba(48, 124, 236, 0.16);
+}
+
+.exercise-skeleton {
+  border-radius: 10px;
+  background: linear-gradient(90deg, #e2e8f0 0%, #f8fafc 50%, #e2e8f0 100%);
+  background-size: 200% 100%;
+  animation: exercise-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.exercise-skeleton-title {
+  height: 1.15rem;
+  width: 58%;
+}
+
+.exercise-skeleton-line {
+  height: 0.95rem;
+  width: 100%;
+  margin-top: 0.65rem;
+}
+
+.exercise-skeleton-line-short {
+  width: 72%;
+}
+
+.exercise-skeleton-block {
+  height: 4.75rem;
+  width: 100%;
+  margin-top: 0.65rem;
+}
+
+@keyframes exercise-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .exercise-header {
