@@ -118,9 +118,6 @@
   margin-top: 0.85rem;
   display: grid;
   gap: 0.75rem;
-  max-height: 62vh;
-  overflow: auto;
-  padding-right: 0.2rem;
 }
 
 .exercise-item {
@@ -191,13 +188,15 @@
   cursor: not-allowed;
 }
 
+.exercise-load-more {
+  margin-top: 0.85rem;
+  display: flex;
+  justify-content: center;
+}
+
 @media (max-width: 1080px) {
   .exercise-shell {
     grid-template-columns: 1fr;
-  }
-
-  .exercise-list {
-    max-height: 42vh;
   }
 }
 
