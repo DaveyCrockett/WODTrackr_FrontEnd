@@ -173,7 +173,6 @@ function Exercises() {
     equipment: "",
     muscle: "",
   })
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
