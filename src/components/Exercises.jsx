@@ -468,6 +468,7 @@ function Exercises() {
     const clientErrors = validateExerciseForm(formValues)
     if (Object.keys(clientErrors).length > 0) {
       setFieldErrors(clientErrors)
+      setIsSubmitting(false)
       return
     }
 
@@ -567,6 +568,7 @@ function Exercises() {
     const clientErrors = validateExerciseForm(editFormValues)
     if (Object.keys(clientErrors).length > 0) {
       setEditFieldErrors(clientErrors)
+      setIsEditSubmitting(false)
       return
     }
 
