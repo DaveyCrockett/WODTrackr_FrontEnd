@@ -177,3 +177,27 @@ export const buildRequestConfig = (overrides = {}) => {
     ...overrides,
   }
 }
+
+export const validateExerciseForm = (values) => {
+  const errors = {}
+
+  if (!values.name || !values.name.trim()) {
+    errors.name = "Name is required."
+  } else if (values.name.trim().length > 200) {
+    errors.name = "Name must be 200 characters or fewer."
+  }
+
+  if (!values.category) {
+    errors.category = "Category is required."
+  }
+
+  if (!values.equipment) {
+    errors.equipment = "Equipment is required."
+  }
+
+  if (!values.primary_muscle_group) {
+    errors.primary_muscle_group = "Muscle group is required."
+  }
+
+  return errors
+}
