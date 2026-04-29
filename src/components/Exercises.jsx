@@ -1,6 +1,7 @@
 import "../CSS/exercises.css"
 import axios from "axios"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { validateExerciseForm } from "../utils/exerciseUtils"
 
 const API_URL = "http://127.0.0.1:8000/api/wodtrackr/exercises/"
 const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
@@ -193,30 +194,6 @@ const getExerciseFormValues = (exercise) => ({
   created_by: exercise?.created_by_username || exercise?.username || exercise?.created_by || "",
   is_public: Boolean(exercise?.is_public),
 })
-
-const validateExerciseForm = (values) => {
-  const errors = {}
-
-  if (!values.name || !values.name.trim()) {
-    errors.name = "Name is required."
-  } else if (values.name.trim().length > 200) {
-    errors.name = "Name must be 200 characters or fewer."
-  }
-
-  if (!values.category) {
-    errors.category = "Category is required."
-  }
-
-  if (!values.equipment) {
-    errors.equipment = "Equipment is required."
-  }
-
-  if (!values.primary_muscle_group) {
-    errors.primary_muscle_group = "Muscle group is required."
-  }
-
-  return errors
-}
 
 function Exercises() {
   const [exercises, setExercises] = useState([])
