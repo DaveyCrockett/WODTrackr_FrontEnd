@@ -1,6 +1,6 @@
 import "../CSS/exercises.css"
 import axios from "axios"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 const API_URL = "http://127.0.0.1:8000/api/wodtrackr/exercises/"
 const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
@@ -223,6 +223,14 @@ function Exercises() {
   const [formValues, setFormValues] = useState(EMPTY_EXERCISE_FORM_VALUES)
   const [editFormValues, setEditFormValues] = useState(EMPTY_EXERCISE_FORM_VALUES)
 
+  // Refs for modal focus management
+  const addModalRef = useRef(null)
+  const editModalRef = useRef(null)
+  const addModalTriggerRef = useRef(null)
+  const editModalTriggerRef = useRef(null)
+  const addModalPreviouslyOpen = useRef(false)
+  const editModalPreviouslyOpen = useRef(false)
+
   useEffect(() => {
     if (!successMessage) {
       return undefined
@@ -247,6 +255,78 @@ function Exercises() {
 
     return () => clearTimeout(timer)
   }, [isLoading])
+
+  // Move focus into the add-exercise modal when it opens, and return it when it closes
+  useEffect(() => {
+    if (isAddModalOpen) {
+      addModalPreviouslyOpen.current = true
+      addModalRef.current
+        ?.querySelector("button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])")
+        ?.focus()
+    } else if (addModalPreviouslyOpen.current) {
+      addModalTriggerRef.current?.focus()
+    }
+  }, [isAddModalOpen])
+
+  // Move focus into the edit-exercise modal when it opens, and return it when it closes
+  useEffect(() => {
+    if (isEditModalOpen) {
+      editModalPreviouslyOpen.current = true
+      editModalRef.current
+        ?.querySelector("button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])")
+        ?.focus()
+    } else if (editModalPreviouslyOpen.current) {
+      editModalTriggerRef.current?.focus()
+    }
+  }, [isEditModalOpen])
+
+  // Keyboard handler: Escape closes the add modal; Tab is trapped inside it
+  const handleAddModalKeyDown = useCallback((event) => {
+    if (event.key === "Escape") {
+      setIsAddModalOpen(false)
+      return
+    }
+    if (event.key !== "Tab" || !addModalRef.current) return
+    const focusables = Array.from(
+      addModalRef.current.querySelectorAll(
+        "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+      ),
+    )
+    if (focusables.length < 2) return
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }, [])
+
+  // Keyboard handler: Escape closes the edit modal; Tab is trapped inside it
+  const handleEditModalKeyDown = useCallback((event) => {
+    if (event.key === "Escape") {
+      setIsEditModalOpen(false)
+      return
+    }
+    if (event.key !== "Tab" || !editModalRef.current) return
+    const focusables = Array.from(
+      editModalRef.current.querySelectorAll(
+        "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+      ),
+    )
+    if (focusables.length < 2) return
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }, [])
 
   useEffect(() => {
     const loadExercises = async () => {
@@ -554,7 +634,7 @@ function Exercises() {
   )
 
   return (
-    <main className="exercise-page">
+    <main className="exercise-page" aria-label="Exercise Library">
       <section className="exercise-shell">
         <section className="exercise-library-panel">
           <header className="exercise-panel-header">
@@ -564,12 +644,17 @@ function Exercises() {
                 <p>Search and review your exercise list.</p>
               </div>
               <div className="exercise-header-actions">
-                <button type="button" className="exercise-primary-btn" onClick={handleOpenAddModal}>
+                <button
+                  type="button"
+                  className="exercise-primary-btn"
+                  onClick={handleOpenAddModal}
+                  ref={addModalTriggerRef}
+                >
                   Add Exercise
                 </button>
               </div>
             </div>
-            <div className="exercise-counts">
+            <div className="exercise-counts" aria-live="polite" aria-atomic="true">
               <span>{exercises.length} total</span>
               <span>{displayedExercises.length} shown</span>
             </div>
@@ -668,29 +753,56 @@ function Exercises() {
           </div>
 
           {isLoading && isSlowLoading ? (
-            <p className="exercise-loading-note">Still loading exercises. Thanks for hanging tight.</p>
+            <p className="exercise-loading-note" role="status">Still loading exercises. Thanks for hanging tight.</p>
           ) : null}
-          {errorMessage ? <p className="exercise-error">{errorMessage}</p> : null}
+          {errorMessage ? <p className="exercise-error" role="alert">{errorMessage}</p> : null}
+          {successMessage ? <p className="exercise-success" role="status">{successMessage}</p> : null}
 
-          <div className="exercise-list">
+          <div
+            className="exercise-list"
+            role={!isLoading && filteredExercises.length > 0 ? "listbox" : undefined}
+            aria-label={!isLoading && filteredExercises.length > 0 ? "Exercises" : undefined}
+            aria-busy={isLoading}
+            onKeyDown={(event) => {
+              if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
+              if (filteredExercises.length === 0) return
+              event.preventDefault()
+              const currentIndex = displayedExercises.findIndex((ex) => (ex.id ?? null) === selectedExerciseId)
+              let nextIndex = currentIndex
+              if (event.key === "ArrowDown") nextIndex = Math.min(currentIndex + 1, displayedExercises.length - 1)
+              else if (event.key === "ArrowUp") nextIndex = Math.max(currentIndex - 1, 0)
+              else if (event.key === "Home") nextIndex = 0
+              else if (event.key === "End") nextIndex = displayedExercises.length - 1
+              if (nextIndex !== currentIndex) {
+                const nextExercise = displayedExercises[nextIndex]
+                setSelectedExerciseId(nextExercise.id ?? null)
+                const optionEl = nextExercise.id
+                  ? event.currentTarget.querySelector(`#exercise-option-${nextExercise.id}`)
+                  : null
+                optionEl?.focus()
+              }
+            }}
+          >
             {isLoading ? (
               Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (
-                <article className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`}>
+                <div className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`} aria-hidden="true">
                   <div className="exercise-skeleton exercise-skeleton-title" />
                   <div className="exercise-skeleton exercise-skeleton-line" />
                   <div className="exercise-skeleton exercise-skeleton-line exercise-skeleton-line-short" />
                   <div className="exercise-skeleton exercise-skeleton-line" />
-                </article>
+                </div>
               ))
             ) : filteredExercises.length === 0 ? (
-              <p className="exercise-empty">No exercises found.</p>
+              <p className="exercise-empty" role="status">No exercises found.</p>
             ) : (
               displayedExercises.map((exercise, index) => (
                 <article
                   className={`exercise-item ${(exercise.id ?? null) === selectedExerciseId ? "exercise-item-selected" : ""}`}
                   key={exercise.id ?? index}
-                  role="button"
-                  tabIndex={0}
+                  id={exercise.id ? `exercise-option-${exercise.id}` : undefined}
+                  role="option"
+                  aria-selected={(exercise.id ?? null) === selectedExerciseId}
+                  tabIndex={(exercise.id ?? null) === selectedExerciseId ? 0 : -1}
                   onClick={() => setSelectedExerciseId(exercise.id ?? null)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
@@ -726,7 +838,7 @@ function Exercises() {
           ) : null}
         </section>
 
-        <aside className="exercise-form-panel">
+        <aside className="exercise-form-panel" aria-label="Exercise Details">
           <header className="exercise-panel-header">
             <div className="exercise-panel-header-top">
               <div>
@@ -739,6 +851,7 @@ function Exercises() {
                     type="button"
                     className="exercise-secondary-btn"
                     onClick={handleOpenEditModal}
+                    ref={editModalTriggerRef}
                   >
                     Edit Exercise
                   </button>
@@ -776,8 +889,8 @@ function Exercises() {
               </p>
             </section>
           ) : isLoading ? (
-            <section className="exercise-details" aria-live="polite">
-              {isSlowLoading ? <p className="exercise-loading-note">Exercise details are still loading.</p> : null}
+            <section className="exercise-details" aria-live="polite" aria-label="Loading exercise details" aria-busy="true">
+              {isSlowLoading ? <p className="exercise-loading-note" role="status">Exercise details are still loading.</p> : null}
               <div className="exercise-skeleton exercise-skeleton-title" />
               <div className="exercise-skeleton exercise-skeleton-line" />
               <div className="exercise-skeleton exercise-skeleton-line" />
@@ -793,22 +906,30 @@ function Exercises() {
       </section>
 
       {isAddModalOpen ? (
-        <div className="exercise-modal-backdrop" role="presentation" onClick={handleCloseAddModal}>
+        <div
+          className="exercise-modal-backdrop"
+          role="presentation"
+          onClick={handleCloseAddModal}
+        >
           <aside
             className="exercise-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="exercise-modal-title"
+            aria-describedby="exercise-modal-desc"
+            ref={addModalRef}
+            onKeyDown={handleAddModalKeyDown}
             onClick={(event) => event.stopPropagation()}
           >
             <header className="exercise-modal-header">
               <div>
                 <h2 id="exercise-modal-title">Add Exercise</h2>
-                <p>Create a new exercise in your library.</p>
+                <p id="exercise-modal-desc">Create a new exercise in your library.</p>
               </div>
               <button
                 type="button"
                 className="exercise-secondary-btn"
+                aria-label="Close Add Exercise dialog"
                 onClick={handleCloseAddModal}
               >
                 Close
@@ -816,8 +937,7 @@ function Exercises() {
             </header>
 
             <form className="exercise-form" onSubmit={handleSubmit}>
-              {successMessage ? <p className="exercise-success">{successMessage}</p> : null}
-              {errorMessage ? <p className="exercise-error">{errorMessage}</p> : null}
+              {errorMessage ? <p className="exercise-error" role="alert">{errorMessage}</p> : null}
 
               <label className="exercise-field">
                 <span>Name</span>
@@ -933,22 +1053,30 @@ function Exercises() {
       ) : null}
 
       {isEditModalOpen ? (
-        <div className="exercise-modal-backdrop" role="presentation" onClick={handleCloseEditModal}>
+        <div
+          className="exercise-modal-backdrop"
+          role="presentation"
+          onClick={handleCloseEditModal}
+        >
           <aside
             className="exercise-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="exercise-edit-modal-title"
+            aria-describedby="exercise-edit-modal-desc"
+            ref={editModalRef}
+            onKeyDown={handleEditModalKeyDown}
             onClick={(event) => event.stopPropagation()}
           >
             <header className="exercise-modal-header">
               <div>
                 <h2 id="exercise-edit-modal-title">Edit Exercise</h2>
-                <p>Update the selected exercise in your library.</p>
+                <p id="exercise-edit-modal-desc">Update the selected exercise in your library.</p>
               </div>
               <button
                 type="button"
                 className="exercise-secondary-btn"
+                aria-label="Close Edit Exercise dialog"
                 onClick={handleCloseEditModal}
               >
                 Close
@@ -956,7 +1084,7 @@ function Exercises() {
             </header>
 
             <form className="exercise-form" onSubmit={handleEditSubmit}>
-              {editErrorMessage ? <p className="exercise-error">{editErrorMessage}</p> : null}
+              {editErrorMessage ? <p className="exercise-error" role="alert">{editErrorMessage}</p> : null}
 
               <label className="exercise-field">
                 <span>Name</span>
