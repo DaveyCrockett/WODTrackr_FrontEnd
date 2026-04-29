@@ -74,8 +74,8 @@ describe('Exercise Library E2E Tests', () => {
         )
       })
 
-      // Click on Back Squat exercise
-      const backSquatElement = screen.getByText('Back Squat')
+      // Click on Back Squat in the list (first matching heading)
+      const backSquatElement = screen.getAllByText('Back Squat')[0]
       await userEvent.click(backSquatElement)
 
       // Verify details are displayed
@@ -118,7 +118,7 @@ describe('Exercise Library E2E Tests', () => {
 
       // Apply category filter
       const categorySelect = screen.getByLabelText('Category')
-      await userEvent.selectOption(categorySelect, 'strength')
+      await userEvent.selectOptions(categorySelect, 'strength')
 
       // Verify filter was applied
       await waitFor(() => {
@@ -132,7 +132,7 @@ describe('Exercise Library E2E Tests', () => {
 
       // Change sort order
       const sortSelect = screen.getByLabelText('Sort by')
-      await userEvent.selectOption(sortSelect, '-name')
+      await userEvent.selectOptions(sortSelect, '-name')
 
       // Verify sort was applied
       await waitFor(() => {
@@ -217,11 +217,11 @@ describe('Exercise Library E2E Tests', () => {
 
       // Wait for initial exercises to load
       await waitFor(() => {
-        expect(screen.getByText('Exercise 01')).toBeInTheDocument()
+        expect(screen.getAllByText('Exercise 01').length).toBeGreaterThan(0)
       })
 
       // Initial load should show 12 exercises
-      expect(screen.getByText('Exercise 01')).toBeInTheDocument()
+      expect(screen.getAllByText('Exercise 01').length).toBeGreaterThan(0)
       expect(screen.queryByText('Exercise 13')).not.toBeInTheDocument()
 
       // Load More button should be visible
@@ -342,8 +342,8 @@ describe('Exercise Library E2E Tests', () => {
       const categorySelect = screen.getByLabelText('Category')
       const equipmentSelect = screen.getByLabelText('Equipment')
 
-      await userEvent.selectOption(categorySelect, 'strength')
-      await userEvent.selectOption(equipmentSelect, 'barbell')
+      await userEvent.selectOptions(categorySelect, 'strength')
+      await userEvent.selectOptions(equipmentSelect, 'barbell')
 
       // Verify both filters were applied
       await waitFor(() => {
@@ -396,7 +396,7 @@ describe('Exercise Library E2E Tests', () => {
 
       // Change filter
       const categorySelect = screen.getByLabelText('Category')
-      await userEvent.selectOption(categorySelect, 'cardio')
+      await userEvent.selectOptions(categorySelect, 'cardio')
 
       // Verify new call was made
       await waitFor(() => {

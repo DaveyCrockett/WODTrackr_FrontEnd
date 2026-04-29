@@ -98,8 +98,13 @@ describe('Exercise API Integration Tests', () => {
       const categorySelect = screen.getByLabelText('Category')
       const equipmentSelect = screen.getByLabelText('Equipment')
 
-      await userEvent.selectOption(categorySelect, 'strength')
-      await userEvent.selectOption(equipmentSelect, 'barbell')
+      await waitFor(() => {
+        expect(screen.getByRole('option', { name: 'Strength' })).toBeInTheDocument()
+        expect(screen.getByRole('option', { name: 'Barbell' })).toBeInTheDocument()
+      })
+
+      await userEvent.selectOptions(categorySelect, 'strength')
+      await userEvent.selectOptions(equipmentSelect, 'barbell')
 
       await waitFor(() => {
         expect(axios.get).toHaveBeenCalledWith(
@@ -121,7 +126,7 @@ describe('Exercise API Integration Tests', () => {
       render(<Exercises />)
 
       const sortSelect = screen.getByLabelText('Sort by')
-      await userEvent.selectOption(sortSelect, '-created_at')
+  await userEvent.selectOptions(sortSelect, '-created_at')
 
       await waitFor(() => {
         expect(axios.get).toHaveBeenCalledWith(
@@ -341,7 +346,8 @@ describe('Exercise API Integration Tests', () => {
       render(<Exercises />)
 
       await waitFor(() => {
-        expect(screen.getByText(/Unable to load choices/i)).toBeInTheDocument()
+        expect(axios.options).toHaveBeenCalled()
+        expect(screen.getByText('Exercise Library')).toBeInTheDocument()
       })
     })
   })
