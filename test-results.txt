@@ -1,0 +1,73 @@
+﻿
+> wodtrackr-app@0.0.0 test
+> vitest --run
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.5 [39m[90mC:/Users/augus/Documents/Programming/StayFrostyStudios/WODTrackrProject/WODTrackr_FrontEnd[39m
+
+ [32mΓ£ô[39m src/tests/utilities.test.js [2m([22m[2m17 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [31mΓ¥»[39m src/tests/Exercises.e2e.test.jsx [2m([22m[2m9 tests[22m[2m | [22m[31m5 failed[39m[2m)[22m[33m 3036[2mms[22m[39m
+[31m       [31m├ù[31m should complete full exercise search and view workflow[39m[33m 921[2mms[22m[39m
+[31m       [31m├ù[31m should complete search, filter, and sort workflow[39m[33m 333[2mms[22m[39m
+       [32mΓ£ô[39m should complete add exercise workflow[32m 63[2mms[22m[39m
+[31m       [31m├ù[31m should handle pagination with load more[39m[33m 342[2mms[22m[39m
+       [32mΓ£ô[39m should show success message after adding exercise[32m 72[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should handle API errors during search [33m 322[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should require login message when getting 401 error [33m 326[2mms[22m[39m
+[31m       [31m├ù[31m should combine multiple filters correctly[39m[33m 331[2mms[22m[39m
+[31m       [31m├ù[31m should update results when filters change[39m[33m 322[2mms[22m[39m
+ [31mΓ¥»[39m src/tests/Exercises.api.test.jsx [2m([22m[2m24 tests[22m[2m | [22m[31m3 failed[39m[2m)[22m[33m 4966[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should make GET request to exercises endpoint [33m 344[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should include auth token in GET request [33m 315[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should include search parameters in GET request [33m 488[2mms[22m[39m
+[31m       [31m├ù[31m should include filter parameters in GET request[39m[32m 17[2mms[22m[39m
+[31m       [31m├ù[31m should include ordering parameter in GET request[39m[32m 8[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should handle successful response with exercises data [33m 328[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should handle 401 Unauthorized error [33m 335[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should handle 403 Forbidden error [33m 333[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should handle API error with detail message [33m 318[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should show default error message when no detail provided [33m 326[2mms[22m[39m
+       [32mΓ£ô[39m should make OPTIONS request to load choices[32m 10[2mms[22m[39m
+       [32mΓ£ô[39m should cache choices in localStorage[32m 21[2mms[22m[39m
+       [32mΓ£ô[39m should load choices from cache if fresh[32m 17[2mms[22m[39m
+       [32mΓ£ô[39m should refresh choices if cache is stale[32m 9[2mms[22m[39m
+[31m       [31m├ù[31m should handle choices loading error[39m[33m 1014[2mms[22m[39m
+       [32mΓ£ô[39m should make POST request with exercise data[32m 7[2mms[22m[39m
+       [32mΓ£ô[39m should include auth token in POST request[32m 8[2mms[22m[39m
+       [32mΓ£ô[39m should handle POST validation errors[32m 6[2mms[22m[39m
+       [32mΓ£ô[39m should handle POST authentication errors[32m 6[2mms[22m[39m
+       [32mΓ£ô[39m should make PATCH request to update exercise[32m 6[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should only allow editing own exercises [33m 313[2mms[22m[39m
+       [32mΓ£ô[39m should handle network errors[32m 6[2mms[22m[39m
+       [32mΓ£ô[39m should handle malformed API responses[32m 5[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should clear error message when new request is made [33m 723[2mms[22m[39m
+ [31mΓ¥»[39m src/tests/Exercises.test.jsx [2m([22m[2m23 tests[22m[2m | [22m[31m6 failed[39m[2m)[22m[33m 5018[2mms[22m[39m
+       [32mΓ£ô[39m should render exercise library page with main sections[32m 55[2mms[22m[39m
+       [32mΓ£ô[39m should render search and filter controls[32m 17[2mms[22m[39m
+       [32mΓ£ô[39m should render Add Exercise button[32m 9[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should display list of exercises [33m 345[2mms[22m[39m
+       [32mΓ£ô[39m should show empty state when no exercises exist[32m 10[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should display exercise count [33m 315[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should search exercises by name [33m 493[2mms[22m[39m
+[31m       [31m├ù[31m should debounce search requests[39m[33m 446[2mms[22m[39m
+[31m       [31m├ù[31m should filter by category[39m[32m 13[2mms[22m[39m
+[31m       [31m├ù[31m should filter by equipment[39m[32m 11[2mms[22m[39m
+       [32mΓ£ô[39m should clear all filters[32m 178[2mms[22m[39m
+[31m       [31m├ù[31m should sort exercises by different options[39m[32m 8[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should show Load More button when there are more exercises [33m 325[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should load more exercises on Load More click [33m 367[2mms[22m[39m
+[31m       [31m├ù[31m should display selected exercise details[39m[33m 319[2mms[22m[39m
+       [32mΓ£ô[39m should open add exercise modal on Add Exercise button click[32m 60[2mms[22m[39m
+[31m       [31m├ù[31m should submit new exercise form[39m[33m 1053[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should handle API errors gracefully [33m 325[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should handle authentication errors [33m 320[2mms[22m[39m
+       [32mΓ£ô[39m should load choices from OPTIONS endpoint[32m 8[2mms[22m[39m
+       [32mΓ£ô[39m should cache choices from localStorage[32m 19[2mms[22m[39m
+       [32mΓ£ô[39m should have proper ARIA labels[32m 8[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should handle keyboard navigation in exercise list [33m 313[2mms[22m[39m
+
+[2m Test Files [22m [1m[31m3 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[31m14 failed[39m[22m[2m | [22m[1m[32m59 passed[39m[22m[90m (73)[39m
+[2m   Start at [22m 05:43:02
+[2m   Duration [22m 6.95s[2m (transform 515ms, setup 560ms, import 1.39s, tests 13.05s, environment 4.55s)[22m
+
