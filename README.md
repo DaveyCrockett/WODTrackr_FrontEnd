@@ -1,16 +1,57 @@
-# React + Vite
+# WODTrackr — Front End
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+WODTrackr is a React + Vite web application for tracking CrossFit-style workouts (WODs). It connects to a Django REST Framework back end and provides views for workouts, an exercise library, programs, a training calendar, and user account management.
 
-Currently, two official plugins are available:
+## Quick start
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+```bash
+npm install
+npm run dev        # http://localhost:5173
+```
 
-## React Compiler
+| Script | Purpose |
+|---|---|
+| `npm run dev` | Start Vite dev server with HMR |
+| `npm run build` | Production build |
+| `npm run preview` | Locally preview the production build |
+| `npm run lint` | Run ESLint |
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Project structure
 
-## Expanding the ESLint configuration
+```
+src/
+  App.jsx               # Root router
+  components/
+    Exercises.jsx       # Exercise Library (browse, add, edit)
+    Calendar.jsx        # Training calendar
+    Programs.jsx        # Program management
+    Home.jsx            # Dashboard / home
+    Profile.jsx         # User profile
+    Settings.jsx        # Account settings
+    Help.jsx            # Help page
+    Login.jsx           # Login form
+    Register.jsx        # Registration form
+    Layout.jsx          # Shared shell (nav + outlet)
+    Navbar.jsx          # Navigation bar
+  CSS/                  # Component stylesheets
+docs/
+  exercise-library.md   # Exercise Library developer guide
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Authentication
+
+The app stores the auth token in `localStorage` under the key `wodtrackrAuthToken` (or nested inside `wodtrackrUser` as `authToken`). Every API request that requires authentication includes the header:
+
+```
+Authorization: Bearer <token>
+```
+
+## Documentation
+
+| Topic | File |
+|---|---|
+| Exercise Library (user flows, API, extension points) | [docs/exercise-library.md](docs/exercise-library.md) |
+
+## Back-end requirements
+
+The app expects a Django REST Framework API at `http://127.0.0.1:8000`. Update the `API_URL` constants in each component (or use `import.meta.env.VITE_*` variables) when deploying against a remote backend.
