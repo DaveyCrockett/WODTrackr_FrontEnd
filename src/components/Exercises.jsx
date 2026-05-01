@@ -592,11 +592,7 @@ function Exercises() {
     setErrorMessage("")
     setFieldErrors({})
     setSuccessMessage("")
-<<<<<<< HEAD
     setFormValues(getDefaultExerciseFormValues(currentUsername))
-=======
-    setFormValues({ ...EMPTY_EXERCISE_FORM_VALUES, created_by: getStoredUsername() })
->>>>>>> 93c15be79200ae1e658ccf955e2dcec6da776200
     setIsAddModalOpen(true)
   }
 
