@@ -450,6 +450,211 @@ describe('Exercises Component', () => {
         expect(axios.post).toHaveBeenCalled()
       })
     })
+
+    it('should show client-side validation error when name is empty on submit', async () => {
+      axios.get.mockResolvedValue({ data: { data: [] } })
+      axios.options.mockResolvedValue({
+        data: {
+          actions: {
+            POST: {
+              category: { choices: { strength: 'Strength' } },
+              equipment: { choices: { barbell: 'Barbell' } },
+              primary_muscle_group: { choices: { legs: 'Legs' } },
+            },
+          },
+        },
+      })
+
+      render(<Exercises />)
+
+      const addButton = screen.getByText('Add Exercise')
+      await userEvent.click(addButton)
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Exercise name')).toBeInTheDocument()
+      })
+
+      const dialog = screen.getByRole('dialog')
+      const submitButton = within(dialog).getByRole('button', { name: 'Add Exercise' })
+      await userEvent.click(submitButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Name is required.')).toBeInTheDocument()
+      })
+      expect(axios.post).not.toHaveBeenCalled()
+    })
+
+    it('should show client-side validation error for whitespace-only name', async () => {
+      axios.get.mockResolvedValue({ data: { data: [] } })
+      axios.options.mockResolvedValue({
+        data: {
+          actions: {
+            POST: {
+              category: { choices: { strength: 'Strength' } },
+              equipment: { choices: { barbell: 'Barbell' } },
+              primary_muscle_group: { choices: { legs: 'Legs' } },
+            },
+          },
+        },
+      })
+
+      render(<Exercises />)
+
+      const addButton = screen.getByText('Add Exercise')
+      await userEvent.click(addButton)
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Exercise name')).toBeInTheDocument()
+      })
+
+      const dialog = screen.getByRole('dialog')
+      const nameInput = within(dialog).getByPlaceholderText('Exercise name')
+      await userEvent.type(nameInput, '   ')
+
+      const submitButton = within(dialog).getByRole('button', { name: 'Add Exercise' })
+      await userEvent.click(submitButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Name is required.')).toBeInTheDocument()
+      })
+      expect(axios.post).not.toHaveBeenCalled()
+    })
+
+    it('should show client-side validation errors for missing required selects', async () => {
+      axios.get.mockResolvedValue({ data: { data: [] } })
+      axios.options.mockResolvedValue({
+        data: {
+          actions: {
+            POST: {
+              category: { choices: { strength: 'Strength' } },
+              equipment: { choices: { barbell: 'Barbell' } },
+              primary_muscle_group: { choices: { legs: 'Legs' } },
+            },
+          },
+        },
+      })
+
+      render(<Exercises />)
+
+      const addButton = screen.getByText('Add Exercise')
+      await userEvent.click(addButton)
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Exercise name')).toBeInTheDocument()
+      })
+
+      const dialog = screen.getByRole('dialog')
+      const nameInput = within(dialog).getByPlaceholderText('Exercise name')
+      await userEvent.type(nameInput, 'My Exercise')
+
+      // Leave category, equipment, muscle unselected
+      const submitButton = within(dialog).getByRole('button', { name: 'Add Exercise' })
+      await userEvent.click(submitButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Category is required.')).toBeInTheDocument()
+        expect(screen.getByText('Equipment is required.')).toBeInTheDocument()
+        expect(screen.getByText('Muscle group is required.')).toBeInTheDocument()
+      })
+      expect(axios.post).not.toHaveBeenCalled()
+    })
+
+    it('should clear field error when user corrects the field', async () => {
+      axios.get.mockResolvedValue({ data: { data: [] } })
+      axios.options.mockResolvedValue({
+        data: {
+          actions: {
+            POST: {
+              category: { choices: { strength: 'Strength' } },
+              equipment: { choices: { barbell: 'Barbell' } },
+              primary_muscle_group: { choices: { legs: 'Legs' } },
+            },
+          },
+        },
+      })
+
+      render(<Exercises />)
+
+      const addButton = screen.getByText('Add Exercise')
+      await userEvent.click(addButton)
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Exercise name')).toBeInTheDocument()
+      })
+
+      const dialog = screen.getByRole('dialog')
+      const nameInput = within(dialog).getByPlaceholderText('Exercise name')
+      const submitButton = within(dialog).getByRole('button', { name: 'Add Exercise' })
+
+      // Trigger validation error
+      await userEvent.click(submitButton)
+      await waitFor(() => {
+        expect(screen.getByText('Name is required.')).toBeInTheDocument()
+      })
+
+      // Correct the field — error should disappear
+      await userEvent.type(nameInput, 'Fixed Name')
+      await waitFor(() => {
+        expect(screen.queryByText('Name is required.')).not.toBeInTheDocument()
+      })
+    })
+
+    it('should reset form values when Add modal is closed', async () => {
+      axios.get.mockResolvedValue({ data: { data: [] } })
+      axios.options.mockResolvedValue({ data: {} })
+
+      render(<Exercises />)
+
+      const addButton = screen.getByText('Add Exercise')
+      await userEvent.click(addButton)
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Exercise name')).toBeInTheDocument()
+      })
+
+      const dialog = screen.getByRole('dialog')
+      const nameInput = within(dialog).getByPlaceholderText('Exercise name')
+      await userEvent.type(nameInput, 'Partially Filled')
+
+      const closeButton = within(dialog).getByRole('button', { name: /close/i })
+      await userEvent.click(closeButton)
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      })
+
+      // Reopen the modal and check the field is cleared
+      await userEvent.click(addButton)
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Exercise name')).toBeInTheDocument()
+      })
+      const reopenedNameInput = screen.getByPlaceholderText('Exercise name')
+      expect(reopenedNameInput).toHaveValue('')
+    })
+
+    it('should pre-populate created_by with logged-in username', async () => {
+      vi.mocked(localStorage.getItem).mockImplementation((key) => {
+        if (key === 'wodtrackrUser') {
+          return JSON.stringify({ username: 'currentuser', authToken: 'token' })
+        }
+        return null
+      })
+
+      axios.get.mockResolvedValue({ data: { data: [] } })
+      axios.options.mockResolvedValue({ data: {} })
+
+      render(<Exercises />)
+
+      const addButton = screen.getByText('Add Exercise')
+      await userEvent.click(addButton)
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+      })
+
+      const createdByInput = screen.getByPlaceholderText('Coach or athlete')
+      expect(createdByInput).toHaveValue('currentuser')
+    })
   })
 
   describe('API Integration', () => {
