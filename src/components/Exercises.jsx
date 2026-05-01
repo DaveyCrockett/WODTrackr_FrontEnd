@@ -1,6 +1,7 @@
 import "../CSS/exercises.css"
 import axios from "axios"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { validateExerciseForm } from "../utils/exerciseUtils"
 
 const API_URL = "/api/wodtrackr/exercises/"
 const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
@@ -496,6 +497,13 @@ function Exercises() {
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }))
+    if (fieldErrors[name]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev }
+        delete next[name]
+        return next
+      })
+    }
   }
 
   const handleEditChange = (event) => {
@@ -504,13 +512,28 @@ function Exercises() {
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }))
+    if (editFieldErrors[name]) {
+      setEditFieldErrors((prev) => {
+        const next = { ...prev }
+        delete next[name]
+        return next
+      })
+    }
   }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    setIsSubmitting(true)
     setErrorMessage("")
     setSuccessMessage("")
+
+    const clientErrors = validateExerciseForm(formValues)
+    if (Object.keys(clientErrors).length > 0) {
+      setFieldErrors(clientErrors)
+      setIsSubmitting(false)
+      return
+    }
+
+    setIsSubmitting(true)
     setFieldErrors({})
 
     try {
@@ -569,11 +592,18 @@ function Exercises() {
     setErrorMessage("")
     setFieldErrors({})
     setSuccessMessage("")
+<<<<<<< HEAD
     setFormValues(getDefaultExerciseFormValues(currentUsername))
+=======
+    setFormValues({ ...EMPTY_EXERCISE_FORM_VALUES, created_by: getStoredUsername() })
+>>>>>>> 93c15be79200ae1e658ccf955e2dcec6da776200
     setIsAddModalOpen(true)
   }
 
   const handleCloseAddModal = () => {
+    setFormValues(EMPTY_EXERCISE_FORM_VALUES)
+    setFieldErrors({})
+    setErrorMessage("")
     setIsAddModalOpen(false)
   }
 
@@ -598,8 +628,16 @@ function Exercises() {
       return
     }
 
-    setIsEditSubmitting(true)
     setEditErrorMessage("")
+
+    const clientErrors = validateExerciseForm(editFormValues)
+    if (Object.keys(clientErrors).length > 0) {
+      setEditFieldErrors(clientErrors)
+      setIsEditSubmitting(false)
+      return
+    }
+
+    setIsEditSubmitting(true)
     setEditFieldErrors({})
 
     try {
@@ -998,7 +1036,7 @@ function Exercises() {
               </button>
             </header>
 
-            <form className="exercise-form" onSubmit={handleSubmit}>
+            <form className="exercise-form" onSubmit={handleSubmit} noValidate>
               {errorMessage ? <p className="exercise-error" role="alert">{errorMessage}</p> : null}
 
               <label className="exercise-field">
@@ -1009,6 +1047,7 @@ function Exercises() {
                   value={formValues.name}
                   onChange={handleChange}
                   placeholder="Exercise name"
+                  maxLength={200}
                   required
                 />
                 {fieldErrors.name ? <small className="exercise-field-error">{fieldErrors.name}</small> : null}
@@ -1146,7 +1185,7 @@ function Exercises() {
               </button>
             </header>
 
-            <form className="exercise-form" onSubmit={handleEditSubmit}>
+            <form className="exercise-form" onSubmit={handleEditSubmit} noValidate>
               {editErrorMessage ? <p className="exercise-error" role="alert">{editErrorMessage}</p> : null}
 
               <label className="exercise-field">
@@ -1157,6 +1196,7 @@ function Exercises() {
                   value={editFormValues.name}
                   onChange={handleEditChange}
                   placeholder="Exercise name"
+                  maxLength={200}
                   required
                 />
                 {editFieldErrors.name ? <small className="exercise-field-error">{editFieldErrors.name}</small> : null}

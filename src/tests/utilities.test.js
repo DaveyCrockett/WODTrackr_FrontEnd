@@ -6,6 +6,7 @@ import {
   formatTimestamp,
   getFieldErrorsFromResponse,
   getExerciseFormValues,
+  validateExerciseForm,
 } from '../utils/exerciseUtils'
 
 describe('Exercise Utility Functions', () => {
@@ -222,6 +223,82 @@ describe('Exercise Utility Functions', () => {
         created_by: '',
         is_public: false,
       })
+    })
+  })
+
+  describe('validateExerciseForm', () => {
+    const validValues = {
+      name: 'Back Squat',
+      category: 'strength',
+      equipment: 'barbell',
+      primary_muscle_group: 'legs',
+      description: '',
+      created_by: '',
+      is_public: false,
+    }
+
+    it('should return no errors for valid form values', () => {
+      const result = validateExerciseForm(validValues)
+      expect(result).toEqual({})
+    })
+
+    it('should require name', () => {
+      const result = validateExerciseForm({ ...validValues, name: '' })
+      expect(result.name).toBe('Name is required.')
+    })
+
+    it('should reject whitespace-only name', () => {
+      const result = validateExerciseForm({ ...validValues, name: '   ' })
+      expect(result.name).toBe('Name is required.')
+    })
+
+    it('should reject name longer than 200 characters', () => {
+      const longName = 'A'.repeat(201)
+      const result = validateExerciseForm({ ...validValues, name: longName })
+      expect(result.name).toBe('Name must be 200 characters or fewer.')
+    })
+
+    it('should accept name of exactly 200 characters', () => {
+      const maxName = 'A'.repeat(200)
+      const result = validateExerciseForm({ ...validValues, name: maxName })
+      expect(result.name).toBeUndefined()
+    })
+
+    it('should require category', () => {
+      const result = validateExerciseForm({ ...validValues, category: '' })
+      expect(result.category).toBe('Category is required.')
+    })
+
+    it('should require equipment', () => {
+      const result = validateExerciseForm({ ...validValues, equipment: '' })
+      expect(result.equipment).toBe('Equipment is required.')
+    })
+
+    it('should require primary_muscle_group', () => {
+      const result = validateExerciseForm({ ...validValues, primary_muscle_group: '' })
+      expect(result.primary_muscle_group).toBe('Muscle group is required.')
+    })
+
+    it('should return multiple errors for multiple invalid fields', () => {
+      const result = validateExerciseForm({
+        name: '',
+        category: '',
+        equipment: '',
+        primary_muscle_group: '',
+        description: '',
+        created_by: '',
+        is_public: false,
+      })
+      expect(result.name).toBe('Name is required.')
+      expect(result.category).toBe('Category is required.')
+      expect(result.equipment).toBe('Equipment is required.')
+      expect(result.primary_muscle_group).toBe('Muscle group is required.')
+    })
+
+    it('should not return errors for optional fields (description, created_by, is_public)', () => {
+      const result = validateExerciseForm({ ...validValues, description: '', created_by: '' })
+      expect(result.description).toBeUndefined()
+      expect(result.created_by).toBeUndefined()
     })
   })
 })
