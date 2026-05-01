@@ -2,11 +2,13 @@ import "../CSS/exercises.css"
 import axios from "axios"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-const API_URL = "http://127.0.0.1:8000/api/wodtrackr/exercises/"
+const API_URL = "/api/wodtrackr/exercises/"
 const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 const PAGE_SIZE = 12
 const SKELETON_CARD_COUNT = 6
+const buildApiUrl = (path = "") => `${API_URL}${String(path).replace(/^\/+/, "")}`
+const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
 const EMPTY_EXERCISE_FORM_VALUES = {
   name: "",
   description: "",
@@ -16,6 +18,10 @@ const EMPTY_EXERCISE_FORM_VALUES = {
   created_by: "",
   is_public: false,
 }
+const getDefaultExerciseFormValues = (username = "") => ({
+  ...EMPTY_EXERCISE_FORM_VALUES,
+  created_by: username || "",
+})
 
 const getAuthToken = () => {
   const directToken = localStorage.getItem("wodtrackrAuthToken")
@@ -97,6 +103,41 @@ const normalizeChoices = (choices) => {
     .filter((choice) => choice.value !== "" && choice.value !== null && choice.value !== undefined)
 }
 
+const normalizeSchemaChoices = (fieldConfig) => {
+  if (!fieldConfig || typeof fieldConfig !== "object") {
+    return []
+  }
+
+  const enumValues = Array.isArray(fieldConfig.enum)
+    ? fieldConfig.enum
+    : Array.isArray(fieldConfig.child?.enum)
+      ? fieldConfig.child.enum
+      : null
+
+  if (enumValues?.length) {
+    const enumLabels =
+      fieldConfig["x-enumNames"] ??
+      fieldConfig.enumNames ??
+      fieldConfig.child?.["x-enumNames"] ??
+      fieldConfig.child?.enumNames ??
+      []
+
+    return enumValues
+      .map((value, index) => ({
+        value,
+        label: String(enumLabels[index] ?? value),
+      }))
+      .filter((choice) => choice.value !== "" && choice.value !== null && choice.value !== undefined)
+  }
+
+  const variantChoices = normalizeChoices(fieldConfig.oneOf ?? fieldConfig.anyOf ?? fieldConfig.child?.oneOf ?? fieldConfig.child?.anyOf)
+  if (variantChoices.length > 0) {
+    return variantChoices
+  }
+
+  return []
+}
+
 const extractChoicesFromFieldConfig = (fieldConfig) => {
   if (!fieldConfig) {
     return []
@@ -110,6 +151,11 @@ const extractChoicesFromFieldConfig = (fieldConfig) => {
   const childChoices = normalizeChoices(fieldConfig?.child?.choices)
   if (childChoices.length > 0) {
     return childChoices
+  }
+
+  const schemaChoices = normalizeSchemaChoices(fieldConfig)
+  if (schemaChoices.length > 0) {
+    return schemaChoices
   }
 
   return []
@@ -220,7 +266,7 @@ function Exercises() {
   const [categoryChoices, setCategoryChoices] = useState([])
   const [equipmentChoices, setEquipmentChoices] = useState([])
   const [muscleChoices, setMuscleChoices] = useState([])
-  const [formValues, setFormValues] = useState(EMPTY_EXERCISE_FORM_VALUES)
+  const [formValues, setFormValues] = useState(() => getDefaultExerciseFormValues(getStoredUsername()))
   const [editFormValues, setEditFormValues] = useState(EMPTY_EXERCISE_FORM_VALUES)
 
   // Refs for modal focus management
@@ -395,10 +441,25 @@ function Exercises() {
       }
 
       try {
-        const response = await axios.options(API_URL, buildRequestConfig())
-        const category = getChoicesFromMetadata(response?.data, ["category"])
-        const equipment = getChoicesFromMetadata(response?.data, ["equipment"])
-        const muscle = getChoicesFromMetadata(response?.data, ["primary_muscle_group", "muscle"])
+        let metadata = null
+
+        try {
+          const optionsResponse = await axios.options(buildApiUrl("choices"), buildRequestConfig())
+          if (optionsResponse?.status !== 204 && hasMetadataPayload(optionsResponse?.data)) {
+            metadata = optionsResponse.data
+          }
+        } catch {
+          // Fall back to GET when OPTIONS is unsupported or blocked.
+        }
+
+        if (!metadata) {
+          const getResponse = await axios.get(buildApiUrl("choices"), buildRequestConfig())
+          metadata = getResponse?.data
+        }
+
+        const category = getChoicesFromMetadata(metadata, ["category"])
+        const equipment = getChoicesFromMetadata(metadata, ["equipment"])
+        const muscle = getChoicesFromMetadata(metadata, ["primary_muscle_group", "muscle"])
 
         setCategoryChoices(category)
         setEquipmentChoices(equipment)
@@ -461,7 +522,7 @@ function Exercises() {
           category: formValues.category,
           equipment: formValues.equipment,
           primary_muscle_group: formValues.primary_muscle_group,
-          created_by: formValues.created_by,
+          created_by: currentUsername || formValues.created_by,
           is_public: formValues.is_public,
         },
         buildRequestConfig(),
@@ -471,7 +532,7 @@ function Exercises() {
         setExercises((prev) => [response.data.data, ...prev])
       }
 
-      setFormValues(EMPTY_EXERCISE_FORM_VALUES)
+      setFormValues(getDefaultExerciseFormValues(currentUsername))
       setSuccessMessage("Exercise added successfully.")
       setIsAddModalOpen(false)
     } catch (error) {
@@ -508,6 +569,7 @@ function Exercises() {
     setErrorMessage("")
     setFieldErrors({})
     setSuccessMessage("")
+    setFormValues(getDefaultExerciseFormValues(currentUsername))
     setIsAddModalOpen(true)
   }
 
@@ -1007,9 +1069,10 @@ function Exercises() {
                 <input
                   type="text"
                   name="created_by"
-                  value={formValues.created_by}
-                  onChange={handleChange}
+                  value={currentUsername || formValues.created_by}
                   placeholder="Coach or athlete"
+                  readOnly
+                  aria-readonly="true"
                 />
                 {fieldErrors.created_by ? <small className="exercise-field-error">{fieldErrors.created_by}</small> : null}
               </label>

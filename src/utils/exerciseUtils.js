@@ -48,6 +48,41 @@ export const normalizeChoices = (choices) => {
     .filter((choice) => choice.value !== "" && choice.value !== null && choice.value !== undefined)
 }
 
+const normalizeSchemaChoices = (fieldConfig) => {
+  if (!fieldConfig || typeof fieldConfig !== "object") {
+    return []
+  }
+
+  const enumValues = Array.isArray(fieldConfig.enum)
+    ? fieldConfig.enum
+    : Array.isArray(fieldConfig.child?.enum)
+      ? fieldConfig.child.enum
+      : null
+
+  if (enumValues?.length) {
+    const enumLabels =
+      fieldConfig["x-enumNames"] ??
+      fieldConfig.enumNames ??
+      fieldConfig.child?.["x-enumNames"] ??
+      fieldConfig.child?.enumNames ??
+      []
+
+    return enumValues
+      .map((value, index) => ({
+        value,
+        label: String(enumLabels[index] ?? value),
+      }))
+      .filter((choice) => choice.value !== "" && choice.value !== null && choice.value !== undefined)
+  }
+
+  const variantChoices = normalizeChoices(fieldConfig.oneOf ?? fieldConfig.anyOf ?? fieldConfig.child?.oneOf ?? fieldConfig.child?.anyOf)
+  if (variantChoices.length > 0) {
+    return variantChoices
+  }
+
+  return []
+}
+
 export const extractChoicesFromFieldConfig = (fieldConfig) => {
   if (!fieldConfig) {
     return []
@@ -61,6 +96,11 @@ export const extractChoicesFromFieldConfig = (fieldConfig) => {
   const childChoices = normalizeChoices(fieldConfig?.child?.choices)
   if (childChoices.length > 0) {
     return childChoices
+  }
+
+  const schemaChoices = normalizeSchemaChoices(fieldConfig)
+  if (schemaChoices.length > 0) {
+    return schemaChoices
   }
 
   return []

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   normalizeChoices,
   extractChoicesFromFieldConfig,
+  getChoicesFromMetadata,
   formatTimestamp,
   getFieldErrorsFromResponse,
   getExerciseFormValues,
@@ -58,6 +59,54 @@ describe('Exercise Utility Functions', () => {
       expect(normalizeChoices(null)).toEqual([])
       expect(normalizeChoices(undefined)).toEqual([])
       expect(normalizeChoices('invalid')).toEqual([])
+    })
+  })
+
+  describe('extractChoicesFromFieldConfig', () => {
+    it('should extract schema enum choices with enum labels', () => {
+      const fieldConfig = {
+        enum: ['strength', 'cardio'],
+        'x-enumNames': ['Strength', 'Cardio'],
+      }
+
+      expect(extractChoicesFromFieldConfig(fieldConfig)).toEqual([
+        { value: 'strength', label: 'Strength' },
+        { value: 'cardio', label: 'Cardio' },
+      ])
+    })
+
+    it('should extract child schema enum choices when nested', () => {
+      const fieldConfig = {
+        child: {
+          enum: ['barbell'],
+          enumNames: ['Barbell'],
+        },
+      }
+
+      expect(extractChoicesFromFieldConfig(fieldConfig)).toEqual([
+        { value: 'barbell', label: 'Barbell' },
+      ])
+    })
+  })
+
+  describe('getChoicesFromMetadata', () => {
+    it('should find schema enum choices in OPTIONS metadata', () => {
+      const metadata = {
+        actions: {
+          POST: {
+            category: {
+              type: 'choice',
+              enum: ['strength', 'cardio'],
+              'x-enumNames': ['Strength', 'Cardio'],
+            },
+          },
+        },
+      }
+
+      expect(getChoicesFromMetadata(metadata, ['category'])).toEqual([
+        { value: 'strength', label: 'Strength' },
+        { value: 'cardio', label: 'Cardio' },
+      ])
     })
   })
 

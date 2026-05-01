@@ -350,6 +350,42 @@ describe('Exercise API Integration Tests', () => {
         expect(screen.getByText('Exercise Library')).toBeInTheDocument()
       })
     })
+
+    it('should populate add exercise modal selects from schema enum metadata', async () => {
+      axios.get.mockResolvedValue({ data: { data: [] } })
+      axios.options.mockResolvedValue({
+        data: {
+          actions: {
+            POST: {
+              category: {
+                enum: ['strength'],
+                'x-enumNames': ['Strength'],
+              },
+              equipment: {
+                enum: ['barbell'],
+                enumNames: ['Barbell'],
+              },
+              primary_muscle_group: {
+                child: {
+                  enum: ['legs'],
+                  enumNames: ['Legs'],
+                },
+              },
+            },
+          },
+        },
+      })
+
+      render(<Exercises />)
+
+      await userEvent.click(screen.getByRole('button', { name: /add exercise/i }))
+
+      await waitFor(() => {
+        expect(screen.getAllByRole('option', { name: 'Strength' }).length).toBeGreaterThan(0)
+        expect(screen.getAllByRole('option', { name: 'Barbell' }).length).toBeGreaterThan(0)
+        expect(screen.getAllByRole('option', { name: 'Legs' }).length).toBeGreaterThan(0)
+      })
+    })
   })
 
   describe('POST /exercises/ - Adding Exercise', () => {
