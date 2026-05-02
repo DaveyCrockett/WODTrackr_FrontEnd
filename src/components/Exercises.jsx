@@ -264,6 +264,7 @@ function Exercises() {
   const [editErrorMessage, setEditErrorMessage] = useState("")
   const [editFieldErrors, setEditFieldErrors] = useState({})
   const [isEditSubmitting, setIsEditSubmitting] = useState(false)
+  const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false)
   const [categoryChoices, setCategoryChoices] = useState([])
   const [equipmentChoices, setEquipmentChoices] = useState([])
   const [muscleChoices, setMuscleChoices] = useState([])
@@ -682,6 +683,34 @@ function Exercises() {
     }
   }
 
+  const handleDeleteExercise = async () => {
+    if (!selectedExercise?.id || !canDeleteSelectedExercise) {
+      return
+    }
+
+    setErrorMessage("")
+    setSuccessMessage("")
+    setIsDeleteSubmitting(true)
+
+    try {
+      await axios.delete(`${API_URL}${selectedExercise.id}/`, buildRequestConfig())
+      setExercises((prev) => prev.filter((exercise) => exercise.id !== selectedExercise.id))
+      setSuccessMessage("Exercise deleted successfully.")
+    } catch (error) {
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        setErrorMessage("Please log in before deleting exercises.")
+        return
+      }
+
+      const message =
+        error?.response?.data?.detail ||
+        "Unable to delete exercise. Please try again."
+      setErrorMessage(message)
+    } finally {
+      setIsDeleteSubmitting(false)
+    }
+  }
+
   const handleLoadMore = () => {
     setVisibleCount((prev) => prev + PAGE_SIZE)
   }
@@ -702,6 +731,7 @@ function Exercises() {
     selectedExerciseOwner &&
     currentUsername === selectedExerciseOwner,
   )
+  const canDeleteSelectedExercise = canEditSelectedExercise
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
@@ -983,6 +1013,16 @@ function Exercises() {
               <p className="exercise-meta">
                 <strong>Updated:</strong> {formatTimestamp(selectedExercise.updated_at)}
               </p>
+              {canDeleteSelectedExercise ? (
+                <button
+                  type="button"
+                  className="exercise-danger-btn"
+                  onClick={handleDeleteExercise}
+                  disabled={isDeleteSubmitting}
+                >
+                  {isDeleteSubmitting ? "Deleting..." : "Delete Exercise"}
+                </button>
+              ) : null}
             </section>
           ) : isLoading ? (
             <section className="exercise-details" aria-live="polite" aria-label="Loading exercise details" aria-busy="true">

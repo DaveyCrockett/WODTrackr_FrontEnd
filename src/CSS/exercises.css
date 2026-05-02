@@ -296,6 +296,32 @@
   cursor: not-allowed;
 }
 
+.exercise-danger-btn {
+  width: 100%;
+  margin-top: 0.6rem;
+  border: none;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  background: #b91c1c;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.exercise-danger-btn:hover {
+  background: #991b1b;
+}
+
+.exercise-danger-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.28);
+}
+
+.exercise-danger-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .exercise-modal-backdrop {
   position: fixed;
   inset: 0;

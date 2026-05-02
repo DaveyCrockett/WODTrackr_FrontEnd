@@ -376,6 +376,85 @@ describe('Exercises Component', () => {
       expect(screen.getByText(/A fundamental strength movement/)).toBeInTheDocument()
       expect(screen.getAllByText(/coach1/).length).toBeGreaterThan(0)
     })
+
+    it('should show delete button for exercises owned by current user and delete the exercise', async () => {
+      vi.mocked(localStorage.getItem).mockImplementation((key) => {
+        if (key === 'wodtrackrUser') {
+          return JSON.stringify({ username: 'coach1', authToken: 'token' })
+        }
+        return null
+      })
+
+      const mockExercises = [
+        {
+          id: 1,
+          name: 'Back Squat',
+          description: 'A fundamental strength movement',
+          category: 'strength',
+          equipment: 'barbell',
+          primary_muscle_group: 'legs',
+          created_by_username: 'coach1',
+          is_public: true,
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ]
+
+      axios.get.mockResolvedValue({ data: { data: mockExercises } })
+      axios.options.mockResolvedValue({ data: {} })
+      axios.delete.mockResolvedValue({ status: 204 })
+
+      render(<Exercises />)
+
+      const deleteButton = await screen.findByRole('button', { name: 'Delete Exercise' })
+      await userEvent.click(deleteButton)
+
+      await waitFor(() => {
+        expect(axios.delete).toHaveBeenCalledWith(
+          expect.stringContaining('/api/wodtrackr/exercises/1/'),
+          expect.anything()
+        )
+      })
+
+      await waitFor(() => {
+        expect(screen.queryByText('Back Squat')).not.toBeInTheDocument()
+      })
+    })
+
+    it('should not show delete button for exercises owned by another user', async () => {
+      vi.mocked(localStorage.getItem).mockImplementation((key) => {
+        if (key === 'wodtrackrUser') {
+          return JSON.stringify({ username: 'coach2', authToken: 'token' })
+        }
+        return null
+      })
+
+      const mockExercises = [
+        {
+          id: 1,
+          name: 'Back Squat',
+          description: 'A fundamental strength movement',
+          category: 'strength',
+          equipment: 'barbell',
+          primary_muscle_group: 'legs',
+          created_by_username: 'coach1',
+          is_public: true,
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ]
+
+      axios.get.mockResolvedValue({ data: { data: mockExercises } })
+      axios.options.mockResolvedValue({ data: {} })
+
+      render(<Exercises />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Back Squat')).toBeInTheDocument()
+      })
+
+      expect(screen.queryByRole('button', { name: 'Delete Exercise' })).not.toBeInTheDocument()
+    })
   })
 
   describe('Add Exercise Modal', () => {
