@@ -20,6 +20,27 @@
   flex-shrink: 0;
 }
 
+.programs-top-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.programs-new-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 0.62rem 0.9rem;
+  background: #1d4ed8;
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.programs-new-btn:hover {
+  background: #1e40af;
+}
+
 .programs-search-area {
   display: flex;
   flex-direction: column;
@@ -261,6 +282,62 @@
   color: #64748b;
 }
 
+.programs-card-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.programs-card-action-btn {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+}
+
+.programs-card-action-btn:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.programs-card-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.programs-card-action-btn-primary {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.programs-card-action-btn-primary:hover:not(:disabled) {
+  background: #1e40af;
+  border-color: #1e40af;
+}
+
+.programs-card-feedback {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #1d4ed8;
+}
+
+.programs-card-detail {
+  border-top: 1px solid #e2e8f0;
+  margin-top: 0.25rem;
+  padding-top: 0.5rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.programs-card-detail-line {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #475569;
+}
+
 /* ── Difficulty badges ── */
 .programs-badge {
   flex-shrink: 0;
@@ -329,4 +406,152 @@
 .programs-page-btn-active:hover:not(:disabled) {
   background: #1e40af;
   border-color: #1e40af;
+}
+
+.programs-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  z-index: 1000;
+}
+
+.programs-modal {
+  width: min(680px, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
+  padding: 1rem;
+}
+
+.programs-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.programs-modal-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.15rem;
+}
+
+.programs-modal-form {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.programs-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.programs-modal-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.programs-modal-field span {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.programs-modal-field input,
+.programs-modal-field textarea,
+.programs-modal-field select {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
+.programs-modal-field input:focus,
+.programs-modal-field textarea:focus,
+.programs-modal-field select:focus {
+  outline: none;
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+.programs-modal-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.programs-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.programs-modal-secondary-btn {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+  background: #ffffff;
+  color: #334155;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.programs-modal-secondary-btn:hover {
+  background: #f8fafc;
+}
+
+.programs-modal-primary-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+  background: #1d4ed8;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.programs-modal-primary-btn:hover:not(:disabled) {
+  background: #1e40af;
+}
+
+.programs-modal-primary-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.programs-modal-error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 860px) {
+  .programs-top-bar {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .programs-top-actions {
+    width: 100%;
+  }
+
+  .programs-new-btn {
+    width: 100%;
+  }
+
+  .programs-modal-grid {
+    grid-template-columns: 1fr;
+  }
 }
