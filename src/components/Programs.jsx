@@ -342,11 +342,6 @@ function Programs() {
   return (
     <main className="programs-page" aria-label="Training Programs">
       <header className="programs-top-bar">
-        <div className="programs-top-actions">
-          <button type="button" className="programs-new-btn" onClick={handleOpenCreateModal}>
-            New Program
-          </button>
-        </div>
         <div className="programs-search-area">
           <label className="programs-field-label" htmlFor="program-search">
             Search Programs
@@ -374,7 +369,16 @@ function Programs() {
             <option value="desc">Name (Z–A)</option>
           </select>
         </div>
+        <div className="programs-top-actions">
+          <button type="button" className="programs-new-btn" onClick={handleOpenCreateModal}>
+            New Program
+          </button>
+        </div>
       </header>
+
+      <button type="button" className="programs-fab" onClick={handleOpenCreateModal} aria-label="Create new program">
+        New Program
+      </button>
 
       <div className="programs-shell">
         <aside className="programs-filter-panel" aria-label="Program Filters">

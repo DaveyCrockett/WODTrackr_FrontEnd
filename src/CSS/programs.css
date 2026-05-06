@@ -22,7 +22,8 @@
 
 .programs-top-actions {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
+  justify-content: flex-end;
   flex-shrink: 0;
 }
 
@@ -39,6 +40,10 @@
 
 .programs-new-btn:hover {
   background: #1e40af;
+}
+
+.programs-fab {
+  display: none;
 }
 
 .programs-search-area {
@@ -544,11 +549,34 @@
   }
 
   .programs-top-actions {
-    width: 100%;
+    display: none;
   }
 
-  .programs-new-btn {
-    width: 100%;
+  .programs-sort-area {
+    min-width: 100%;
+  }
+
+  .programs-fab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 950;
+    border: none;
+    border-radius: 999px;
+    padding: 0.75rem 1rem;
+    background: #1d4ed8;
+    color: #ffffff;
+    font-size: 0.86rem;
+    font-weight: 700;
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2);
+    cursor: pointer;
+  }
+
+  .programs-fab:hover {
+    background: #1e40af;
   }
 
   .programs-modal-grid {
