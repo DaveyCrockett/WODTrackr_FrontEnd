@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from "react"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
 const PROGRAMS_PER_PAGE = 6
-const DEFAULT_DIFFICULTIES = ["Beginner", "Intermediate", "Advanced"]
+const DEFAULT_DIFFICULTIES = ["Beginner", "Intermediate", "Advanced"]// change this to be added to exercise model
+const PROGRAMS_CHOICES_CACHE_KEY = "wodtrackrProgramChoices"
+const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
+const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
 const EMPTY_PROGRAM_FORM_VALUES = {
   name: "",
   description: "",
@@ -62,6 +65,104 @@ const normalizeProgramDetailPayload = (data) => {
   return null
 }
 
+const normalizeChoices = (choices) => {
+  if (choices && typeof choices === "object" && !Array.isArray(choices)) {
+    return Object.entries(choices)
+      .map(([value, label]) => ({ value, label: String(label) }))
+      .filter((c) => c.value !== "" && c.value !== null && c.value !== undefined)
+  }
+
+  if (!Array.isArray(choices)) return []
+
+  return choices
+    .map((choice) => {
+      if (Array.isArray(choice)) {
+        const [value, label] = choice
+        return { value: value ?? "", label: label ?? String(value ?? "") }
+      }
+      if (choice && typeof choice === "object") {
+        const value = choice.value ?? choice.id ?? choice.key ?? ""
+        const label = choice.label ?? choice.display_name ?? choice.displayName ?? choice.name ?? String(value)
+        return { value, label }
+      }
+      return { value: choice, label: String(choice) }
+    })
+    .filter((c) => c.value !== "" && c.value !== null && c.value !== undefined)
+}
+
+const normalizeSchemaChoices = (fieldConfig) => {
+  if (!fieldConfig || typeof fieldConfig !== "object") return []
+
+  const enumValues = Array.isArray(fieldConfig.enum)
+    ? fieldConfig.enum
+    : Array.isArray(fieldConfig.child?.enum)
+      ? fieldConfig.child.enum
+      : null
+
+  if (enumValues?.length) {
+    const enumLabels =
+      fieldConfig["x-enumNames"] ??
+      fieldConfig.enumNames ??
+      fieldConfig.child?.["x-enumNames"] ??
+      fieldConfig.child?.enumNames ??
+      []
+    return enumValues
+      .map((value, index) => ({ value, label: String(enumLabels[index] ?? value) }))
+      .filter((c) => c.value !== "" && c.value !== null && c.value !== undefined)
+  }
+
+  const variantChoices = normalizeChoices(
+    fieldConfig.oneOf ?? fieldConfig.anyOf ?? fieldConfig.child?.oneOf ?? fieldConfig.child?.anyOf,
+  )
+  if (variantChoices.length > 0) return variantChoices
+
+  return []
+}
+
+const extractChoicesFromFieldConfig = (fieldConfig) => {
+  if (!fieldConfig) return []
+
+  const directChoices = normalizeChoices(fieldConfig?.choices)
+  if (directChoices.length > 0) return directChoices
+
+  const childChoices = normalizeChoices(fieldConfig?.child?.choices)
+  if (childChoices.length > 0) return childChoices
+
+  const schemaChoices = normalizeSchemaChoices(fieldConfig)
+  if (schemaChoices.length > 0) return schemaChoices
+
+  return []
+}
+
+const getChoicesFromMetadata = (metadata, fieldNames) => {
+  if (!metadata || typeof metadata !== "object") return []
+
+  const visited = new Set()
+  const queue = [metadata]
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    if (!current || typeof current !== "object" || visited.has(current)) continue
+    visited.add(current)
+
+    for (const fieldName of fieldNames) {
+      const candidate = current?.[fieldName]
+      if (Array.isArray(candidate)) {
+        const mapped = normalizeChoices(candidate)
+        if (mapped.length > 0) return mapped
+      }
+      const mapped = extractChoicesFromFieldConfig(candidate)
+      if (mapped.length > 0) return mapped
+    }
+
+    for (const value of Object.values(current)) {
+      if (value && typeof value === "object") queue.push(value)
+    }
+  }
+
+  return []
+}
+
 const formatTimestamp = (value) => {
   if (!value) return ""
   const parsed = new Date(value)
@@ -88,6 +189,10 @@ function Programs() {
   const [detailLoadingId, setDetailLoadingId] = useState(null)
   const [reuseLoadingId, setReuseLoadingId] = useState(null)
   const [reuseMessageById, setReuseMessageById] = useState({})
+  const [categoryChoices, setCategoryChoices] = useState([])
+  const [goalChoices, setGoalChoices] = useState([])
+  const [difficultyChoices, setDifficultyChoices] = useState([])
+  const [isChoicesLoading, setIsChoicesLoading] = useState(false)
 
   useEffect(() => {
     const loadPrograms = async () => {
@@ -113,21 +218,82 @@ function Programs() {
     loadPrograms()
   }, [])
 
-  const difficulties = useMemo(
-    () => {
-      const fromPrograms = programs.map((p) => p?.difficulty).filter(Boolean)
-      return [...new Set([...DEFAULT_DIFFICULTIES, ...fromPrograms])].sort()
-    },
-    [programs],
-  )
-  const categories = useMemo(
-    () => [...new Set(programs.map((p) => p?.category).filter(Boolean))].sort(),
-    [programs],
-  )
-  const goals = useMemo(
-    () => [...new Set(programs.map((p) => p?.goal).filter(Boolean))].sort(),
-    [programs],
-  )
+  useEffect(() => {
+    const loadChoices = async () => {
+      setIsChoicesLoading(true)
+
+      try {
+        const cachedRaw = localStorage.getItem(PROGRAMS_CHOICES_CACHE_KEY)
+        if (cachedRaw) {
+          const parsed = JSON.parse(cachedRaw)
+          const isFresh = Date.now() - (parsed?.cachedAt || 0) < CHOICES_CACHE_TTL_MS
+          if (isFresh && (parsed?.categoryChoices?.length || parsed?.goalChoices?.length || parsed?.difficultyChoices?.length)) {
+            setCategoryChoices(parsed.categoryChoices || [])
+            setGoalChoices(parsed.goalChoices || [])
+            setDifficultyChoices(parsed.difficultyChoices || [])
+            setIsChoicesLoading(false)
+            return
+          }
+        }
+      } catch {
+        localStorage.removeItem(PROGRAMS_CHOICES_CACHE_KEY)
+      }
+
+      try {
+        let metadata = null
+
+        try {
+          const optionsResponse = await axios.options(API_URL, buildRequestConfig())
+          if (optionsResponse?.status !== 204 && hasMetadataPayload(optionsResponse?.data)) {
+            metadata = optionsResponse.data
+          }
+        } catch {
+          // Fall back to GET when OPTIONS is unsupported or blocked.
+        }
+
+        if (!metadata) {
+          const getResponse = await axios.get(API_URL, buildRequestConfig())
+          metadata = getResponse?.data
+        }
+
+        const category = getChoicesFromMetadata(metadata, ["category"])
+        const goal = getChoicesFromMetadata(metadata, ["goal"])
+        const difficulty = getChoicesFromMetadata(metadata, ["difficulty"])
+
+        setCategoryChoices(category)
+        setGoalChoices(goal)
+        setDifficultyChoices(difficulty)
+        localStorage.setItem(
+          PROGRAMS_CHOICES_CACHE_KEY,
+          JSON.stringify({ categoryChoices: category, goalChoices: goal, difficultyChoices: difficulty, cachedAt: Date.now() }),
+        )
+      } catch {
+        // Non-critical — filters will still work from loaded program data.
+      } finally {
+        setIsChoicesLoading(false)
+      }
+    }
+
+    loadChoices()
+  }, [])
+
+  const difficulties = useMemo(() => {
+    const apiValues = difficultyChoices.map((c) => c.value)
+    const fromPrograms = programs.map((p) => p?.difficulty).filter(Boolean)
+    return [...new Set([...DEFAULT_DIFFICULTIES, ...apiValues, ...fromPrograms])].sort()
+  }, [programs, difficultyChoices])
+
+  const categories = useMemo(() => {
+    const apiValues = categoryChoices.map((c) => c.value)
+    const fromPrograms = programs.map((p) => p?.category).filter(Boolean)
+    return [...new Set([...apiValues, ...fromPrograms])].sort()
+  }, [programs, categoryChoices])
+
+  const goals = useMemo(() => {
+    const apiValues = goalChoices.map((c) => c.value)
+    const fromPrograms = programs.map((p) => p?.goal).filter(Boolean)
+    return [...new Set([...apiValues, ...fromPrograms])].sort()
+  }, [programs, goalChoices])
 
   const filteredAndSortedPrograms = useMemo(() => {
     let result = [...programs]
