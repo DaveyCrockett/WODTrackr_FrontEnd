@@ -446,7 +446,7 @@ function Exercises() {
         let metadata = null
 
         try {
-          const optionsResponse = await axios.options(buildApiUrl("choices"), buildRequestConfig())
+          const optionsResponse = await axios.options(API_URL, buildRequestConfig())
           if (optionsResponse?.status !== 204 && hasMetadataPayload(optionsResponse?.data)) {
             metadata = optionsResponse.data
           }
@@ -455,7 +455,7 @@ function Exercises() {
         }
 
         if (!metadata) {
-          const getResponse = await axios.get(buildApiUrl("choices"), buildRequestConfig())
+          const getResponse = await axios.get(API_URL, buildRequestConfig())
           metadata = getResponse?.data
         }
 
