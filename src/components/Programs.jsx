@@ -240,25 +240,12 @@ function Programs() {
       }
 
       try {
-        let metadata = null
+        const response = await axios.get(`${API_URL}choices/`, buildRequestConfig())
+        const data = response?.data ?? {}
 
-        try {
-          const optionsResponse = await axios.options(API_URL, buildRequestConfig())
-          if (optionsResponse?.status !== 204 && hasMetadataPayload(optionsResponse?.data)) {
-            metadata = optionsResponse.data
-          }
-        } catch {
-          // Fall back to GET when OPTIONS is unsupported or blocked.
-        }
-
-        if (!metadata) {
-          const getResponse = await axios.get(API_URL, buildRequestConfig())
-          metadata = getResponse?.data
-        }
-
-        const category = getChoicesFromMetadata(metadata, ["category"])
-        const goal = getChoicesFromMetadata(metadata, ["goal"])
-        const difficulty = getChoicesFromMetadata(metadata, ["difficulty"])
+        const category = normalizeChoices(data.category ?? data.categories ?? [])
+        const goal = normalizeChoices(data.goal ?? data.goals ?? [])
+        const difficulty = normalizeChoices(data.difficulty ?? data.difficulties ?? [])
 
         setCategoryChoices(category)
         setGoalChoices(goal)
