@@ -298,8 +298,8 @@ function Programs() {
   }, [])
 
   const difficulties = useMemo(() => {
-    const apiValues = difficultyChoices.map((c) => c.value)
-    if (apiValues.length > 0) return [...new Set(apiValues)]
+    const apiLabels = difficultyChoices.map((c) => c.label || c.value).filter(Boolean)
+    if (apiLabels.length > 0) return [...new Set(apiLabels)]
     const fromPrograms = programs.map((p) => p?.difficulty).filter(Boolean)
     return [...new Set([...DEFAULT_DIFFICULTIES, ...fromPrograms])]
   }, [programs, difficultyChoices])
