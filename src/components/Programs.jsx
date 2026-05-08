@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react"
 const API_URL = "/api/wodtrackr/exercise-programs/"
 const PROGRAMS_PER_PAGE = 6
 const DEFAULT_DIFFICULTIES = ["All Levels", "Beginner", "Intermediate", "Advanced"]
+const DEFAULT_DURATION_MIN = 1
+const DEFAULT_DURATION_MAX = 12
 const PROGRAMS_CHOICES_CACHE_KEY = "wodtrackrProgramChoices"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
@@ -192,6 +194,7 @@ function Programs() {
   const [categoryChoices, setCategoryChoices] = useState([])
   const [goalChoices, setGoalChoices] = useState([])
   const [difficultyChoices, setDifficultyChoices] = useState([])
+  const [durationRange, setDurationRange] = useState({ min: DEFAULT_DURATION_MIN, max: DEFAULT_DURATION_MAX })
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
 
   useEffect(() => {
@@ -231,6 +234,9 @@ function Programs() {
             setCategoryChoices(parsed.categoryChoices || [])
             setGoalChoices(parsed.goalChoices || [])
             setDifficultyChoices(parsed.difficultyChoices || [])
+            if (parsed?.durationRange?.min && parsed?.durationRange?.max) {
+              setDurationRange(parsed.durationRange)
+            }
             setIsChoicesLoading(false)
             return
           }
@@ -246,13 +252,40 @@ function Programs() {
         const category = normalizeChoices(data.category ?? data.categories ?? [])
         const goal = normalizeChoices(data.goal ?? data.goals ?? [])
         const difficulty = normalizeChoices(data.difficulty ?? data.difficulties ?? [])
+        const durationConfig =
+          data.duration_weeks ??
+          data.durationWeeks ??
+          data.fields?.duration_weeks ??
+          data.properties?.duration_weeks ??
+          {}
+
+        const minDurationCandidate = Number(
+          durationConfig.min ?? durationConfig.minimum ?? durationConfig.min_value ?? durationConfig.minValue,
+        )
+        const maxDurationCandidate = Number(
+          durationConfig.max ?? durationConfig.maximum ?? durationConfig.max_value ?? durationConfig.maxValue,
+        )
+
+        const minDuration = Number.isFinite(minDurationCandidate) ? minDurationCandidate : DEFAULT_DURATION_MIN
+        const maxDuration = Number.isFinite(maxDurationCandidate) ? maxDurationCandidate : DEFAULT_DURATION_MAX
+        const nextDurationRange =
+          maxDuration >= minDuration
+            ? { min: minDuration, max: maxDuration }
+            : { min: DEFAULT_DURATION_MIN, max: DEFAULT_DURATION_MAX }
 
         setCategoryChoices(category)
         setGoalChoices(goal)
         setDifficultyChoices(difficulty)
+        setDurationRange(nextDurationRange)
         localStorage.setItem(
           PROGRAMS_CHOICES_CACHE_KEY,
-          JSON.stringify({ categoryChoices: category, goalChoices: goal, difficultyChoices: difficulty, cachedAt: Date.now() }),
+          JSON.stringify({
+            categoryChoices: category,
+            goalChoices: goal,
+            difficultyChoices: difficulty,
+            durationRange: nextDurationRange,
+            cachedAt: Date.now(),
+          }),
         )
       } catch {
         // Non-critical — filters will still work from loaded program data.
@@ -273,14 +306,16 @@ function Programs() {
 
   const categories = useMemo(() => {
     const apiValues = categoryChoices.map((c) => c.value)
+    if (apiValues.length > 0) return [...new Set(apiValues)].sort()
     const fromPrograms = programs.map((p) => p?.category).filter(Boolean)
-    return [...new Set([...apiValues, ...fromPrograms])].sort()
+    return [...new Set(fromPrograms)].sort()
   }, [programs, categoryChoices])
 
   const goals = useMemo(() => {
     const apiValues = goalChoices.map((c) => c.value)
+    if (apiValues.length > 0) return [...new Set(apiValues)].sort()
     const fromPrograms = programs.map((p) => p?.goal).filter(Boolean)
-    return [...new Set([...apiValues, ...fromPrograms])].sort()
+    return [...new Set(fromPrograms)].sort()
   }, [programs, goalChoices])
 
   const filteredAndSortedPrograms = useMemo(() => {
@@ -381,8 +416,8 @@ function Programs() {
     }
 
     const durationValue = Number(createFormValues.duration_weeks)
-    if (!Number.isFinite(durationValue) || durationValue <= 0) {
-      nextErrors.duration_weeks = "Duration must be greater than 0."
+    if (!Number.isFinite(durationValue) || durationValue < durationRange.min || durationValue > durationRange.max) {
+      nextErrors.duration_weeks = `Duration must be between ${durationRange.min} and ${durationRange.max} weeks.`
     }
 
     return nextErrors
@@ -792,7 +827,8 @@ function Programs() {
                   <span>Duration (weeks)</span>
                   <input
                     type="number"
-                    min={1}
+                    min={durationRange.min}
+                    max={durationRange.max}
                     name="duration_weeks"
                     value={createFormValues.duration_weeks}
                     onChange={handleCreateFieldChange}
@@ -804,27 +840,37 @@ function Programs() {
 
                 <label className="programs-modal-field">
                   <span>Category</span>
-                  <input
-                    type="text"
+                  <select
                     name="category"
                     value={createFormValues.category}
                     onChange={handleCreateFieldChange}
-                    placeholder="Strength"
                     required
-                  />
+                  >
+                    <option value="">Select category</option>
+                    {categories.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
                   {createFieldErrors.category ? <small className="programs-modal-error">{createFieldErrors.category}</small> : null}
                 </label>
 
                 <label className="programs-modal-field">
                   <span>Goal</span>
-                  <input
-                    type="text"
+                  <select
                     name="goal"
                     value={createFormValues.goal}
                     onChange={handleCreateFieldChange}
-                    placeholder="General Fitness"
                     required
-                  />
+                  >
+                    <option value="">Select goal</option>
+                    {goals.map((goal) => (
+                      <option key={goal} value={goal}>
+                        {goal}
+                      </option>
+                    ))}
+                  </select>
                   {createFieldErrors.goal ? <small className="programs-modal-error">{createFieldErrors.goal}</small> : null}
                 </label>
               </div>
