@@ -368,6 +368,11 @@
   color: #991b1b;
 }
 
+.programs-badge-all-levels {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
 /* ── Numbered pagination ── */
 .programs-pagination {
   display: flex;

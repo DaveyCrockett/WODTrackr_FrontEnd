@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
 const PROGRAMS_PER_PAGE = 6
-const DEFAULT_DIFFICULTIES = ["Beginner", "Intermediate", "Advanced"]// change this to be added to exercise model
+const DEFAULT_DIFFICULTIES = ["All Levels", "Beginner", "Intermediate", "Advanced"]
 const PROGRAMS_CHOICES_CACHE_KEY = "wodtrackrProgramChoices"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
@@ -266,8 +266,9 @@ function Programs() {
 
   const difficulties = useMemo(() => {
     const apiValues = difficultyChoices.map((c) => c.value)
+    if (apiValues.length > 0) return [...new Set(apiValues)]
     const fromPrograms = programs.map((p) => p?.difficulty).filter(Boolean)
-    return [...new Set([...DEFAULT_DIFFICULTIES, ...apiValues, ...fromPrograms])].sort()
+    return [...new Set([...DEFAULT_DIFFICULTIES, ...fromPrograms])]
   }, [programs, difficultyChoices])
 
   const categories = useMemo(() => {
@@ -489,6 +490,7 @@ function Programs() {
     if (difficulty === "Beginner") return "programs-badge programs-badge-beginner"
     if (difficulty === "Intermediate") return "programs-badge programs-badge-intermediate"
     if (difficulty === "Advanced") return "programs-badge programs-badge-advanced"
+    if (difficulty === "All Levels") return "programs-badge programs-badge-all-levels"
     return "programs-badge"
   }
 
@@ -545,16 +547,6 @@ function Programs() {
           <div className="programs-filter-group">
             <span className="programs-filter-label">Difficulty</span>
             <div className="programs-filter-radios">
-              <label className="programs-radio-label">
-                <input
-                  type="radio"
-                  name="difficulty"
-                  value=""
-                  checked={filters.difficulty === ""}
-                  onChange={() => handleFilterChange("difficulty", "")}
-                />
-                All
-              </label>
               {difficulties.map((d) => (
                 <label key={d} className="programs-radio-label">
                   <input
