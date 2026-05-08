@@ -183,7 +183,7 @@ function Programs() {
   const [isCreateSubmitting, setIsCreateSubmitting] = useState(false)
   const [searchName, setSearchName] = useState("")
   const [sortOrder, setSortOrder] = useState("asc")
-  const [filters, setFilters] = useState({ difficulty: "", category: "", goal: "" })
+  const [filters, setFilters] = useState({ difficulty: [], category: "", goal: "" })
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedProgramId, setSelectedProgramId] = useState(null)
   const [programDetailsById, setProgramDetailsById] = useState({})
@@ -298,10 +298,11 @@ function Programs() {
   }, [])
 
   const difficulties = useMemo(() => {
-    const apiLabels = difficultyChoices.map((c) => c.label || c.value).filter(Boolean)
-    if (apiLabels.length > 0) return [...new Set(apiLabels)]
+    if (difficultyChoices.length > 0) {
+      return difficultyChoices.map((c) => ({ value: c.value, label: c.label || c.value }))
+    }
     const fromPrograms = programs.map((p) => p?.difficulty).filter(Boolean)
-    return [...new Set([...DEFAULT_DIFFICULTIES, ...fromPrograms])]
+    return [...new Set([...DEFAULT_DIFFICULTIES, ...fromPrograms])].map((v) => ({ value: v, label: v }))
   }, [programs, difficultyChoices])
 
   const categories = useMemo(() => {
@@ -330,8 +331,8 @@ function Programs() {
       )
     }
 
-    if (filters.difficulty) {
-      result = result.filter((p) => p.difficulty === filters.difficulty)
+    if (filters.difficulty.length > 0) {
+      result = result.filter((p) => filters.difficulty.includes(p.difficulty))
     }
     if (filters.category) {
       result = result.filter((p) => p.category === filters.category)
@@ -373,7 +374,7 @@ function Programs() {
   const handleClearFilters = () => {
     setSearchName("")
     setSortOrder("asc")
-    setFilters({ difficulty: "", category: "", goal: "" })
+    setFilters({ difficulty: [], category: "", goal: "" })
     setCurrentPage(1)
   }
 
@@ -521,11 +522,17 @@ function Programs() {
     }
   }
 
-  const getDifficultyClass = (difficulty) => {
-    if (difficulty === "Beginner") return "programs-badge programs-badge-beginner"
-    if (difficulty === "Intermediate") return "programs-badge programs-badge-intermediate"
-    if (difficulty === "Advanced") return "programs-badge programs-badge-advanced"
-    if (difficulty === "All Levels") return "programs-badge programs-badge-all-levels"
+  const getDifficultyLabel = (value) => {
+    const match = difficultyChoices.find((c) => c.value === value)
+    return match ? match.label : value
+  }
+
+  const getDifficultyClass = (value) => {
+    const normalized = String(value ?? "").toLowerCase().replace(/[^a-z]/g, "")
+    if (normalized === "beginner") return "programs-badge programs-badge-beginner"
+    if (normalized === "intermediate") return "programs-badge programs-badge-intermediate"
+    if (normalized === "advanced") return "programs-badge programs-badge-advanced"
+    if (normalized === "alllevels") return "programs-badge programs-badge-all-levels"
     return "programs-badge"
   }
 
@@ -581,17 +588,21 @@ function Programs() {
 
           <div className="programs-filter-group">
             <span className="programs-filter-label">Difficulty</span>
-            <div className="programs-filter-radios">
+            <div className="programs-filter-checkboxes">
               {difficulties.map((d) => (
-                <label key={d} className="programs-radio-label">
+                <label key={d.value} className="programs-checkbox-label">
                   <input
-                    type="radio"
-                    name="difficulty"
-                    value={d}
-                    checked={filters.difficulty === d}
-                    onChange={() => handleFilterChange("difficulty", d)}
+                    type="checkbox"
+                    value={d.value}
+                    checked={filters.difficulty.includes(d.value)}
+                    onChange={(e) => {
+                      const next = e.target.checked
+                        ? [...filters.difficulty, d.value]
+                        : filters.difficulty.filter((v) => v !== d.value)
+                      handleFilterChange("difficulty", next)
+                    }}
                   />
-                  {d}
+                  {d.label}
                 </label>
               ))}
             </div>
@@ -659,7 +670,7 @@ function Programs() {
                 <article key={program.id} className="programs-card">
                   <div className="programs-card-header">
                     <h3 className="programs-card-title">{program.name}</h3>
-                    <span className={getDifficultyClass(program.difficulty)}>{program.difficulty}</span>
+                    <span className={getDifficultyClass(program.difficulty)}>{getDifficultyLabel(program.difficulty)}</span>
                   </div>
                   <p className="programs-card-description">{program.description}</p>
                   <div className="programs-card-tags">
@@ -814,9 +825,9 @@ function Programs() {
                     required
                   >
                     <option value="">Select difficulty</option>
-                    {difficulties.map((difficulty) => (
-                      <option key={difficulty} value={difficulty}>
-                        {difficulty}
+                    {difficulties.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {d.label}
                       </option>
                     ))}
                   </select>

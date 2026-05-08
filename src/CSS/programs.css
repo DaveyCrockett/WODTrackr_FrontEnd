@@ -160,13 +160,14 @@
   color: #334155;
 }
 
-.programs-filter-radios {
+
+.programs-filter-checkboxes {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
 }
 
-.programs-radio-label {
+.programs-checkbox-label {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -175,7 +176,7 @@
   cursor: pointer;
 }
 
-.programs-radio-label input[type="radio"] {
+.programs-checkbox-label input[type="checkbox"] {
   accent-color: #1d4ed8;
   cursor: pointer;
 }
