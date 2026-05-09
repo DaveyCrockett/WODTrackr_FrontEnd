@@ -552,10 +552,11 @@ function Programs() {
     setSelectedProgramId(programId)
     setEditFieldErrors({})
     setEditErrorMessage("")
-    setEditFormValues(buildProgramFormValues(programs.find((program) => program.id === programId)))
+    const cachedDetail = programDetailsById[programId]
+    const listProgram = programs.find((program) => program.id === programId)
+    setEditFormValues(buildProgramFormValues(cachedDetail ?? listProgram))
 
-    if (programDetailsById[programId]) {
-      setEditFormValues(buildProgramFormValues(programDetailsById[programId]))
+    if (cachedDetail) {
       return
     }
 
