@@ -313,12 +313,17 @@ function Programs() {
     loadChoices()
   }, [])
 
+  const selectedProgram = useMemo(
+    () => programs.find((program) => program.id === selectedProgramId) ?? null,
+    [programs, selectedProgramId],
+  )
+
   useEffect(() => {
     if (!selectedProgramId) return
-    const sourceProgram = programDetailsById[selectedProgramId] ?? programs.find((program) => program.id === selectedProgramId)
+    const sourceProgram = programDetailsById[selectedProgramId] ?? selectedProgram
     if (!sourceProgram) return
     setEditFormValues(buildProgramFormValues(sourceProgram))
-  }, [selectedProgramId, programDetailsById, programs])
+  }, [selectedProgramId, programDetailsById, selectedProgram])
 
   const difficulties = useMemo(() => {
     if (difficultyChoices.length > 0) {
@@ -377,10 +382,6 @@ function Programs() {
   const pagedPrograms = filteredAndSortedPrograms.slice(
     (safePage - 1) * PROGRAMS_PER_PAGE,
     safePage * PROGRAMS_PER_PAGE,
-  )
-  const selectedProgram = useMemo(
-    () => programs.find((program) => program.id === selectedProgramId) ?? null,
-    [programs, selectedProgramId],
   )
   const selectedProgramDetails = selectedProgramId ? programDetailsById[selectedProgramId] : null
 
@@ -1007,7 +1008,7 @@ function Programs() {
           >
             <header className="programs-modal-header">
               <h2 id="programs-detail-modal-title">
-                {selectedProgram?.name || selectedProgramDetails?.name || "Program Details"}
+                {selectedProgramDetails?.name || selectedProgram?.name || "Program Details"}
               </h2>
               <button type="button" className="programs-modal-secondary-btn" onClick={handleCloseDetailsModal}>
                 Close
