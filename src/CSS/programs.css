@@ -548,6 +548,25 @@
   cursor: not-allowed;
 }
 
+.programs-modal-danger-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+  background: #b91c1c;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.programs-modal-danger-btn:hover:not(:disabled) {
+  background: #991b1b;
+}
+
+.programs-modal-danger-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .programs-modal-error {
   margin: 0;
   color: #b91c1c;

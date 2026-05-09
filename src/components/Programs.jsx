@@ -20,6 +20,19 @@ const EMPTY_PROGRAM_FORM_VALUES = {
   is_public: false,
 }
 
+const buildProgramFormValues = (program) => ({
+  name: String(program?.name ?? ""),
+  description: String(program?.description ?? ""),
+  difficulty: program?.difficulty ?? "",
+  duration_weeks:
+    program?.duration_weeks === null || program?.duration_weeks === undefined
+      ? ""
+      : String(program.duration_weeks),
+  category: String(program?.category ?? ""),
+  goal: String(program?.goal ?? ""),
+  is_public: Boolean(program?.is_public),
+})
+
 const getAuthToken = () => {
   const directToken = localStorage.getItem("wodtrackrAuthToken")
   if (directToken) {
@@ -189,6 +202,11 @@ function Programs() {
   const [programDetailsById, setProgramDetailsById] = useState({})
   const [detailErrorById, setDetailErrorById] = useState({})
   const [detailLoadingId, setDetailLoadingId] = useState(null)
+  const [editFormValues, setEditFormValues] = useState(EMPTY_PROGRAM_FORM_VALUES)
+  const [editFieldErrors, setEditFieldErrors] = useState({})
+  const [editErrorMessage, setEditErrorMessage] = useState("")
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false)
+  const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false)
   const [categoryChoices, setCategoryChoices] = useState([])
   const [goalChoices, setGoalChoices] = useState([])
   const [difficultyChoices, setDifficultyChoices] = useState([])
@@ -295,6 +313,13 @@ function Programs() {
     loadChoices()
   }, [])
 
+  useEffect(() => {
+    if (!selectedProgramId) return
+    const sourceProgram = programDetailsById[selectedProgramId] ?? programs.find((program) => program.id === selectedProgramId)
+    if (!sourceProgram) return
+    setEditFormValues(buildProgramFormValues(sourceProgram))
+  }, [selectedProgramId, programDetailsById, programs])
+
   const difficulties = useMemo(() => {
     if (difficultyChoices.length > 0) {
       return difficultyChoices.map((c) => ({ value: c.value, label: c.label || c.value }))
@@ -353,6 +378,11 @@ function Programs() {
     (safePage - 1) * PROGRAMS_PER_PAGE,
     safePage * PROGRAMS_PER_PAGE,
   )
+  const selectedProgram = useMemo(
+    () => programs.find((program) => program.id === selectedProgramId) ?? null,
+    [programs, selectedProgramId],
+  )
+  const selectedProgramDetails = selectedProgramId ? programDetailsById[selectedProgramId] : null
 
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }))
@@ -476,14 +506,56 @@ function Programs() {
     }
   }
 
-  const handleViewDetails = async (programId) => {
-    if (selectedProgramId === programId) {
-      setSelectedProgramId(null)
-      return
+  const handleCloseDetailsModal = () => {
+    setSelectedProgramId(null)
+    setEditFieldErrors({})
+    setEditErrorMessage("")
+    setIsEditSubmitting(false)
+    setIsDeleteSubmitting(false)
+  }
+
+  const validateEditForm = () => {
+    const nextErrors = {}
+
+    if (!editFormValues.name.trim()) {
+      nextErrors.name = "Program name is required."
+    }
+    if (!editFormValues.description.trim()) {
+      nextErrors.description = "Description is required."
+    }
+    if (!editFormValues.difficulty) {
+      nextErrors.difficulty = "Difficulty is required."
+    }
+    if (!editFormValues.category.trim()) {
+      nextErrors.category = "Category is required."
+    }
+    if (!editFormValues.goal.trim()) {
+      nextErrors.goal = "Goal is required."
     }
 
+    const durationValue = Number(editFormValues.duration_weeks)
+    if (!Number.isFinite(durationValue) || durationValue < durationRange.min || durationValue > durationRange.max) {
+      nextErrors.duration_weeks = `Duration must be between ${durationRange.min} and ${durationRange.max} weeks.`
+    }
+
+    return nextErrors
+  }
+
+  const handleEditFieldChange = (event) => {
+    const { name, type, checked, value } = event.target
+    const nextValue = type === "checkbox" ? checked : value
+    setEditFormValues((prev) => ({ ...prev, [name]: nextValue }))
+    setEditFieldErrors((prev) => ({ ...prev, [name]: "" }))
+  }
+
+  const handleViewDetails = async (programId) => {
     setSelectedProgramId(programId)
+    setEditFieldErrors({})
+    setEditErrorMessage("")
+    setEditFormValues(buildProgramFormValues(programs.find((program) => program.id === programId)))
+
     if (programDetailsById[programId]) {
+      setEditFormValues(buildProgramFormValues(programDetailsById[programId]))
       return
     }
 
@@ -502,6 +574,75 @@ function Programs() {
       setDetailErrorById((prev) => ({ ...prev, [programId]: message }))
     } finally {
       setDetailLoadingId(null)
+    }
+  }
+
+  const handleUpdateProgram = async (event) => {
+    event.preventDefault()
+    if (!selectedProgramId) return
+
+    setEditErrorMessage("")
+    const nextErrors = validateEditForm()
+    if (Object.keys(nextErrors).length > 0) {
+      setEditFieldErrors(nextErrors)
+      return
+    }
+
+    setIsEditSubmitting(true)
+    try {
+      const payload = {
+        name: editFormValues.name.trim(),
+        description: editFormValues.description.trim(),
+        difficulty: editFormValues.difficulty,
+        duration_weeks: Number(editFormValues.duration_weeks),
+        category: editFormValues.category.trim(),
+        goal: editFormValues.goal.trim(),
+        is_public: Boolean(editFormValues.is_public),
+      }
+
+      const response = await axios.patch(`${API_URL}${selectedProgramId}/`, payload, buildRequestConfig())
+      const updatedProgram = normalizeProgramDetailPayload(response?.data) ?? payload
+      setPrograms((prev) =>
+        prev.map((program) => (program.id === selectedProgramId ? { ...program, ...updatedProgram } : program)),
+      )
+      setProgramDetailsById((prev) => ({ ...prev, [selectedProgramId]: { ...prev[selectedProgramId], ...updatedProgram } }))
+      handleCloseDetailsModal()
+    } catch (error) {
+      const fieldErrors = {}
+      const responseData = error?.response?.data
+      if (responseData && typeof responseData === "object") {
+        const knownFields = ["name", "description", "difficulty", "duration_weeks", "category", "goal", "is_public"]
+        for (const fieldName of knownFields) {
+          const rawValue = responseData[fieldName]
+          if (!rawValue) continue
+          fieldErrors[fieldName] = Array.isArray(rawValue) ? rawValue.join(" ") : String(rawValue)
+        }
+      }
+      setEditFieldErrors(fieldErrors)
+      setEditErrorMessage(error?.response?.data?.detail || "Unable to update program. Please review your inputs.")
+    } finally {
+      setIsEditSubmitting(false)
+    }
+  }
+
+  const handleDeleteProgram = async () => {
+    if (!selectedProgramId) return
+
+    setEditErrorMessage("")
+    setIsDeleteSubmitting(true)
+    try {
+      await axios.delete(`${API_URL}${selectedProgramId}/`, buildRequestConfig())
+      setPrograms((prev) => prev.filter((program) => program.id !== selectedProgramId))
+      setProgramDetailsById((prev) => {
+        const next = { ...prev }
+        delete next[selectedProgramId]
+        return next
+      })
+      handleCloseDetailsModal()
+    } catch (error) {
+      setEditErrorMessage(error?.response?.data?.detail || "Unable to delete program. Please try again.")
+    } finally {
+      setIsDeleteSubmitting(false)
     }
   }
 
@@ -670,33 +811,9 @@ function Programs() {
                       onClick={() => handleViewDetails(program.id)}
                       disabled={detailLoadingId === program.id}
                     >
-                      {detailLoadingId === program.id
-                        ? "Loading..."
-                        : selectedProgramId === program.id
-                          ? "Hide Details"
-                          : "View Details"}
+                      {detailLoadingId === program.id ? "Loading..." : "View Details"}
                     </button>
                   </div>
-
-                  {selectedProgramId === program.id ? (
-                    <section className="programs-card-detail" aria-label={`Details for ${program.name}`}>
-                      {detailErrorById[program.id] ? (
-                        <p className="programs-card-feedback" role="alert">{detailErrorById[program.id]}</p>
-                      ) : (
-                        <>
-                          <p className="programs-card-detail-line">
-                            <strong>Updated:</strong> {formatTimestamp(programDetailsById[program.id]?.updated_at) || "N/A"}
-                          </p>
-                          <p className="programs-card-detail-line">
-                            <strong>Visibility:</strong> {programDetailsById[program.id]?.is_public ? "Public" : "Private"}
-                          </p>
-                          <p className="programs-card-detail-line">
-                            <strong>Exercises:</strong> {Array.isArray(programDetailsById[program.id]?.exercises) ? programDetailsById[program.id].exercises.length : "N/A"}
-                          </p>
-                        </>
-                      )}
-                    </section>
-                  ) : null}
                 </article>
               ))}
             </div>
@@ -873,6 +990,157 @@ function Programs() {
                 </button>
                 <button type="submit" className="programs-modal-primary-btn" disabled={isCreateSubmitting}>
                   {isCreateSubmitting ? "Creating..." : "Create Program"}
+                </button>
+              </div>
+            </form>
+          </aside>
+        </div>
+      ) : null}
+
+      {selectedProgramId ? (
+        <div className="programs-modal-backdrop" role="presentation" onClick={handleCloseDetailsModal}>
+          <aside
+            className="programs-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="programs-detail-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="programs-modal-header">
+              <h2 id="programs-detail-modal-title">
+                {selectedProgram?.name || selectedProgramDetails?.name || "Program Details"}
+              </h2>
+              <button type="button" className="programs-modal-secondary-btn" onClick={handleCloseDetailsModal}>
+                Close
+              </button>
+            </header>
+
+            <form className="programs-modal-form" onSubmit={handleUpdateProgram}>
+              {detailLoadingId === selectedProgramId ? (
+                <p className="programs-card-feedback" role="status">Loading program details...</p>
+              ) : null}
+
+              {detailErrorById[selectedProgramId] ? (
+                <p className="programs-modal-error" role="alert">{detailErrorById[selectedProgramId]}</p>
+              ) : null}
+
+              {editErrorMessage ? (
+                <p className="programs-modal-error" role="alert">{editErrorMessage}</p>
+              ) : null}
+
+              <label className="programs-modal-field">
+                <span>Name</span>
+                <input
+                  type="text"
+                  name="name"
+                  value={editFormValues.name}
+                  onChange={handleEditFieldChange}
+                  placeholder="Program name"
+                  required
+                />
+                {editFieldErrors.name ? <small className="programs-modal-error">{editFieldErrors.name}</small> : null}
+              </label>
+
+              <label className="programs-modal-field">
+                <span>Description</span>
+                <textarea
+                  name="description"
+                  value={editFormValues.description}
+                  onChange={handleEditFieldChange}
+                  placeholder="What this program is for"
+                  rows={3}
+                  required
+                />
+                {editFieldErrors.description ? <small className="programs-modal-error">{editFieldErrors.description}</small> : null}
+              </label>
+
+              <div className="programs-modal-grid">
+                <label className="programs-modal-field">
+                  <span>Difficulty</span>
+                  <select name="difficulty" value={editFormValues.difficulty} onChange={handleEditFieldChange} required>
+                    <option value="">Select difficulty</option>
+                    {difficulties.map((difficulty) => (
+                      <option key={difficulty.value} value={difficulty.value}>
+                        {difficulty.label}
+                      </option>
+                    ))}
+                  </select>
+                  {editFieldErrors.difficulty ? <small className="programs-modal-error">{editFieldErrors.difficulty}</small> : null}
+                </label>
+
+                <label className="programs-modal-field">
+                  <span>Duration (weeks)</span>
+                  <input
+                    type="number"
+                    min={durationRange.min}
+                    max={durationRange.max}
+                    name="duration_weeks"
+                    value={editFormValues.duration_weeks}
+                    onChange={handleEditFieldChange}
+                    placeholder="8"
+                    required
+                  />
+                  {editFieldErrors.duration_weeks ? <small className="programs-modal-error">{editFieldErrors.duration_weeks}</small> : null}
+                </label>
+
+                <label className="programs-modal-field">
+                  <span>Category</span>
+                  <select name="category" value={editFormValues.category} onChange={handleEditFieldChange} required>
+                    <option value="">Select category</option>
+                    {categories.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                  {editFieldErrors.category ? <small className="programs-modal-error">{editFieldErrors.category}</small> : null}
+                </label>
+
+                <label className="programs-modal-field">
+                  <span>Goal</span>
+                  <select name="goal" value={editFormValues.goal} onChange={handleEditFieldChange} required>
+                    <option value="">Select goal</option>
+                    {goals.map((goal) => (
+                      <option key={goal} value={goal}>
+                        {goal}
+                      </option>
+                    ))}
+                  </select>
+                  {editFieldErrors.goal ? <small className="programs-modal-error">{editFieldErrors.goal}</small> : null}
+                </label>
+              </div>
+
+              <label className="programs-modal-checkbox">
+                <input
+                  type="checkbox"
+                  name="is_public"
+                  checked={editFormValues.is_public}
+                  onChange={handleEditFieldChange}
+                />
+                Public program
+              </label>
+
+              <p className="programs-card-detail-line">
+                <strong>Updated:</strong> {formatTimestamp(selectedProgramDetails?.updated_at || selectedProgram?.updated_at) || "N/A"}
+              </p>
+              <p className="programs-card-detail-line">
+                <strong>Exercises:</strong> {Array.isArray(selectedProgramDetails?.exercises) ? selectedProgramDetails.exercises.length : "N/A"}
+              </p>
+
+              <div className="programs-modal-actions">
+                <button type="button" className="programs-modal-secondary-btn" onClick={handleCloseDetailsModal}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="programs-modal-danger-btn"
+                  onClick={handleDeleteProgram}
+                  disabled={isDeleteSubmitting || isEditSubmitting}
+                >
+                  {isDeleteSubmitting ? "Deleting..." : "Delete Program"}
+                </button>
+                <button type="submit" className="programs-modal-primary-btn" disabled={isEditSubmitting || isDeleteSubmitting}>
+                  {isEditSubmitting ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             </form>
