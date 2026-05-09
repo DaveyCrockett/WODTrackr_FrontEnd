@@ -282,6 +282,12 @@
   font-weight: 600;
 }
 
+.programs-card-goal {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #334155;
+}
+
 .programs-card-creator {
   margin: 0;
   font-size: 0.8rem;

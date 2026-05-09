@@ -3,7 +3,7 @@ import axios from "axios"
 import { useEffect, useMemo, useState } from "react"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
-const PROGRAMS_PER_PAGE = 6
+const PROGRAMS_PER_PAGE = 10
 const DEFAULT_DIFFICULTIES = ["All Levels", "Beginner", "Intermediate", "Advanced"]
 const DEFAULT_DURATION_MIN = 1
 const DEFAULT_DURATION_MAX = 12
@@ -189,8 +189,6 @@ function Programs() {
   const [programDetailsById, setProgramDetailsById] = useState({})
   const [detailErrorById, setDetailErrorById] = useState({})
   const [detailLoadingId, setDetailLoadingId] = useState(null)
-  const [reuseLoadingId, setReuseLoadingId] = useState(null)
-  const [reuseMessageById, setReuseMessageById] = useState({})
   const [categoryChoices, setCategoryChoices] = useState([])
   const [goalChoices, setGoalChoices] = useState([])
   const [difficultyChoices, setDifficultyChoices] = useState([])
@@ -385,6 +383,7 @@ function Programs() {
     setIsCreateModalOpen(true)
   }
 
+
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false)
   }
@@ -503,22 +502,6 @@ function Programs() {
       setDetailErrorById((prev) => ({ ...prev, [programId]: message }))
     } finally {
       setDetailLoadingId(null)
-    }
-  }
-
-  const handleReuseProgram = async (programId) => {
-    setReuseLoadingId(programId)
-    setReuseMessageById((prev) => ({ ...prev, [programId]: "" }))
-
-    try {
-      const response = await axios.post(`${API_URL}${programId}/reuse/`, {}, buildRequestConfig())
-      const message = response?.data?.detail || "Program reused successfully."
-      setReuseMessageById((prev) => ({ ...prev, [programId]: message }))
-    } catch (error) {
-      const message = error?.response?.data?.detail || "Unable to reuse this program."
-      setReuseMessageById((prev) => ({ ...prev, [programId]: message }))
-    } finally {
-      setReuseLoadingId(null)
     }
   }
 
@@ -675,9 +658,9 @@ function Programs() {
                   <p className="programs-card-description">{program.description}</p>
                   <div className="programs-card-tags">
                     <span className="programs-card-tag">{program.category}</span>
-                    <span className="programs-card-tag">{program.goal}</span>
                     <span className="programs-card-tag">{program.duration_weeks ?? "?"} weeks</span>
                   </div>
+                  <p className="programs-card-goal"><strong>Goal:</strong> {program.goal || "N/A"}</p>
                   <p className="programs-card-creator">By {program.created_by_username || program.created_by || "Unknown"}</p>
 
                   <div className="programs-card-actions">
@@ -693,19 +676,7 @@ function Programs() {
                           ? "Hide Details"
                           : "View Details"}
                     </button>
-                    <button
-                      type="button"
-                      className="programs-card-action-btn programs-card-action-btn-primary"
-                      onClick={() => handleReuseProgram(program.id)}
-                      disabled={reuseLoadingId === program.id}
-                    >
-                      {reuseLoadingId === program.id ? "Reusing..." : "Reuse Program"}
-                    </button>
                   </div>
-
-                  {reuseMessageById[program.id] ? (
-                    <p className="programs-card-feedback" role="status">{reuseMessageById[program.id]}</p>
-                  ) : null}
 
                   {selectedProgramId === program.id ? (
                     <section className="programs-card-detail" aria-label={`Details for ${program.name}`}>
