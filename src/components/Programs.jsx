@@ -48,6 +48,16 @@ const getAuthToken = () => {
   }
 }
 
+const getStoredUsername = () => {
+  try {
+    const rawValue = localStorage.getItem("wodtrackrUser")
+    const userData = rawValue ? JSON.parse(rawValue) : null
+    return userData?.username || ""
+  } catch {
+    return ""
+  }
+}
+
 const buildRequestConfig = (overrides = {}) => {
   const authToken = getAuthToken()
   return {
@@ -207,6 +217,7 @@ function Programs() {
   const [editErrorMessage, setEditErrorMessage] = useState("")
   const [isEditSubmitting, setIsEditSubmitting] = useState(false)
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false)
+  const [isDetailsEditMode, setIsDetailsEditMode] = useState(false)
   const [categoryChoices, setCategoryChoices] = useState([])
   const [goalChoices, setGoalChoices] = useState([])
   const [difficultyChoices, setDifficultyChoices] = useState([])
@@ -320,10 +331,11 @@ function Programs() {
 
   useEffect(() => {
     if (!selectedProgramId) return
+    if (isDetailsEditMode) return
     const sourceProgram = programDetailsById[selectedProgramId] ?? selectedProgram
     if (!sourceProgram) return
     setEditFormValues(buildProgramFormValues(sourceProgram))
-  }, [selectedProgramId, programDetailsById, selectedProgram])
+  }, [selectedProgramId, programDetailsById, selectedProgram, isDetailsEditMode])
 
   const difficulties = useMemo(() => {
     if (difficultyChoices.length > 0) {
@@ -384,6 +396,19 @@ function Programs() {
     safePage * PROGRAMS_PER_PAGE,
   )
   const selectedProgramDetails = selectedProgramId ? programDetailsById[selectedProgramId] : null
+  const selectedProgramOwner =
+    selectedProgramDetails?.created_by_username ||
+    selectedProgramDetails?.created_by ||
+    selectedProgram?.created_by_username ||
+    selectedProgram?.created_by ||
+    ""
+  const currentUsername = getStoredUsername()
+  const canEditSelectedProgram = Boolean(
+    selectedProgramId &&
+    currentUsername &&
+    selectedProgramOwner &&
+    currentUsername === selectedProgramOwner,
+  )
 
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }))
@@ -513,6 +538,7 @@ function Programs() {
     setEditErrorMessage("")
     setIsEditSubmitting(false)
     setIsDeleteSubmitting(false)
+    setIsDetailsEditMode(false)
   }
 
   const validateEditForm = () => {
@@ -543,14 +569,29 @@ function Programs() {
   }
 
   const handleEditFieldChange = (event) => {
+    if (!isDetailsEditMode) return
+
     const { name, type, checked, value } = event.target
     const nextValue = type === "checkbox" ? checked : value
     setEditFormValues((prev) => ({ ...prev, [name]: nextValue }))
     setEditFieldErrors((prev) => ({ ...prev, [name]: "" }))
   }
 
+  const handleStartEditProgram = () => {
+    if (!selectedProgramId || !canEditSelectedProgram) return
+
+    const sourceProgram = programDetailsById[selectedProgramId] ?? selectedProgram
+    if (sourceProgram) {
+      setEditFormValues(buildProgramFormValues(sourceProgram))
+    }
+    setEditFieldErrors({})
+    setEditErrorMessage("")
+    setIsDetailsEditMode(true)
+  }
+
   const handleViewDetails = async (programId) => {
     setSelectedProgramId(programId)
+    setIsDetailsEditMode(false)
     setEditFieldErrors({})
     setEditErrorMessage("")
     const cachedDetail = programDetailsById[programId]
@@ -600,7 +641,7 @@ function Programs() {
         is_public: Boolean(editFormValues.is_public),
       }
 
-      const response = await axios.patch(`${API_URL}${selectedProgramId}/`, payload, buildRequestConfig())
+      const response = await axios.put(`${API_URL}${selectedProgramId}/`, payload, buildRequestConfig())
       const updatedProgram = normalizeProgramDetailPayload(response?.data) ?? payload
       setPrograms((prev) =>
         prev.map((program) => (program.id === selectedProgramId ? { ...program, ...updatedProgram } : program)),
@@ -1036,6 +1077,7 @@ function Programs() {
                   value={editFormValues.name}
                   onChange={handleEditFieldChange}
                   placeholder="Program name"
+                  readOnly={!isDetailsEditMode}
                   required
                 />
                 {editFieldErrors.name ? <small className="programs-modal-error">{editFieldErrors.name}</small> : null}
@@ -1049,6 +1091,7 @@ function Programs() {
                   onChange={handleEditFieldChange}
                   placeholder="What this program is for"
                   rows={3}
+                  readOnly={!isDetailsEditMode}
                   required
                 />
                 {editFieldErrors.description ? <small className="programs-modal-error">{editFieldErrors.description}</small> : null}
@@ -1057,7 +1100,13 @@ function Programs() {
               <div className="programs-modal-grid">
                 <label className="programs-modal-field">
                   <span>Difficulty</span>
-                  <select name="difficulty" value={editFormValues.difficulty} onChange={handleEditFieldChange} required>
+                  <select
+                    name="difficulty"
+                    value={editFormValues.difficulty}
+                    onChange={handleEditFieldChange}
+                    disabled={!isDetailsEditMode}
+                    required
+                  >
                     <option value="">Select difficulty</option>
                     {difficulties.map((difficulty) => (
                       <option key={difficulty.value} value={difficulty.value}>
@@ -1078,6 +1127,7 @@ function Programs() {
                     value={editFormValues.duration_weeks}
                     onChange={handleEditFieldChange}
                     placeholder="8"
+                    readOnly={!isDetailsEditMode}
                     required
                   />
                   {editFieldErrors.duration_weeks ? <small className="programs-modal-error">{editFieldErrors.duration_weeks}</small> : null}
@@ -1085,7 +1135,13 @@ function Programs() {
 
                 <label className="programs-modal-field">
                   <span>Category</span>
-                  <select name="category" value={editFormValues.category} onChange={handleEditFieldChange} required>
+                  <select
+                    name="category"
+                    value={editFormValues.category}
+                    onChange={handleEditFieldChange}
+                    disabled={!isDetailsEditMode}
+                    required
+                  >
                     <option value="">Select category</option>
                     {categories.map((category) => (
                       <option key={category} value={category}>
@@ -1098,7 +1154,13 @@ function Programs() {
 
                 <label className="programs-modal-field">
                   <span>Goal</span>
-                  <select name="goal" value={editFormValues.goal} onChange={handleEditFieldChange} required>
+                  <select
+                    name="goal"
+                    value={editFormValues.goal}
+                    onChange={handleEditFieldChange}
+                    disabled={!isDetailsEditMode}
+                    required
+                  >
                     <option value="">Select goal</option>
                     {goals.map((goal) => (
                       <option key={goal} value={goal}>
@@ -1116,6 +1178,7 @@ function Programs() {
                   name="is_public"
                   checked={editFormValues.is_public}
                   onChange={handleEditFieldChange}
+                  disabled={!isDetailsEditMode}
                 />
                 Public program
               </label>
@@ -1128,20 +1191,31 @@ function Programs() {
               </p>
 
               <div className="programs-modal-actions">
-                <button type="button" className="programs-modal-secondary-btn" onClick={handleCloseDetailsModal}>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="programs-modal-danger-btn"
-                  onClick={handleDeleteProgram}
-                  disabled={isDeleteSubmitting || isEditSubmitting}
-                >
-                  {isDeleteSubmitting ? "Deleting..." : "Delete Program"}
-                </button>
-                <button type="submit" className="programs-modal-primary-btn" disabled={isEditSubmitting || isDeleteSubmitting}>
-                  {isEditSubmitting ? "Saving..." : "Save Changes"}
-                </button>
+                {canEditSelectedProgram && !isDetailsEditMode ? (
+                  <button
+                    type="button"
+                    className="programs-modal-primary-btn"
+                    onClick={handleStartEditProgram}
+                    disabled={detailLoadingId === selectedProgramId}
+                  >
+                    Edit Program
+                  </button>
+                ) : null}
+                {canEditSelectedProgram && isDetailsEditMode ? (
+                  <button
+                    type="button"
+                    className="programs-modal-danger-btn"
+                    onClick={handleDeleteProgram}
+                    disabled={isDeleteSubmitting || isEditSubmitting}
+                  >
+                    {isDeleteSubmitting ? "Deleting..." : "Delete Program"}
+                  </button>
+                ) : null}
+                {canEditSelectedProgram && isDetailsEditMode ? (
+                  <button type="submit" className="programs-modal-primary-btn" disabled={isEditSubmitting || isDeleteSubmitting}>
+                    {isEditSubmitting ? "Saving..." : "Save Changes"}
+                  </button>
+                ) : null}
               </div>
             </form>
           </aside>
