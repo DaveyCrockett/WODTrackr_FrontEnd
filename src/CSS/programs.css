@@ -573,6 +573,88 @@
   font-size: 0.82rem;
 }
 
+.programs-plan-builder {
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  border-radius: 12px;
+  padding: 0.8rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.programs-plan-builder h3 {
+  margin: 0;
+  font-size: 0.98rem;
+  color: #1e3a8a;
+}
+
+.programs-plan-helper {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #475569;
+}
+
+.programs-plan-controls {
+  display: grid;
+  grid-template-columns: minmax(130px, 180px) minmax(180px, 1fr) auto;
+  gap: 0.6rem;
+  align-items: end;
+}
+
+.programs-plan-add-btn {
+  white-space: nowrap;
+}
+
+.programs-plan-weeks {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.programs-plan-week-card {
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  padding: 0.6rem;
+  background: #ffffff;
+}
+
+.programs-plan-week-card h4 {
+  margin: 0 0 0.45rem;
+  color: #1e293b;
+  font-size: 0.9rem;
+}
+
+.programs-plan-exercise-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.programs-plan-exercise-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+}
+
+.programs-plan-remove-btn {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.78rem;
+  color: #334155;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.programs-plan-remove-btn:hover {
+  background: #f8fafc;
+}
+
 @media (max-width: 860px) {
   .programs-top-bar {
     flex-wrap: wrap;
@@ -611,6 +693,10 @@
   }
 
   .programs-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .programs-plan-controls {
     grid-template-columns: 1fr;
   }
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import React from "react"
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import axios from "axios"
 import Programs from "../components/Programs"
@@ -35,7 +35,12 @@ describe("Programs Component", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
-    vi.mocked(localStorage.getItem).mockReturnValue(null)
+    vi.mocked(localStorage.getItem).mockImplementation((key) => {
+      if (key === "wodtrackrUser") {
+        return JSON.stringify({ username: "coach", authToken: "token" })
+      }
+      return null
+    })
   })
 
   it("opens details modal from View Details and updates a program", async () => {
@@ -49,7 +54,7 @@ describe("Programs Component", () => {
       }
       return Promise.resolve({ data: {} })
     })
-    axios.patch.mockResolvedValue({ data: { ...mockProgram, name: "Updated Strength Cycle" } })
+    axios.put.mockResolvedValue({ data: { ...mockProgram, name: "Updated Strength Cycle" } })
 
     render(<Programs />)
 
@@ -57,6 +62,7 @@ describe("Programs Component", () => {
     await userEvent.click(screen.getByRole("button", { name: "View Details" }))
 
     const dialog = await screen.findByRole("dialog")
+    await userEvent.click(screen.getByRole("button", { name: "Edit Program" }))
     const nameInput = await screen.findByRole("textbox", { name: "Name" })
     expect(dialog).toBeInTheDocument()
     expect(nameInput).toHaveValue("Strength Cycle")
@@ -66,7 +72,7 @@ describe("Programs Component", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save Changes" }))
 
     await waitFor(() => {
-      expect(axios.patch).toHaveBeenCalledWith(
+      expect(axios.put).toHaveBeenCalledWith(
         `${API_URL}1/`,
         expect.objectContaining({ name: "Updated Strength Cycle" }),
         expect.anything(),
@@ -88,6 +94,7 @@ describe("Programs Component", () => {
     await screen.findByText("Strength Cycle")
     await userEvent.click(screen.getByRole("button", { name: "View Details" }))
     await screen.findByRole("dialog")
+    await userEvent.click(screen.getByRole("button", { name: "Edit Program" }))
 
     await userEvent.click(screen.getByRole("button", { name: "Delete Program" }))
 
@@ -96,6 +103,47 @@ describe("Programs Component", () => {
     })
     await waitFor(() => {
       expect(screen.queryByText("Strength Cycle")).not.toBeInTheDocument()
+    })
+  })
+
+  it("creates a program with selected workout exercises", async () => {
+    axios.get.mockImplementation((url) => {
+      if (url === API_URL) return Promise.resolve({ data: { data: [mockProgram] } })
+      if (url === `${API_URL}choices/`) return Promise.resolve(mockChoicesResponse)
+      if (url === "/api/wodtrackr/exercises/") {
+        return Promise.resolve({ data: { data: [{ id: 101, name: "Back Squat" }] } })
+      }
+      return Promise.resolve({ data: {} })
+    })
+    axios.post.mockResolvedValue({ data: { data: { ...mockProgram, id: 2, name: "Plan Builder" } } })
+
+    render(<Programs />)
+
+    await screen.findByText("Strength Cycle")
+    await userEvent.click(screen.getByRole("button", { name: "New Program" }))
+    const createDialog = await screen.findByRole("dialog", { name: "Create New Program" })
+
+    await userEvent.type(within(createDialog).getByRole("textbox", { name: "Name" }), "Plan Builder")
+    await userEvent.type(within(createDialog).getByRole("textbox", { name: "Description" }), "Includes structured sessions")
+    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Difficulty" }), "Beginner")
+    await userEvent.type(within(createDialog).getByRole("spinbutton", { name: "Duration \(weeks\)" }), "2")
+    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Category" }), "Strength")
+    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Goal" }), "Build Strength")
+
+    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Exercise" }), "101")
+    await userEvent.click(within(createDialog).getByRole("button", { name: "Add Exercise" }))
+
+    await userEvent.click(within(createDialog).getByRole("button", { name: "Create Program" }))
+
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalledWith(
+        API_URL,
+        expect.objectContaining({
+          name: "Plan Builder",
+          exercises: [101],
+        }),
+        expect.anything(),
+      )
     })
   })
 })
