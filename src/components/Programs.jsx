@@ -17,6 +17,98 @@ const normalizeDurationWeeks = (value) => {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0
 }
 
+const buildProgramItemsApiUrl = (programId) => `${API_URL}${programId}/item/`
+const buildProgramItemDetailApiUrl = (programId, itemId) => `${API_URL}${programId}/item/${itemId}/`
+
+const normalizeProgramItemsPayload = (data) => {
+  if (Array.isArray(data?.data)) return data.data
+  if (Array.isArray(data?.results)) return data.results
+  if (Array.isArray(data?.items)) return data.items
+  if (Array.isArray(data)) return data
+  return []
+}
+
+const buildProgramItemsFromWorkoutPlan = (workoutPlan) => {
+  let position = 1
+  const items = []
+
+  for (const weekEntry of Array.isArray(workoutPlan) ? workoutPlan : []) {
+    const weekNumber = Number(weekEntry?.week_number)
+    if (!Number.isFinite(weekNumber) || weekNumber < 1) continue
+
+    for (const exerciseId of Array.isArray(weekEntry?.exercise_ids) ? weekEntry.exercise_ids : []) {
+      const normalizedExerciseId = Number(exerciseId)
+      if (!Number.isFinite(normalizedExerciseId)) continue
+      items.push({
+        exercise: normalizedExerciseId,
+        position,
+        week: weekNumber,
+        day: 1,
+      })
+      position += 1
+    }
+  }
+
+  return items
+}
+
+const syncProgramItems = async (programId, itemsPayload, replaceExisting = false) => {
+  const endpoint = buildProgramItemsApiUrl(programId)
+  const requestConfig = buildRequestConfig()
+
+  if (replaceExisting) {
+    let didClearExistingItems = false
+
+    try {
+      await axios.delete(endpoint, requestConfig)
+      didClearExistingItems = true
+    } catch {
+      // Some APIs do not support bulk DELETE on the list endpoint.
+    }
+
+    if (!didClearExistingItems) {
+      try {
+        const existingItemsResponse = await axios.get(endpoint, requestConfig)
+        const existingItems = normalizeProgramItemsPayload(existingItemsResponse?.data)
+        await Promise.all(
+          existingItems
+            .map((item) => Number(item?.id))
+            .filter((itemId) => Number.isFinite(itemId))
+            .map((itemId) => axios.delete(buildProgramItemDetailApiUrl(programId, itemId), requestConfig)),
+        )
+      } catch {
+        // If individual cleanup fails, continue and let create attempts surface errors.
+      }
+    }
+  }
+
+  for (const item of Array.isArray(itemsPayload) ? itemsPayload : []) {
+    await axios.post(endpoint, item, requestConfig)
+  }
+}
+
+const buildWorkoutPlanFromProgramItems = (items, durationValue) => {
+  const grouped = (Array.isArray(items) ? items : []).reduce((accumulator, item) => {
+    const exerciseId = Number(item?.exercise_id ?? item?.exercise?.id ?? item?.exercise)
+    if (!Number.isFinite(exerciseId)) return accumulator
+
+    const weekNumber = Number(item?.week)
+    const targetWeek = Number.isFinite(weekNumber) && weekNumber > 0 ? weekNumber : 1
+    if (!accumulator[targetWeek]) accumulator[targetWeek] = new Set()
+    accumulator[targetWeek].add(exerciseId)
+    return accumulator
+  }, {})
+
+  const basePlan = Object.entries(grouped)
+    .map(([weekNumber, exerciseIds]) => ({
+      week_number: Number(weekNumber),
+      exercise_ids: [...exerciseIds],
+    }))
+    .sort((a, b) => a.week_number - b.week_number)
+
+  return buildWorkoutPlanForDuration(durationValue, basePlan)
+}
+
 const buildWorkoutPlanForDuration = (durationValue, previousPlan = []) => {
   const weeks = normalizeDurationWeeks(durationValue)
   if (weeks === 0) return []
@@ -733,6 +825,16 @@ function Programs() {
 
       const response = await axios.post(API_URL, payload, buildRequestConfig())
       const createdProgram = normalizeProgramDetailPayload(response?.data)
+      if (createdProgram?.id) {
+        const itemsPayload = buildProgramItemsFromWorkoutPlan(normalizedWorkoutPlan)
+        if (itemsPayload.length > 0) {
+          try {
+            await syncProgramItems(createdProgram.id, itemsPayload, false)
+          } catch {
+            // Do not block program creation when item sync fails.
+          }
+        }
+      }
       const createdProgramWithPlan = createdProgram
         ? {
             ...createdProgram,
@@ -864,21 +966,32 @@ function Programs() {
     setDetailErrorById((prev) => ({ ...prev, [programId]: "" }))
 
     try {
-      const response = await axios.get(`${API_URL}${programId}/`, buildRequestConfig())
-      const detail = normalizeProgramDetailPayload(response?.data)
+      const [detailResponse, itemsResponse] = await Promise.all([
+        axios.get(`${API_URL}${programId}/`, buildRequestConfig()),
+        axios.get(buildProgramItemsApiUrl(programId), buildRequestConfig()).catch(() => null),
+      ])
+      const detail = normalizeProgramDetailPayload(detailResponse?.data)
       if (!detail) {
         throw new Error("No detail payload")
       }
+      const itemRecords = normalizeProgramItemsPayload(itemsResponse?.data)
+      const itemsPlan = buildWorkoutPlanFromProgramItems(itemRecords, detail?.duration_weeks)
       const detailHasPlan = buildWorkoutPlanFromProgram(detail).length > 0
       const sourceHasPlan = buildWorkoutPlanFromProgram(sourceProgramFromList).length > 0
-      const mergedDetail =
-        !detailHasPlan && sourceHasPlan
+      const mergedDetail = {
+        ...detail,
+        ...(itemsPlan.length > 0
           ? {
-              ...detail,
-              workout_plan: sourceProgramFromList?.workout_plan ?? detail.workout_plan,
-              exercises: sourceProgramFromList?.exercises ?? detail.exercises,
+              workout_plan: itemsPlan,
+              exercises: [...new Set(itemsPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))],
             }
-          : detail
+          : !detailHasPlan && sourceHasPlan
+            ? {
+                workout_plan: sourceProgramFromList?.workout_plan ?? detail.workout_plan,
+                exercises: sourceProgramFromList?.exercises ?? detail.exercises,
+              }
+            : {}),
+      }
       setProgramDetailsById((prev) => ({ ...prev, [programId]: mergedDetail }))
     } catch (error) {
       const message = error?.response?.data?.detail || "Unable to load program details."
@@ -916,6 +1029,12 @@ function Programs() {
       }
 
       const response = await axios.put(`${API_URL}${selectedProgramId}/`, payload, buildRequestConfig())
+      const itemsPayload = buildProgramItemsFromWorkoutPlan(normalizedDetailWorkoutPlan)
+      try {
+        await syncProgramItems(selectedProgramId, itemsPayload, true)
+      } catch {
+        // Keep program update success even if item sync fails.
+      }
       const updatedProgram = normalizeProgramDetailPayload(response?.data) ?? payload
       setPrograms((prev) =>
         prev.map((program) => (program.id === selectedProgramId ? { ...program, ...updatedProgram } : program)),
