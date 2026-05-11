@@ -149,6 +149,12 @@ const getWorkoutPlanValidationMessage = (durationValue, workoutPlan) => {
   return ""
 }
 
+const clearFormFieldError = (previousErrors, fieldName, clearWorkoutPlan = false) => ({
+  ...previousErrors,
+  [fieldName]: "",
+  ...(clearWorkoutPlan ? { workout_plan: "" } : {}),
+})
+
 const toExerciseId = (value) => {
   const candidate = Number(value)
   return Number.isFinite(candidate) ? candidate : null
@@ -751,7 +757,7 @@ function Programs() {
       }
       return nextFormValues
     })
-    setCreateFieldErrors((prev) => ({ ...prev, [name]: "", ...(name === "duration_weeks" ? { workout_plan: "" } : {}) }))
+    setCreateFieldErrors((prev) => clearFormFieldError(prev, name, name === "duration_weeks"))
   }
 
   const handleAddExerciseToWorkoutWeek = () => {
@@ -957,7 +963,7 @@ function Programs() {
       setDetailPlanWeek(1)
       setDetailPlanExerciseId("")
     }
-    setEditFieldErrors((prev) => ({ ...prev, [name]: "", ...(name === "duration_weeks" ? { workout_plan: "" } : {}) }))
+    setEditFieldErrors((prev) => clearFormFieldError(prev, name, name === "duration_weeks"))
   }
 
   const handleStartEditProgram = () => {
