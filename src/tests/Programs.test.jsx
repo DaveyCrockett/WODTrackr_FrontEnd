@@ -31,6 +31,12 @@ const mockChoicesResponse = {
   },
 }
 
+const buildWorkoutPlan = (weeks, exerciseId = 101) =>
+  Array.from({ length: weeks }, (_, index) => ({
+    week_number: index + 1,
+    exercise_ids: [exerciseId],
+  }))
+
 describe("Programs Component", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -44,13 +50,29 @@ describe("Programs Component", () => {
   })
 
   it("opens details modal from View Details and updates a program", async () => {
+    const listedProgram = {
+      ...mockProgram,
+      duration_weeks: 1,
+      exercises: [{ id: 101 }],
+      workout_plan: buildWorkoutPlan(1),
+    }
+
     axios.get.mockImplementation((url) => {
-      if (url === API_URL) return Promise.resolve({ data: { data: [mockProgram] } })
+      if (url === API_URL) return Promise.resolve({ data: { data: [listedProgram] } })
       if (url === `${API_URL}choices/`) return Promise.resolve(mockChoicesResponse)
       if (url === `${API_URL}1/`) {
         return Promise.resolve({
-          data: { ...mockProgram, exercises: [{ id: 101 }], updated_at: "2025-01-01T00:00:00Z" },
+          data: {
+            ...listedProgram,
+            duration_weeks: 1,
+            exercises: [{ id: 101 }],
+            workout_plan: buildWorkoutPlan(1),
+            updated_at: "2025-01-01T00:00:00Z",
+          },
         })
+      }
+      if (url === `${API_URL}1/item/`) {
+        return Promise.resolve({ data: { data: [{ id: 1, exercise: 101, week: 1, day: 1 }] } })
       }
       return Promise.resolve({ data: {} })
     })
@@ -132,6 +154,9 @@ describe("Programs Component", () => {
 
     await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Exercise" }), "101")
     await userEvent.click(within(createDialog).getByRole("button", { name: "Add Exercise" }))
+    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Week" }), "2")
+    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Exercise" }), "101")
+    await userEvent.click(within(createDialog).getByRole("button", { name: "Add Exercise" }))
 
     await userEvent.click(within(createDialog).getByRole("button", { name: "Create Program" }))
 
@@ -145,5 +170,64 @@ describe("Programs Component", () => {
         expect.anything(),
       )
     })
+  })
+
+  it("prevents creating a program without any workout plan exercises", async () => {
+    axios.get.mockImplementation((url) => {
+      if (url === API_URL) return Promise.resolve({ data: { data: [mockProgram] } })
+      if (url === `${API_URL}choices/`) return Promise.resolve(mockChoicesResponse)
+      if (url === "/api/wodtrackr/exercises/") {
+        return Promise.resolve({ data: { data: [{ id: 101, name: "Back Squat" }] } })
+      }
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<Programs />)
+
+    await screen.findByText("Strength Cycle")
+    await userEvent.click(screen.getByRole("button", { name: "New Program" }))
+    const createDialog = await screen.findByRole("dialog", { name: "Create New Program" })
+
+    await userEvent.type(within(createDialog).getByRole("textbox", { name: "Name" }), "Plan Builder")
+    await userEvent.type(within(createDialog).getByRole("textbox", { name: "Description" }), "Includes structured sessions")
+    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Difficulty" }), "Beginner")
+    await userEvent.type(within(createDialog).getByRole("spinbutton", { name: "Duration (weeks)" }), "2")
+    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Category" }), "Strength")
+    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Goal" }), "Build Strength")
+
+    await userEvent.click(within(createDialog).getByRole("button", { name: "Create Program" }))
+
+    expect(axios.post).not.toHaveBeenCalled()
+    expect(await screen.findByText("Add at least 1 workout to your program.")).toBeInTheDocument()
+  })
+
+  it("prevents creating a program when any workout week is empty", async () => {
+    axios.get.mockImplementation((url) => {
+      if (url === API_URL) return Promise.resolve({ data: { data: [mockProgram] } })
+      if (url === `${API_URL}choices/`) return Promise.resolve(mockChoicesResponse)
+      if (url === "/api/wodtrackr/exercises/") {
+        return Promise.resolve({ data: { data: [{ id: 101, name: "Back Squat" }] } })
+      }
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<Programs />)
+
+    await screen.findByText("Strength Cycle")
+    await userEvent.click(screen.getByRole("button", { name: "New Program" }))
+    const createDialog = await screen.findByRole("dialog", { name: "Create New Program" })
+
+    await userEvent.type(within(createDialog).getByRole("textbox", { name: "Name" }), "Plan Builder")
+    await userEvent.type(within(createDialog).getByRole("textbox", { name: "Description" }), "Includes structured sessions")
+    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Difficulty" }), "Beginner")
+    await userEvent.type(within(createDialog).getByRole("spinbutton", { name: "Duration (weeks)" }), "2")
+    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Category" }), "Strength")
+    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Goal" }), "Build Strength")
+    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Exercise" }), "101")
+    await userEvent.click(within(createDialog).getByRole("button", { name: "Add Exercise" }))
+    await userEvent.click(within(createDialog).getByRole("button", { name: "Create Program" }))
+
+    expect(axios.post).not.toHaveBeenCalled()
+    expect(await screen.findByText("Each week in the workout plan must include at least 1 exercise.")).toBeInTheDocument()
   })
 })

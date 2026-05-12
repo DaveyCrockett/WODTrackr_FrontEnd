@@ -133,6 +133,28 @@ const buildWorkoutPlanForDuration = (durationValue, previousPlan = []) => {
   })
 }
 
+const getWorkoutPlanValidationMessage = (durationValue, workoutPlan) => {
+  const normalizedWorkoutPlan = buildWorkoutPlanForDuration(durationValue, workoutPlan)
+  if (normalizedWorkoutPlan.length === 0) return ""
+
+  const weeksWithExercises = normalizedWorkoutPlan.filter((weekEntry) => weekEntry.exercise_ids.length > 0)
+  if (weeksWithExercises.length === 0) {
+    return "Add at least 1 workout to your program."
+  }
+
+  if (weeksWithExercises.length !== normalizedWorkoutPlan.length) {
+    return "Each week in the workout plan must include at least 1 exercise."
+  }
+
+  return ""
+}
+
+const clearFormFieldError = (previousErrors, fieldName, clearWorkoutPlan = false) => ({
+  ...previousErrors,
+  [fieldName]: "",
+  ...(clearWorkoutPlan ? { workout_plan: "" } : {}),
+})
+
 const toExerciseId = (value) => {
   const candidate = Number(value)
   return Number.isFinite(candidate) ? candidate : null
@@ -735,7 +757,7 @@ function Programs() {
       }
       return nextFormValues
     })
-    setCreateFieldErrors((prev) => ({ ...prev, [name]: "" }))
+    setCreateFieldErrors((prev) => clearFormFieldError(prev, name, name === "duration_weeks"))
   }
 
   const handleAddExerciseToWorkoutWeek = () => {
@@ -754,6 +776,7 @@ function Programs() {
       })
       return { ...prev, workout_plan: nextPlan }
     })
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
     setCreatePlanExerciseId("")
   }
 
@@ -768,6 +791,7 @@ function Programs() {
       })
       return { ...prev, workout_plan: nextPlan }
     })
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
   const validateCreateForm = () => {
@@ -792,6 +816,11 @@ function Programs() {
     const durationValue = Number(createFormValues.duration_weeks)
     if (!Number.isFinite(durationValue) || durationValue < durationRange.min || durationValue > durationRange.max) {
       nextErrors.duration_weeks = `Duration must be between ${durationRange.min} and ${durationRange.max} weeks.`
+    }
+
+    const workoutPlanError = getWorkoutPlanValidationMessage(durationValue, createFormValues.workout_plan)
+    if (workoutPlanError) {
+      nextErrors.workout_plan = workoutPlanError
     }
 
     return nextErrors
@@ -915,6 +944,11 @@ function Programs() {
       nextErrors.duration_weeks = `Duration must be between ${durationRange.min} and ${durationRange.max} weeks.`
     }
 
+    const workoutPlanError = getWorkoutPlanValidationMessage(durationValue, detailWorkoutPlan)
+    if (workoutPlanError) {
+      nextErrors.workout_plan = workoutPlanError
+    }
+
     return nextErrors
   }
 
@@ -929,7 +963,7 @@ function Programs() {
       setDetailPlanWeek(1)
       setDetailPlanExerciseId("")
     }
-    setEditFieldErrors((prev) => ({ ...prev, [name]: "" }))
+    setEditFieldErrors((prev) => clearFormFieldError(prev, name, name === "duration_weeks"))
   }
 
   const handleStartEditProgram = () => {
@@ -1099,6 +1133,7 @@ function Programs() {
         }
       })
     })
+    setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
     setDetailPlanExerciseId("")
   }
 
@@ -1114,6 +1149,7 @@ function Programs() {
         }
       }),
     )
+    setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
   const getDifficultyLabel = (value) => {
@@ -1462,6 +1498,7 @@ function Programs() {
                 <p className="programs-plan-helper">
                   Pick a week and add exercises from your library. The number of weeks matches Duration.
                 </p>
+                {createFieldErrors.workout_plan ? <small className="programs-modal-error">{createFieldErrors.workout_plan}</small> : null}
 
                 {isExerciseLibraryLoading ? <p className="programs-plan-helper">Loading exercise library...</p> : null}
                 {exerciseLibraryError ? <p className="programs-modal-error">{exerciseLibraryError}</p> : null}
@@ -1725,6 +1762,7 @@ function Programs() {
                     ? "Your plan is editable only after pressing Edit Program."
                     : "You can view this workout plan, but only the creator can edit it."}
                 </p>
+                {editFieldErrors.workout_plan ? <small className="programs-modal-error">{editFieldErrors.workout_plan}</small> : null}
 
                 {canEditSelectedProgram && isDetailsEditMode ? (
                   <div className="programs-plan-controls">
