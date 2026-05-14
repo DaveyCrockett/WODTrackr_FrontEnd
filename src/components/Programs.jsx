@@ -1,6 +1,8 @@
 import "../CSS/programs.css"
+import "../CSS/equipment-multiselect.css"
 import axios from "axios"
 import { useEffect, useMemo, useState } from "react"
+import EquipmentMultiSelect from "./EquipmentMultiSelect"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
@@ -8,7 +10,7 @@ const PROGRAMS_PER_PAGE = 10
 const DEFAULT_DIFFICULTIES = ["All Levels", "Beginner", "Intermediate", "Advanced"]
 const DEFAULT_DURATION_MIN = 1
 const DEFAULT_DURATION_MAX = 12
-const PROGRAMS_CHOICES_CACHE_KEY = "wodtrackrProgramChoices"
+const PROGRAMS_CHOICES_CACHE_KEY = "wodtrackrProgramChoicesV3"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
 
@@ -133,6 +135,18 @@ const buildWorkoutPlanForDuration = (durationValue, previousPlan = []) => {
   })
 }
 
+const normalizeWorkoutPlanForComparison = (workoutPlan) =>
+  (Array.isArray(workoutPlan) ? workoutPlan : [])
+    .map((entry) => ({
+      week_number: Number(entry?.week_number) || 0,
+      exercise_ids: [...new Set((Array.isArray(entry?.exercise_ids) ? entry.exercise_ids : []).map((exerciseId) => Number(exerciseId)).filter((exerciseId) => Number.isFinite(exerciseId)))].sort((a, b) => a - b),
+    }))
+    .filter((entry) => entry.week_number > 0)
+    .sort((a, b) => a.week_number - b.week_number)
+
+const areWorkoutPlansEqual = (leftPlan, rightPlan) =>
+  JSON.stringify(normalizeWorkoutPlanForComparison(leftPlan)) === JSON.stringify(normalizeWorkoutPlanForComparison(rightPlan))
+
 const toExerciseId = (value) => {
   const candidate = Number(value)
   return Number.isFinite(candidate) ? candidate : null
@@ -227,6 +241,7 @@ const EMPTY_PROGRAM_FORM_VALUES = {
   duration_weeks: "",
   category: "",
   goal: "",
+  equipment: [],
   is_public: false,
   workout_plan: [],
 }
@@ -241,6 +256,7 @@ const buildProgramFormValues = (program) => ({
       : String(program.duration_weeks),
   category: String(program?.category ?? ""),
   goal: String(program?.goal ?? ""),
+  equipment: normalizeEquipmentValues(program?.equipment),
   is_public: Boolean(program?.is_public),
 })
 
@@ -393,12 +409,10 @@ const getChoicesFromMetadata = (metadata, fieldNames) => {
 
     for (const fieldName of fieldNames) {
       const candidate = current?.[fieldName]
-      if (Array.isArray(candidate)) {
-        const mapped = normalizeChoices(candidate)
-        if (mapped.length > 0) return mapped
-      }
-      const mapped = extractChoicesFromFieldConfig(candidate)
-      if (mapped.length > 0) return mapped
+      const normalizedCandidateChoices = normalizeChoices(candidate)
+      if (normalizedCandidateChoices.length > 0) return normalizedCandidateChoices
+      const extractedCandidateChoices = extractChoicesFromFieldConfig(candidate)
+      if (extractedCandidateChoices.length > 0) return extractedCandidateChoices
     }
 
     for (const value of Object.values(current)) {
@@ -414,6 +428,32 @@ const formatTimestamp = (value) => {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return String(value)
   return parsed.toLocaleString()
+}
+
+const normalizeEquipmentValues = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => String(entry ?? "").trim())
+      .filter(Boolean)
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    if (trimmed.includes(",")) {
+      return trimmed
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    }
+    return [trimmed]
+  }
+
+  if (value === null || value === undefined) {
+    return []
+  }
+
+  return [String(value)]
 }
 
 function Programs() {
@@ -432,7 +472,7 @@ function Programs() {
   const [createPlanExerciseId, setCreatePlanExerciseId] = useState("")
   const [searchName, setSearchName] = useState("")
   const [sortOrder, setSortOrder] = useState("asc")
-  const [filters, setFilters] = useState({ difficulty: [], category: "", goal: "" })
+  const [filters, setFilters] = useState({ difficulty: [], category: "", goal: "", equipment: [] })
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedProgramId, setSelectedProgramId] = useState(null)
   const [programDetailsById, setProgramDetailsById] = useState({})
@@ -450,6 +490,7 @@ function Programs() {
   const [categoryChoices, setCategoryChoices] = useState([])
   const [goalChoices, setGoalChoices] = useState([])
   const [difficultyChoices, setDifficultyChoices] = useState([])
+  const [equipmentChoices, setEquipmentChoices] = useState([])
   const [durationRange, setDurationRange] = useState({ min: DEFAULT_DURATION_MIN, max: DEFAULT_DURATION_MAX })
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
 
@@ -505,10 +546,17 @@ function Programs() {
         if (cachedRaw) {
           const parsed = JSON.parse(cachedRaw)
           const isFresh = Date.now() - (parsed?.cachedAt || 0) < CHOICES_CACHE_TTL_MS
-          if (isFresh && (parsed?.categoryChoices?.length || parsed?.goalChoices?.length || parsed?.difficultyChoices?.length)) {
+          if (
+            isFresh &&
+            (parsed?.categoryChoices?.length ||
+              parsed?.goalChoices?.length ||
+              parsed?.difficultyChoices?.length ||
+              parsed?.equipmentChoices?.length)
+          ) {
             setCategoryChoices(parsed.categoryChoices || [])
             setGoalChoices(parsed.goalChoices || [])
             setDifficultyChoices(parsed.difficultyChoices || [])
+            setEquipmentChoices(parsed.equipmentChoices || [])
             if (parsed?.durationRange?.min && parsed?.durationRange?.max) {
               setDurationRange(parsed.durationRange)
             }
@@ -523,10 +571,22 @@ function Programs() {
       try {
         const response = await axios.get(`${API_URL}choices/`, buildRequestConfig())
         const data = response?.data ?? {}
+        const directCategoryChoices = normalizeChoices(data.category ?? data.categories ?? [])
+        const directGoalChoices = normalizeChoices(data.goal ?? data.goals ?? [])
+        const directDifficultyChoices = normalizeChoices(data.difficulty ?? data.difficulties ?? [])
+        const directEquipmentChoices = normalizeChoices(data.equipment ?? data.equipments ?? [])
 
-        const category = normalizeChoices(data.category ?? data.categories ?? [])
-        const goal = normalizeChoices(data.goal ?? data.goals ?? [])
-        const difficulty = normalizeChoices(data.difficulty ?? data.difficulties ?? [])
+        const category =
+          directCategoryChoices.length > 0 ? directCategoryChoices : getChoicesFromMetadata(data, ["category", "categories"])
+        const goal = directGoalChoices.length > 0 ? directGoalChoices : getChoicesFromMetadata(data, ["goal", "goals"])
+        const difficulty =
+          directDifficultyChoices.length > 0
+            ? directDifficultyChoices
+            : getChoicesFromMetadata(data, ["difficulty", "difficulties"])
+        const equipment =
+          directEquipmentChoices.length > 0
+            ? directEquipmentChoices
+            : getChoicesFromMetadata(data, ["equipment", "equipments"])
         const durationConfig =
           data.duration_weeks ??
           data.durationWeeks ??
@@ -551,6 +611,7 @@ function Programs() {
         setCategoryChoices(category)
         setGoalChoices(goal)
         setDifficultyChoices(difficulty)
+        setEquipmentChoices(equipment)
         setDurationRange(nextDurationRange)
         localStorage.setItem(
           PROGRAMS_CHOICES_CACHE_KEY,
@@ -558,6 +619,7 @@ function Programs() {
             categoryChoices: category,
             goalChoices: goal,
             difficultyChoices: difficulty,
+            equipmentChoices: equipment,
             durationRange: nextDurationRange,
             cachedAt: Date.now(),
           }),
@@ -607,6 +669,14 @@ function Programs() {
     return [...new Set(fromPrograms)].sort()
   }, [programs, goalChoices])
 
+  const equipments = useMemo(() => {
+    const apiValues = equipmentChoices.map((c) => c.value)
+    if (apiValues.length > 0) return equipmentChoices.map((c) => ({ value: c.value, label: c.label || c.value }))
+    const fromPrograms = programs.flatMap((p) => normalizeEquipmentValues(p?.equipment))
+    return [...new Set(fromPrograms)].sort().map((v) => ({ value: v, label: v }))
+  }, [programs, equipmentChoices])
+
+
   const workoutPlan = Array.isArray(createFormValues.workout_plan) ? createFormValues.workout_plan : []
   const exerciseOptions = useMemo(() => {
     return [...exerciseLibrary]
@@ -643,6 +713,12 @@ function Programs() {
     }
     if (filters.goal) {
       result = result.filter((p) => p.goal === filters.goal)
+    }
+    if (Array.isArray(filters.equipment) && filters.equipment.length > 0) {
+      result = result.filter((p) => {
+        const programEquipment = normalizeEquipmentValues(p?.equipment)
+        return filters.equipment.some((selectedValue) => programEquipment.includes(selectedValue))
+      })
     }
 
     result.sort((a, b) => {
@@ -706,7 +782,7 @@ function Programs() {
   const handleClearFilters = () => {
     setSearchName("")
     setSortOrder("asc")
-    setFilters({ difficulty: [], category: "", goal: "" })
+    setFilters({ difficulty: [], category: "", goal: "", equipment: [] })
     setCurrentPage(1)
   }
 
@@ -788,6 +864,9 @@ function Programs() {
     if (!createFormValues.goal.trim()) {
       nextErrors.goal = "Goal is required."
     }
+    if (!Array.isArray(createFormValues.equipment) || createFormValues.equipment.length === 0) {
+      nextErrors.equipment = "Equipment is required."
+    }
 
     const durationValue = Number(createFormValues.duration_weeks)
     if (!Number.isFinite(durationValue) || durationValue < durationRange.min || durationValue > durationRange.max) {
@@ -818,6 +897,7 @@ function Programs() {
         duration_weeks: Number(createFormValues.duration_weeks),
         category: createFormValues.category.trim(),
         goal: createFormValues.goal.trim(),
+        equipment: Array.isArray(createFormValues.equipment) ? createFormValues.equipment : (createFormValues.equipment ? [createFormValues.equipment] : []),
         is_public: Boolean(createFormValues.is_public),
         exercises: selectedExerciseIds,
         workout_plan: normalizedWorkoutPlan,
@@ -862,7 +942,16 @@ function Programs() {
       const fieldErrors = {}
       const responseData = error?.response?.data
       if (responseData && typeof responseData === "object") {
-        const knownFields = ["name", "description", "difficulty", "duration_weeks", "category", "goal", "is_public"]
+        const knownFields = [
+          "name",
+          "description",
+          "difficulty",
+          "duration_weeks",
+          "category",
+          "goal",
+          "equipment",
+          "is_public",
+        ]
         for (const fieldName of knownFields) {
           const rawValue = responseData[fieldName]
           if (!rawValue) {
@@ -908,6 +997,9 @@ function Programs() {
     }
     if (!editFormValues.goal.trim()) {
       nextErrors.goal = "Goal is required."
+    }
+    if (!Array.isArray(editFormValues.equipment) || editFormValues.equipment.length === 0) {
+      nextErrors.equipment = "Equipment is required."
     }
 
     const durationValue = Number(editFormValues.duration_weeks)
@@ -1016,6 +1108,8 @@ function Programs() {
     try {
       const normalizedDetailWorkoutPlan = buildWorkoutPlanForDuration(editFormValues.duration_weeks, detailsWorkoutPlan)
       const selectedExerciseIds = [...new Set(normalizedDetailWorkoutPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))]
+      const currentProgram = programDetailsById[selectedProgramId] ?? selectedProgram
+      const existingWorkoutPlan = buildWorkoutPlanFromProgram(currentProgram)
       const payload = {
         name: editFormValues.name.trim(),
         description: editFormValues.description.trim(),
@@ -1023,17 +1117,20 @@ function Programs() {
         duration_weeks: Number(editFormValues.duration_weeks),
         category: editFormValues.category.trim(),
         goal: editFormValues.goal.trim(),
+        equipment: Array.isArray(editFormValues.equipment) ? editFormValues.equipment : (editFormValues.equipment ? [editFormValues.equipment] : []),
         is_public: Boolean(editFormValues.is_public),
         exercises: selectedExerciseIds,
         workout_plan: normalizedDetailWorkoutPlan,
       }
 
       const response = await axios.put(`${API_URL}${selectedProgramId}/`, payload, buildRequestConfig())
-      const itemsPayload = buildProgramItemsFromWorkoutPlan(normalizedDetailWorkoutPlan)
-      try {
-        await syncProgramItems(selectedProgramId, itemsPayload, true)
-      } catch {
-        // Keep program update success even if item sync fails.
+      if (!areWorkoutPlansEqual(normalizedDetailWorkoutPlan, existingWorkoutPlan)) {
+        const itemsPayload = buildProgramItemsFromWorkoutPlan(normalizedDetailWorkoutPlan)
+        try {
+          await syncProgramItems(selectedProgramId, itemsPayload, true)
+        } catch {
+          // Keep program update success even if item sync fails.
+        }
       }
       const updatedProgram = normalizeProgramDetailPayload(response?.data) ?? payload
       setPrograms((prev) =>
@@ -1045,7 +1142,16 @@ function Programs() {
       const fieldErrors = {}
       const responseData = error?.response?.data
       if (responseData && typeof responseData === "object") {
-        const knownFields = ["name", "description", "difficulty", "duration_weeks", "category", "goal", "is_public"]
+        const knownFields = [
+          "name",
+          "description",
+          "difficulty",
+          "duration_weeks",
+          "category",
+          "goal",
+          "equipment",
+          "is_public",
+        ]
         for (const fieldName of knownFields) {
           const rawValue = responseData[fieldName]
           if (!rawValue) continue
@@ -1253,6 +1359,18 @@ function Programs() {
             </select>
           </div>
 
+          <div className="programs-filter-group">
+            <span className="programs-filter-label">Equipment</span>
+            <EquipmentMultiSelect
+              options={equipments}
+              value={Array.isArray(filters.equipment) ? filters.equipment : []}
+              onChange={(selected) => handleFilterChange("equipment", selected)}
+              name="filter-equipment"
+            />
+          </div>
+
+
+
           <p className="programs-results-count" aria-live="polite">
             {filteredAndSortedPrograms.length} program{filteredAndSortedPrograms.length !== 1 ? "s" : ""} found
           </p>
@@ -1455,6 +1573,21 @@ function Programs() {
                   </select>
                   {createFieldErrors.goal ? <small className="programs-modal-error">{createFieldErrors.goal}</small> : null}
                 </label>
+
+                <label className="programs-modal-field">
+                  <span>Equipment</span>
+                  <EquipmentMultiSelect
+                    options={equipments}
+                    value={Array.isArray(createFormValues.equipment) ? createFormValues.equipment : (createFormValues.equipment ? [createFormValues.equipment] : [])}
+                    onChange={(selected) => {
+                      setCreateFormValues((prev) => ({ ...prev, equipment: selected }))
+                      setCreateFieldErrors((prev) => ({ ...prev, equipment: "" }))
+                    }}
+                    name="equipment"
+                  />
+                  {createFieldErrors.equipment ? <small className="programs-modal-error">{createFieldErrors.equipment}</small> : null}
+                </label>
+
               </div>
 
               <section className="programs-plan-builder" aria-label="Workout plan builder">
@@ -1698,6 +1831,31 @@ function Programs() {
                   </select>
                   {editFieldErrors.goal ? <small className="programs-modal-error">{editFieldErrors.goal}</small> : null}
                 </label>
+
+                <label className="programs-modal-field">
+                  <span>Equipment</span>
+                  {isDetailsEditMode ? (
+                    <EquipmentMultiSelect
+                      options={equipments}
+                      value={Array.isArray(editFormValues.equipment) ? editFormValues.equipment : (editFormValues.equipment ? [editFormValues.equipment] : [])}
+                      onChange={(selected) => {
+                        setEditFormValues((prev) => ({ ...prev, equipment: selected }))
+                        setEditFieldErrors((prev) => ({ ...prev, equipment: "" }))
+                      }}
+                      name="equipment"
+                      disabled={!isDetailsEditMode}
+                    />
+                  ) : (
+                    <ul className="equipment-list">
+                      {(Array.isArray(editFormValues.equipment) ? editFormValues.equipment : (editFormValues.equipment ? [editFormValues.equipment] : [])).map((eq) => {
+                        const label = (equipments.find((e) => e.value === eq) || {}).label || eq
+                        return <li key={eq}>{label}</li>
+                      })}
+                    </ul>
+                  )}
+                  {editFieldErrors.equipment ? <small className="programs-modal-error">{editFieldErrors.equipment}</small> : null}
+                </label>
+
               </div>
 
               <label className="programs-modal-checkbox">
