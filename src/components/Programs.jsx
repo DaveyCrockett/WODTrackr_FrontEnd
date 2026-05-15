@@ -1190,7 +1190,7 @@ function Programs() {
         workout_plan: normalizedDetailWorkoutPlan,
       }
 
-      const response = await axios.put(`${API_URL}/${selectedProgramId}/`, payload, buildRequestConfig())
+      const response = await axios.put(`${API_URL}${selectedProgramId}/`, payload, buildRequestConfig())
       if (!areWorkoutPlansEqual(normalizedDetailWorkoutPlan, existingWorkoutPlan)) {
         const itemsPayload = buildProgramItemsFromWorkoutPlan(normalizedDetailWorkoutPlan)
         try {
