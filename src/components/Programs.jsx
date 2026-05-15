@@ -266,7 +266,7 @@ const buildProgramFormValues = (program) => ({
       : String(program.duration_weeks),
   category: String(program?.category ?? ""),
   goal: String(program?.goal ?? ""),
-  equipment: normalizeEquipmentValues(program?.equipment),
+  equipment: getProgramEquipmentValues(program),
   is_public: Boolean(program?.is_public),
 })
 
@@ -440,10 +440,32 @@ const formatTimestamp = (value) => {
   return parsed.toLocaleString()
 }
 
+const normalizeEquipmentEntry = (value) => {
+  if (value && typeof value === "object") {
+    const candidate =
+      value.value ??
+      value.id ??
+      value.key ??
+      value.slug ??
+      value.code ??
+      value.equipment_id ??
+      value.equipmentId ??
+      value.name ??
+      value.label ??
+      value.equipment_name ??
+      value.equipmentName ??
+      value.equipment
+    if (candidate === null || candidate === undefined) return ""
+    return String(candidate).trim()
+  }
+
+  return String(value ?? "").trim()
+}
+
 const normalizeEquipmentValues = (value) => {
   if (Array.isArray(value)) {
     return value
-      .map((entry) => String(entry ?? "").trim())
+      .map((entry) => normalizeEquipmentEntry(entry))
       .filter(Boolean)
   }
 
@@ -463,7 +485,20 @@ const normalizeEquipmentValues = (value) => {
     return []
   }
 
-  return [String(value)]
+  const normalizedSingleValue = normalizeEquipmentEntry(value)
+  return normalizedSingleValue ? [normalizedSingleValue] : []
+}
+
+const getProgramEquipmentValues = (program) => {
+  const candidateValues = [
+    program?.equipment,
+    program?.equipments,
+    program?.equipment_ids,
+    program?.equipment_values,
+    program?.equipment_required,
+  ]
+
+  return [...new Set(candidateValues.flatMap((entry) => normalizeEquipmentValues(entry)))]
 }
 
 function Programs() {
@@ -511,6 +546,7 @@ function Programs() {
 
       try {
         const response = await axios.get(API_URL, buildRequestConfig())
+        console.log("Raw programs API response:", response)
         setPrograms(normalizeProgramsPayload(response?.data))
       } catch (error) {
         if (error?.response?.status === 401 || error?.response?.status === 403) {
@@ -680,8 +716,15 @@ function Programs() {
   }, [programs, goalChoices])
 
   const equipments = useMemo(() => {
-    const apiValues = equipmentChoices.map((c) => c.value)
-    if (apiValues.length > 0) return equipmentChoices.map((c) => ({ value: c.value, label: c.label || c.value }))
+    const apiValues = equipmentChoices.map((c) => normalizeEquipmentEntry(c.value))
+    if (apiValues.length > 0) {
+      return equipmentChoices
+        .map((c) => ({
+          value: normalizeEquipmentEntry(c.value),
+          label: String(c.label || c.value),
+        }))
+        .filter((entry) => Boolean(entry.value))
+    }
     const fromPrograms = programs.flatMap((p) => normalizeEquipmentValues(p?.equipment))
     return [...new Set(fromPrograms)].sort().map((v) => ({ value: v, label: v }))
   }, [programs, equipmentChoices])
@@ -726,8 +769,8 @@ function Programs() {
     }
     if (Array.isArray(filters.equipment) && filters.equipment.length > 0) {
       result = result.filter((p) => {
-        const programEquipment = normalizeEquipmentValues(p?.equipment)
-        return filters.equipment.some((selectedValue) => programEquipment.includes(selectedValue))
+        const programEquipment = getProgramEquipmentValues(p)
+        return filters.equipment.some((selectedValue) => programEquipment.includes(normalizeEquipmentEntry(selectedValue)))
       })
     }
 
@@ -914,7 +957,7 @@ function Programs() {
         duration_weeks: Number(createFormValues.duration_weeks),
         category: createFormValues.category.trim(),
         goal: createFormValues.goal.trim(),
-        equipment: Array.isArray(createFormValues.equipment) ? createFormValues.equipment : (createFormValues.equipment ? [createFormValues.equipment] : []),
+        equipment: normalizeEquipmentValues(createFormValues.equipment),
         is_public: Boolean(createFormValues.is_public),
         exercises: selectedExerciseIds,
         workout_plan: normalizedWorkoutPlan,
@@ -943,6 +986,7 @@ function Programs() {
               Array.isArray(createdProgram.exercises) && createdProgram.exercises.length > 0
                 ? createdProgram.exercises
                 : selectedExerciseIds,
+            equipment: getProgramEquipmentValues(createdProgram).length > 0 ? getProgramEquipmentValues(createdProgram) : payload.equipment,
           }
         : null
 
@@ -1094,6 +1138,7 @@ function Programs() {
       const sourceHasPlan = buildWorkoutPlanFromProgram(sourceProgramFromList).length > 0
       const mergedDetail = {
         ...detail,
+        equipment: getProgramEquipmentValues(detail).length > 0 ? getProgramEquipmentValues(detail) : getProgramEquipmentValues(sourceProgramFromList),
         ...(itemsPlan.length > 0
           ? {
               workout_plan: itemsPlan,
@@ -1139,13 +1184,13 @@ function Programs() {
         duration_weeks: Number(editFormValues.duration_weeks),
         category: editFormValues.category.trim(),
         goal: editFormValues.goal.trim(),
-        equipment: Array.isArray(editFormValues.equipment) ? editFormValues.equipment : (editFormValues.equipment ? [editFormValues.equipment] : []),
+        equipment: normalizeEquipmentValues(editFormValues.equipment),
         is_public: Boolean(editFormValues.is_public),
         exercises: selectedExerciseIds,
         workout_plan: normalizedDetailWorkoutPlan,
       }
 
-      const response = await axios.put(`${API_URL}${selectedProgramId}/`, payload, buildRequestConfig())
+      const response = await axios.put(`${API_URL}/${selectedProgramId}/`, payload, buildRequestConfig())
       if (!areWorkoutPlansEqual(normalizedDetailWorkoutPlan, existingWorkoutPlan)) {
         const itemsPayload = buildProgramItemsFromWorkoutPlan(normalizedDetailWorkoutPlan)
         try {
@@ -1156,9 +1201,31 @@ function Programs() {
       }
       const updatedProgram = normalizeProgramDetailPayload(response?.data) ?? payload
       setPrograms((prev) =>
-        prev.map((program) => (program.id === selectedProgramId ? { ...program, ...updatedProgram } : program)),
+        prev.map((program) =>
+          program.id === selectedProgramId
+            ? {
+                ...program,
+                ...updatedProgram,
+                
+                equipment:
+                  getProgramEquipmentValues(updatedProgram).length > 0
+                    ? getProgramEquipmentValues(updatedProgram)
+                    : payload.equipment,
+              }
+            : program,
+        ),
       )
-      setProgramDetailsById((prev) => ({ ...prev, [selectedProgramId]: { ...prev[selectedProgramId], ...updatedProgram } }))
+      setProgramDetailsById((prev) => ({
+        ...prev,
+        [selectedProgramId]: {
+          ...prev[selectedProgramId],
+          ...updatedProgram,
+          equipment:
+            getProgramEquipmentValues(updatedProgram).length > 0
+              ? getProgramEquipmentValues(updatedProgram)
+              : payload.equipment,
+        },
+      }))
       handleCloseDetailsModal()
     } catch (error) {
       const fieldErrors = {}
@@ -1604,6 +1671,7 @@ function Programs() {
                     options={equipments}
                     value={Array.isArray(createFormValues.equipment) ? createFormValues.equipment : (createFormValues.equipment ? [createFormValues.equipment] : [])}
                     onChange={(selected) => {
+                      console.log("Selected equipment:", selected)
                       setCreateFormValues((prev) => ({ ...prev, equipment: selected }))
                       setCreateFieldErrors((prev) => ({ ...prev, equipment: "" }))
                     }}

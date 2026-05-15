@@ -27,6 +27,7 @@ const mockChoicesResponse = {
     category: ["Strength"],
     goal: ["Build Strength"],
     difficulty: ["Beginner"],
+    equipment: { barbell: "Barbell" },
     duration_weeks: { min: 1, max: 12 },
   },
 }
@@ -53,6 +54,7 @@ describe("Programs Component", () => {
     const listedProgram = {
       ...mockProgram,
       duration_weeks: 1,
+      equipment: ["barbell"],
       exercises: [{ id: 101 }],
       workout_plan: buildWorkoutPlan(1),
     }
@@ -96,7 +98,7 @@ describe("Programs Component", () => {
     await waitFor(() => {
       expect(axios.put).toHaveBeenCalledWith(
         `${API_URL}1/`,
-        expect.objectContaining({ name: "Updated Strength Cycle" }),
+        expect.objectContaining({ name: "Updated Strength Cycle", equipment: ["barbell"] }),
         expect.anything(),
       )
     })
@@ -151,6 +153,8 @@ describe("Programs Component", () => {
     await userEvent.type(within(createDialog).getByRole("spinbutton", { name: "Duration \(weeks\)" }), "2")
     await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Category" }), "Strength")
     await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Goal" }), "Build Strength")
+    await userEvent.click(within(createDialog).getByRole("button", { name: "Equipment" }))
+    await userEvent.click(within(createDialog).getByRole("checkbox", { name: "Barbell" }))
 
     await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Exercise" }), "101")
     await userEvent.click(within(createDialog).getByRole("button", { name: "Add Exercise" }))
@@ -165,6 +169,7 @@ describe("Programs Component", () => {
         API_URL,
         expect.objectContaining({
           name: "Plan Builder",
+          equipment: ["barbell"],
           exercises: [101],
         }),
         expect.anything(),

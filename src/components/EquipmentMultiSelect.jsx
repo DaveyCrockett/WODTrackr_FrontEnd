@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from "react"
 export default function EquipmentMultiSelect({ options, value, onChange, disabled, name }) {
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef(null)
+  const selectedKeys = Array.isArray(value) ? value.map((entry) => String(entry)) : []
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -23,14 +24,17 @@ export default function EquipmentMultiSelect({ options, value, onChange, disable
 
   const handleCheckboxChange = (optionValue) => {
     if (!Array.isArray(value)) return
-    if (value.includes(optionValue)) {
-      onChange(value.filter((v) => v !== optionValue))
+    const normalizedOptionValue = String(optionValue)
+    if (selectedKeys.includes(normalizedOptionValue)) {
+      onChange(value.filter((v) => String(v) !== normalizedOptionValue))
     } else {
       onChange([...value, optionValue])
     }
   }
 
-  const selectedLabels = options.filter(opt => value.includes(opt.value)).map(opt => opt.label)
+  const selectedLabels = options
+    .filter((opt) => selectedKeys.includes(String(opt.value)))
+    .map((opt) => opt.label)
 
   return (
     <div className="equipment-multiselect-dropdown" ref={dropdownRef}>
@@ -53,7 +57,7 @@ export default function EquipmentMultiSelect({ options, value, onChange, disable
                 type="checkbox"
                 name={name}
                 value={option.value}
-                checked={value.includes(option.value)}
+                checked={selectedKeys.includes(String(option.value))}
                 onChange={() => handleCheckboxChange(option.value)}
                 disabled={disabled}
               />
