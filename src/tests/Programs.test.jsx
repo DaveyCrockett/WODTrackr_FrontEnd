@@ -67,6 +67,7 @@ describe("Programs Component", () => {
           data: {
             ...listedProgram,
             duration_weeks: 1,
+            equipment: [{ id: 9, name: "barbell" }],
             exercises: [{ id: 101 }],
             workout_plan: buildWorkoutPlan(1),
             updated_at: "2025-01-01T00:00:00Z",
