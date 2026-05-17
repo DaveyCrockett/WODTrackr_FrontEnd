@@ -525,20 +525,22 @@ const normalizeEquipmentEntry = (value) => {
       value.equipment_name ??
       value.equipmentName ??
       value.equipment
+    console.log("Normalizing equipment entry from object:", value, "extracted candidate:", candidate) 
     if (candidate === null || candidate === undefined) return ""
     return String(candidate).trim()
   }
 
-  return String(value ?? "").trim()
+   return String(value ?? "").trim()
 }
 
 const normalizeEquipmentValues = (value) => {
   if (Array.isArray(value)) {
+    console.log("Normalizing equipment values from array:", value)
     return value
       .map((entry) => normalizeEquipmentEntry(entry))
       .filter(Boolean)
   }
-
+  console.log("Value is not an array, checking for nested candidates if it's an object.") 
   if (value && typeof value === "object") {
     const nestedCandidates = [
       value.equipment,
@@ -556,6 +558,7 @@ const normalizeEquipmentValues = (value) => {
   }
 
   if (typeof value === "string") {
+    console.log("Normalizing equipment values from string:", value)
     const trimmed = value.trim()
     if (!trimmed) return []
     if (trimmed.includes(",")) {
@@ -583,7 +586,6 @@ const getProgramEquipmentValues = (program) => {
     program?.equipment_values,
     program?.equipment_required,
   ]
-
   return [...new Set(candidateValues.flatMap((entry) => normalizeEquipmentValues(entry)))]
 }
 
@@ -2091,6 +2093,7 @@ function Programs() {
 
                 <label className="programs-modal-field">
                   <span>Equipment</span>
+                  {console.log("Rendering equipment field with values:", editEquipmentValues, "and options:", equipments) }
                   {isDetailsEditMode ? (
                     <EquipmentMultiSelect
                       options={equipments}
