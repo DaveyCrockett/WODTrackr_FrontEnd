@@ -3,7 +3,8 @@ import React, { useState, useRef, useEffect } from "react"
 export default function EquipmentMultiSelect({ options, value, onChange, disabled, name }) {
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef(null)
-  const selectedKeys = Array.isArray(value) ? value.map((entry) => String(entry)) : []
+  const selectedValues = Array.isArray(value) ? value : []
+  const selectedKeys = selectedValues.map((entry) => String(entry))
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -23,12 +24,11 @@ export default function EquipmentMultiSelect({ options, value, onChange, disable
   }, [open])
 
   const handleCheckboxChange = (optionValue) => {
-    if (!Array.isArray(value)) return
     const normalizedOptionValue = String(optionValue)
     if (selectedKeys.includes(normalizedOptionValue)) {
-      onChange(value.filter((v) => String(v) !== normalizedOptionValue))
+      onChange(selectedValues.filter((v) => String(v) !== normalizedOptionValue))
     } else {
-      onChange([...value, optionValue])
+      onChange([...selectedValues, optionValue])
     }
   }
 

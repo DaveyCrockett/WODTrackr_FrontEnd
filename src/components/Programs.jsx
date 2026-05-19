@@ -514,7 +514,9 @@ const normalizeEquipmentEntry = (value) => {
   if (value && typeof value === "object") {
     const candidate =
       value.value ??
+      value.target?.value ??
       value.id ??
+      value.pk ??
       value.key ??
       value.slug ??
       value.code ??
@@ -524,9 +526,26 @@ const normalizeEquipmentEntry = (value) => {
       value.label ??
       value.equipment_name ??
       value.equipmentName ??
-      value.equipment
-    console.log("Normalizing equipment entry from object:", value, "extracted candidate:", candidate) 
+      value.equipment 
     if (candidate === null || candidate === undefined) return ""
+    if (typeof candidate === "object") {
+      const nestedCandidate =
+        candidate.value ??
+        candidate.id ??
+        candidate.pk ??
+        candidate.key ??
+        candidate.slug ??
+        candidate.code ??
+        candidate.equipment_id ??
+        candidate.equipmentId ??
+        candidate.name ??
+        candidate.label ??
+        candidate.equipment_name ??
+        candidate.equipmentName ??
+        candidate.equipment
+      if (nestedCandidate === null || nestedCandidate === undefined) return ""
+      return String(nestedCandidate).trim()
+    }
     return String(candidate).trim()
   }
 
@@ -535,14 +554,14 @@ const normalizeEquipmentEntry = (value) => {
 
 const normalizeEquipmentValues = (value) => {
   if (Array.isArray(value)) {
-    console.log("Normalizing equipment values from array:", value)
     return value
       .map((entry) => normalizeEquipmentEntry(entry))
       .filter(Boolean)
-  }
-  console.log("Value is not an array, checking for nested candidates if it's an object.") 
+  } 
   if (value && typeof value === "object") {
     const nestedCandidates = [
+      value.value,
+      value.target?.value,
       value.equipment,
       value.equipments,
       value.equipment_ids,
@@ -551,14 +570,15 @@ const normalizeEquipmentValues = (value) => {
     ]
       .filter((entry) => entry !== undefined && entry !== null)
       .flatMap((entry) => normalizeEquipmentValues(entry))
-
     if (nestedCandidates.length > 0) {
       return [...new Set(nestedCandidates)]
     }
+
+    const normalizedFromObject = normalizeEquipmentEntry(value)
+    return normalizedFromObject ? [normalizedFromObject] : []
   }
 
   if (typeof value === "string") {
-    console.log("Normalizing equipment values from string:", value)
     const trimmed = value.trim()
     if (!trimmed) return []
     if (trimmed.includes(",")) {
@@ -669,7 +689,6 @@ function Programs() {
 
       try {
         const response = await axios.get(API_URL, buildRequestConfig())
-        console.log("Raw programs API response:", response)
         setPrograms(normalizeProgramsPayload(response?.data))
       } catch (error) {
         if (error?.response?.status === 401 || error?.response?.status === 403) {
@@ -1833,11 +1852,11 @@ function Programs() {
 
                 <label className="programs-modal-field">
                   <span>Equipment</span>
+                  {console.log("Rendering equipment multi-select with values:", createEquipmentValues)}
                   <EquipmentMultiSelect
                     options={equipments}
                     value={createEquipmentValues}
                     onChange={(selected) => {
-                      console.log("Selected equipment:", selected)
                       setCreateFormValues((prev) => ({ ...prev, equipment: selected }))
                       setCreateFieldErrors((prev) => ({ ...prev, equipment: "" }))
                     }}
@@ -2093,7 +2112,6 @@ function Programs() {
 
                 <label className="programs-modal-field">
                   <span>Equipment</span>
-                  {console.log("Rendering equipment field with values:", editEquipmentValues, "and options:", equipments) }
                   {isDetailsEditMode ? (
                     <EquipmentMultiSelect
                       options={equipments}
