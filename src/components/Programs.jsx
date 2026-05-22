@@ -510,8 +510,27 @@ const formatTimestamp = (value) => {
   return parsed.toLocaleString()
 }
 
+const normalizeEquipmentScalar = (value) => {
+  if (value === null || value === undefined) return ""
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "object") return ""
+
+  const trimmed = String(value).trim()
+  if (!trimmed) return ""
+  if (/^[+-]?\d+$/.test(trimmed)) return Number(trimmed)
+  return trimmed
+}
+
 const normalizeEquipmentEntry = (value) => {
+  console.log("Normalizing equipment entry:", value)
   if (value && typeof value === "object") {
+    console.warn("Received unexpected object for equipment entry, attempting to extract scalar value:", value)
+    if (Array.isArray(value)) {
+      console.warn("Received unexpected array for equipment entry, attempting to extract single value:", value)
+      const firstCandidate = value.find((entry) => entry !== null && entry !== undefined)
+      return firstCandidate === undefined ? "" : normalizeEquipmentEntry(firstCandidate)
+    }
+
     const candidate =
       value.value ??
       value.target?.value ??
@@ -527,8 +546,14 @@ const normalizeEquipmentEntry = (value) => {
       value.equipment_name ??
       value.equipmentName ??
       value.equipment 
+
     if (candidate === null || candidate === undefined) return ""
     if (typeof candidate === "object") {
+      if (Array.isArray(candidate)) {
+        const firstCandidate = candidate.find((entry) => entry !== null && entry !== undefined)
+        return firstCandidate === undefined ? "" : normalizeEquipmentEntry(firstCandidate)
+      }
+
       const nestedCandidate =
         candidate.value ??
         candidate.id ??
@@ -543,13 +568,14 @@ const normalizeEquipmentEntry = (value) => {
         candidate.equipment_name ??
         candidate.equipmentName ??
         candidate.equipment
+
       if (nestedCandidate === null || nestedCandidate === undefined) return ""
-      return String(nestedCandidate).trim()
+      return normalizeEquipmentScalar(nestedCandidate)
     }
-    return String(candidate).trim()
+    return normalizeEquipmentScalar(candidate)
   }
 
-   return String(value ?? "").trim()
+   return normalizeEquipmentScalar(value)
 }
 
 const normalizeEquipmentValues = (value) => {
@@ -584,10 +610,10 @@ const normalizeEquipmentValues = (value) => {
     if (trimmed.includes(",")) {
       return trimmed
         .split(",")
-        .map((entry) => entry.trim())
+        .map((entry) => normalizeEquipmentEntry(entry))
         .filter(Boolean)
     }
-    return [trimmed]
+    return [normalizeEquipmentEntry(trimmed)].filter(Boolean)
   }
 
   if (value === null || value === undefined) {
@@ -615,6 +641,8 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
     return [...new Set(normalized)]
   }
 
+  const getAliasKey = (entry) => String(entry).toLowerCase()
+
   const aliasToCanonical = new Map()
   const allowedValues = new Set()
 
@@ -624,19 +652,19 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
 
     allowedValues.add(canonicalValue)
     aliasToCanonical.set(canonicalValue, canonicalValue)
-    aliasToCanonical.set(canonicalValue.toLowerCase(), canonicalValue)
+    aliasToCanonical.set(getAliasKey(canonicalValue), canonicalValue)
 
     const label = normalizeEquipmentEntry(choice?.label)
     if (label) {
       aliasToCanonical.set(label, canonicalValue)
-      aliasToCanonical.set(label.toLowerCase(), canonicalValue)
+      aliasToCanonical.set(getAliasKey(label), canonicalValue)
     }
   }
 
   const mappedValues = normalized
     .map((entry) => {
       const normalizedEntry = normalizeEquipmentEntry(entry)
-      return aliasToCanonical.get(normalizedEntry) ?? aliasToCanonical.get(normalizedEntry.toLowerCase()) ?? ""
+      return aliasToCanonical.get(normalizedEntry) ?? aliasToCanonical.get(getAliasKey(normalizedEntry)) ?? ""
     })
     .filter((entry) => Boolean(entry) && allowedValues.has(entry))
 
