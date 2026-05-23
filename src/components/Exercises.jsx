@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { validateExerciseForm } from "../utils/exerciseUtils"
 
 const API_URL = "/api/wodtrackr/exercises/"
+const EQUIPMENT_API_URL = "/api/wodtrackr/equipment/"
 const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 const PAGE_SIZE = 12
@@ -212,6 +213,13 @@ const formatTimestamp = (value) => {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
   return parsed.toLocaleString()
+}
+
+const normalizeEquipmentPayload = (data) => {
+  if (Array.isArray(data?.data)) return data.data
+  if (Array.isArray(data?.results)) return data.results
+  if (Array.isArray(data)) return data
+  return []
 }
 
 const getFieldErrorsFromResponse = (data) => {
@@ -443,10 +451,20 @@ function Exercises() {
       }
 
       try {
+        const requestConfig = buildRequestConfig()
+        let equipmentChoicesFromEndpoint = []
+
+        try {
+          const equipmentResponse = await axios.get(EQUIPMENT_API_URL, requestConfig)
+          equipmentChoicesFromEndpoint = normalizeChoices(normalizeEquipmentPayload(equipmentResponse?.data))
+        } catch {
+          // Fall back to metadata choices when equipment endpoint is unavailable.
+        }
+
         let metadata = null
 
         try {
-          const optionsResponse = await axios.options(API_URL, buildRequestConfig())
+          const optionsResponse = await axios.options(API_URL, requestConfig)
           if (optionsResponse?.status !== 204 && hasMetadataPayload(optionsResponse?.data)) {
             metadata = optionsResponse.data
           }
@@ -455,12 +473,15 @@ function Exercises() {
         }
 
         if (!metadata) {
-          const getResponse = await axios.get(API_URL, buildRequestConfig())
+          const getResponse = await axios.get(API_URL, requestConfig)
           metadata = getResponse?.data
         }
 
         const category = getChoicesFromMetadata(metadata, ["category"])
-        const equipment = getChoicesFromMetadata(metadata, ["equipment"])
+        const equipment =
+          equipmentChoicesFromEndpoint.length > 0
+            ? equipmentChoicesFromEndpoint
+            : getChoicesFromMetadata(metadata, ["equipment"])
         const muscle = getChoicesFromMetadata(metadata, ["primary_muscle_group", "muscle"])
 
         setCategoryChoices(category)

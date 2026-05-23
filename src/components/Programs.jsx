@@ -6,6 +6,7 @@ import EquipmentMultiSelect from "./EquipmentMultiSelect"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
+const EQUIPMENT_API_URL = "/api/wodtrackr/equipment/"
 const PROGRAMS_PER_PAGE = 10
 const DEFAULT_DIFFICULTIES = ["All Levels", "Beginner", "Intermediate", "Advanced"]
 const DEFAULT_DURATION_MIN = 1
@@ -407,6 +408,13 @@ const normalizeExercisesPayload = (data) => {
   return []
 }
 
+const normalizeEquipmentPayload = (data) => {
+  if (Array.isArray(data?.data)) return data.data
+  if (Array.isArray(data?.results)) return data.results
+  if (Array.isArray(data)) return data
+  return []
+}
+
 const normalizeChoices = (choices) => {
   if (choices && typeof choices === "object" && !Array.isArray(choices)) {
     return Object.entries(choices)
@@ -510,23 +518,20 @@ const formatTimestamp = (value) => {
   return parsed.toLocaleString()
 }
 
-const normalizeEquipmentScalar = (value) => {
-  if (value === null || value === undefined) return ""
-  if (typeof value === "number" && Number.isFinite(value)) return value
-  if (typeof value === "object") return ""
-
-  const trimmed = String(value).trim()
-  if (!trimmed) return ""
-  if (/^[+-]?\d+$/.test(trimmed)) return Number(trimmed)
-  return trimmed
-}
-
 const normalizeEquipmentEntry = (value) => {
-  console.log("Normalizing equipment entry:", value)
+  const normalizeScalar = (entry) => {
+    if (entry === null || entry === undefined) return ""
+    if (typeof entry === "number" && Number.isFinite(entry)) return entry
+    if (typeof entry === "object") return ""
+
+    const trimmed = String(entry).trim()
+    if (!trimmed) return ""
+    if (/^[+-]?\d+$/.test(trimmed)) return Number(trimmed)
+    return trimmed
+  }
+
   if (value && typeof value === "object") {
-    console.warn("Received unexpected object for equipment entry, attempting to extract scalar value:", value)
     if (Array.isArray(value)) {
-      console.warn("Received unexpected array for equipment entry, attempting to extract single value:", value)
       const firstCandidate = value.find((entry) => entry !== null && entry !== undefined)
       return firstCandidate === undefined ? "" : normalizeEquipmentEntry(firstCandidate)
     }
@@ -570,16 +575,17 @@ const normalizeEquipmentEntry = (value) => {
         candidate.equipment
 
       if (nestedCandidate === null || nestedCandidate === undefined) return ""
-      return normalizeEquipmentScalar(nestedCandidate)
+      return normalizeScalar(nestedCandidate)
     }
-    return normalizeEquipmentScalar(candidate)
+    return normalizeScalar(candidate)
   }
 
-   return normalizeEquipmentScalar(value)
+   return normalizeScalar(value)
 }
 
 const normalizeEquipmentValues = (value) => {
   if (Array.isArray(value)) {
+    console.log("Normalizing equipment array:", value)
     return value
       .map((entry) => normalizeEquipmentEntry(entry))
       .filter(Boolean)
@@ -785,12 +791,19 @@ function Programs() {
       }
 
       try {
-        const response = await axios.get(`${API_URL}choices/`, buildRequestConfig())
-        const data = response?.data ?? {}
+        const requestConfig = buildRequestConfig()
+        const [choicesResult, equipmentResult] = await Promise.allSettled([
+          axios.get(`${API_URL}choices/`, requestConfig),
+          axios.get(EQUIPMENT_API_URL, requestConfig),
+        ])
+    
+        const data = choicesResult.status === "fulfilled" ? choicesResult.value?.data ?? {} : {}
+        const equipmentData = equipmentResult.status === "fulfilled" ? equipmentResult.value?.data : null
         const directCategoryChoices = normalizeChoices(data.category ?? data.categories ?? [])
         const directGoalChoices = normalizeChoices(data.goal ?? data.goals ?? [])
         const directDifficultyChoices = normalizeChoices(data.difficulty ?? data.difficulties ?? [])
         const directEquipmentChoices = normalizeChoices(data.equipment ?? data.equipments ?? [])
+        const equipmentChoicesFromEndpoint = normalizeChoices(normalizeEquipmentPayload(equipmentData))
 
         const category =
           directCategoryChoices.length > 0 ? directCategoryChoices : getChoicesFromMetadata(data, ["category", "categories"])
@@ -800,7 +813,9 @@ function Programs() {
             ? directDifficultyChoices
             : getChoicesFromMetadata(data, ["difficulty", "difficulties"])
         const equipment =
-          directEquipmentChoices.length > 0
+          equipmentChoicesFromEndpoint.length > 0
+            ? equipmentChoicesFromEndpoint
+            : directEquipmentChoices.length > 0
             ? directEquipmentChoices
             : getChoicesFromMetadata(data, ["equipment", "equipments"])
         const durationConfig =
@@ -1394,7 +1409,6 @@ function Programs() {
         exercises: selectedExerciseIds,
         workout_plan: normalizedDetailWorkoutPlan,
       }
-
       const response = await axios.put(`${API_URL}${selectedProgramId}/`, payload, buildRequestConfig())
       if (!areWorkoutPlansEqual(normalizedDetailWorkoutPlan, existingWorkoutPlan)) {
         const itemsPayload = buildProgramItemsFromWorkoutPlan(normalizedDetailWorkoutPlan)
