@@ -11,7 +11,7 @@ const PROGRAMS_PER_PAGE = 10
 const DEFAULT_DIFFICULTIES = ["All Levels", "Beginner", "Intermediate", "Advanced"]
 const DEFAULT_DURATION_MIN = 1
 const DEFAULT_DURATION_MAX = 12
-const PROGRAMS_CHOICES_CACHE_KEY = "wodtrackrProgramChoicesV3"
+const PROGRAMS_CHOICES_CACHE_KEY = "wodtrackrProgramChoicesV4"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
 
@@ -415,6 +415,47 @@ const normalizeEquipmentPayload = (data) => {
   return []
 }
 
+const normalizeEquipmentChoices = (choices) => {
+  if (choices && typeof choices === "object" && !Array.isArray(choices)) {
+    return Object.entries(choices)
+      .map(([value, label]) => ({ value, label: String(label) }))
+      .filter((choice) => choice.value !== "" && choice.value !== null && choice.value !== undefined)
+  }
+
+  if (!Array.isArray(choices)) return []
+
+  return choices
+    .map((choice) => {
+      if (Array.isArray(choice)) {
+        const [value, label] = choice
+        return { value: value ?? "", label: label ?? String(value ?? "") }
+      }
+
+      if (choice && typeof choice === "object") {
+        const value =
+          choice.pk ??
+          choice.id ??
+          choice.equipment_id ??
+          choice.equipmentId ??
+          choice.value ??
+          choice.key ??
+          ""
+        const label =
+          choice.label ??
+          choice.name ??
+          choice.display_name ??
+          choice.displayName ??
+          choice.equipment_name ??
+          choice.equipmentName ??
+          String(value)
+        return { value, label }
+      }
+
+      return { value: choice, label: String(choice) }
+    })
+    .filter((choice) => choice.value !== "" && choice.value !== null && choice.value !== undefined)
+}
+
 const normalizeChoices = (choices) => {
   if (choices && typeof choices === "object" && !Array.isArray(choices)) {
     return Object.entries(choices)
@@ -585,7 +626,6 @@ const normalizeEquipmentEntry = (value) => {
 
 const normalizeEquipmentValues = (value) => {
   if (Array.isArray(value)) {
-    console.log("Normalizing equipment array:", value)
     return value
       .map((entry) => normalizeEquipmentEntry(entry))
       .filter(Boolean)
@@ -782,8 +822,6 @@ function Programs() {
             if (parsed?.durationRange?.min && parsed?.durationRange?.max) {
               setDurationRange(parsed.durationRange)
             }
-            setIsChoicesLoading(false)
-            return
           }
         }
       } catch {
@@ -802,8 +840,8 @@ function Programs() {
         const directCategoryChoices = normalizeChoices(data.category ?? data.categories ?? [])
         const directGoalChoices = normalizeChoices(data.goal ?? data.goals ?? [])
         const directDifficultyChoices = normalizeChoices(data.difficulty ?? data.difficulties ?? [])
-        const directEquipmentChoices = normalizeChoices(data.equipment ?? data.equipments ?? [])
-        const equipmentChoicesFromEndpoint = normalizeChoices(normalizeEquipmentPayload(equipmentData))
+        const directEquipmentChoices = normalizeEquipmentChoices(data.equipment ?? data.equipments ?? [])
+        const equipmentChoicesFromEndpoint = normalizeEquipmentChoices(normalizeEquipmentPayload(equipmentData))
 
         const category =
           directCategoryChoices.length > 0 ? directCategoryChoices : getChoicesFromMetadata(data, ["category", "categories"])
@@ -1896,7 +1934,6 @@ function Programs() {
 
                 <label className="programs-modal-field">
                   <span>Equipment</span>
-                  {console.log("Rendering equipment multi-select with values:", createEquipmentValues)}
                   <EquipmentMultiSelect
                     options={equipments}
                     value={createEquipmentSelection}
