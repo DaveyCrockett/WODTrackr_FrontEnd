@@ -1,10 +1,17 @@
 import React, { useState, useRef, useEffect } from "react"
 
-export default function EquipmentMultiSelect({ options, value, onChange, disabled, name }) {
+const getComparableValue = (entry) => {
+  if (entry && typeof entry === "object") {
+    return entry.value ?? entry.id ?? entry.pk ?? entry.key ?? entry.slug ?? entry.code ?? ""
+  }
+  return entry
+}
+
+export default function EquipmentMultiSelect({ options, value, onChange, disabled, name, emitOptionObjects = false }) {
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef(null)
   const selectedValues = Array.isArray(value) ? value : []
-  const selectedKeys = selectedValues.map((entry) => String(entry))
+  const selectedKeys = selectedValues.map((entry) => String(getComparableValue(entry)))
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -26,9 +33,18 @@ export default function EquipmentMultiSelect({ options, value, onChange, disable
   const handleCheckboxChange = (optionValue) => {
     const normalizedOptionValue = String(optionValue)
     if (selectedKeys.includes(normalizedOptionValue)) {
-      onChange(selectedValues.filter((v) => String(v) !== normalizedOptionValue))
+      onChange(selectedValues.filter((entry) => String(getComparableValue(entry)) !== normalizedOptionValue))
     } else {
-      onChange([...selectedValues, optionValue])
+      const selectedOption = (Array.isArray(options) ? options : []).find(
+        (option) => String(option?.value) === normalizedOptionValue,
+      )
+      const valueToAppend = emitOptionObjects
+        ? {
+            value: selectedOption?.value ?? optionValue,
+            label: selectedOption?.label ?? String(selectedOption?.value ?? optionValue),
+          }
+        : optionValue
+      onChange([...selectedValues, valueToAppend])
     }
   }
 

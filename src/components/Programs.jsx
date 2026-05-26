@@ -933,6 +933,8 @@ function Programs() {
     [exerciseOptions],
   )
   const detailsWorkoutPlan = Array.isArray(detailWorkoutPlan) ? detailWorkoutPlan : []
+  const createEquipmentSelection = Array.isArray(createFormValues.equipment) ? createFormValues.equipment : []
+  const editEquipmentSelection = Array.isArray(editFormValues.equipment) ? editFormValues.equipment : []
   const createEquipmentValues = normalizeEquipmentValues(createFormValues.equipment)
   const editEquipmentValues = normalizeEquipmentValues(editFormValues.equipment)
   const filterEquipmentValues = normalizeEquipmentValues(filters.equipment)
@@ -1897,12 +1899,13 @@ function Programs() {
                   {console.log("Rendering equipment multi-select with values:", createEquipmentValues)}
                   <EquipmentMultiSelect
                     options={equipments}
-                    value={createEquipmentValues}
+                    value={createEquipmentSelection}
                     onChange={(selected) => {
                       setCreateFormValues((prev) => ({ ...prev, equipment: selected }))
                       setCreateFieldErrors((prev) => ({ ...prev, equipment: "" }))
                     }}
                     name="equipment"
+                    emitOptionObjects
                   />
                   {createFieldErrors.equipment ? <small className="programs-modal-error">{createFieldErrors.equipment}</small> : null}
                 </label>
@@ -2157,13 +2160,14 @@ function Programs() {
                   {isDetailsEditMode ? (
                     <EquipmentMultiSelect
                       options={equipments}
-                      value={editEquipmentValues}
+                      value={editEquipmentSelection}
                       onChange={(selected) => {
                         setEditFormValues((prev) => ({ ...prev, equipment: selected }))
                         setEditFieldErrors((prev) => ({ ...prev, equipment: "" }))
                       }}
                       name="equipment"
                       disabled={!isDetailsEditMode}
+                      emitOptionObjects
                     />
                   ) : (
                     <ul className="equipment-list">
