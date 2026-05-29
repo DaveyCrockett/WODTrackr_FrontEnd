@@ -7,7 +7,7 @@ const getComparableValue = (entry) => {
   return entry
 }
 
-export default function EquipmentMultiSelect({ options, value, onChange, disabled, name, emitOptionObjects = false }) {
+export default function MultiSelect({ options, value, onChange, disabled, name, emitOptionObjects = false }) {
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef(null)
   const selectedValues = Array.isArray(value) ? value : []
@@ -53,22 +53,22 @@ export default function EquipmentMultiSelect({ options, value, onChange, disable
     .map((opt) => opt.label)
 
   return (
-    <div className="equipment-multiselect-dropdown" ref={dropdownRef}>
+    <div className="multiselect-dropdown" ref={dropdownRef}>
       <button
         type="button"
-        className="equipment-multiselect-toggle"
+        className="multiselect-toggle"
         onClick={() => setOpen((o) => !o)}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        {selectedLabels.length > 0 ? selectedLabels.join(", ") : "Select equipment"}
-        <span className="dropdown-arrow">▾</span>
+        {selectedLabels.length > 0 ? selectedLabels.join(", ") : "Select options"}
+        <span className="multiselect-arrow">▾</span>
       </button>
       {open && (
-        <div className="equipment-multiselect-list" role="listbox">
+        <div className="multiselect-list" role="listbox">
           {options.map((option) => (
-            <label key={option.value} className="equipment-multiselect-label">
+            <label key={option.value} className="multiselect-label">
               <input
                 type="checkbox"
                 name={name}

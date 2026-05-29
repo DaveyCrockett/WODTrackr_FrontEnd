@@ -1,8 +1,8 @@
 import "../CSS/programs.css"
-import "../CSS/equipment-multiselect.css"
+import "../CSS/multiselect.css"
 import axios from "axios"
 import { useEffect, useMemo, useState } from "react"
-import EquipmentMultiSelect from "./EquipmentMultiSelect"
+import MultiSelect from "./MultiSelect"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
@@ -733,7 +733,7 @@ function Programs() {
   const [createPlanExerciseId, setCreatePlanExerciseId] = useState("")
   const [searchName, setSearchName] = useState("")
   const [sortOrder, setSortOrder] = useState("asc")
-  const [filters, setFilters] = useState({ difficulty: [], category: "", goal: "", equipment: [] })
+  const [filters, setFilters] = useState({ difficulty: [], category: [], goal: [], equipment: [] })
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedProgramId, setSelectedProgramId] = useState(null)
   const [programDetailsById, setProgramDetailsById] = useState({})
@@ -933,6 +933,10 @@ function Programs() {
     const fromPrograms = programs.map((p) => p?.category).filter(Boolean)
     return [...new Set(fromPrograms)].sort()
   }, [programs, categoryChoices])
+  const categoryFilterOptions = useMemo(
+    () => categories.map((category) => ({ value: category, label: category })),
+    [categories],
+  )
 
   const goals = useMemo(() => {
     const apiValues = goalChoices.map((c) => c.value)
@@ -940,6 +944,10 @@ function Programs() {
     const fromPrograms = programs.map((p) => p?.goal).filter(Boolean)
     return [...new Set(fromPrograms)].sort()
   }, [programs, goalChoices])
+  const goalFilterOptions = useMemo(
+    () => goals.map((goal) => ({ value: goal, label: goal })),
+    [goals],
+  )
 
   const equipments = useMemo(() => {
     const apiValues = equipmentChoices.map((c) => normalizeEquipmentEntry(c.value))
@@ -975,6 +983,8 @@ function Programs() {
   const editEquipmentSelection = Array.isArray(editFormValues.equipment) ? editFormValues.equipment : []
   const createEquipmentValues = normalizeEquipmentValues(createFormValues.equipment)
   const editEquipmentValues = normalizeEquipmentValues(editFormValues.equipment)
+  const filterCategoryValues = Array.isArray(filters.category) ? filters.category : []
+  const filterGoalValues = Array.isArray(filters.goal) ? filters.goal : []
   const filterEquipmentValues = normalizeEquipmentValues(filters.equipment)
 
   const filteredAndSortedPrograms = useMemo(() => {
@@ -992,11 +1002,11 @@ function Programs() {
     if (filters.difficulty.length > 0) {
       result = result.filter((p) => filters.difficulty.includes(p.difficulty))
     }
-    if (filters.category) {
-      result = result.filter((p) => p.category === filters.category)
+    if (Array.isArray(filters.category) && filters.category.length > 0) {
+      result = result.filter((p) => filters.category.includes(p.category))
     }
-    if (filters.goal) {
-      result = result.filter((p) => p.goal === filters.goal)
+    if (Array.isArray(filters.goal) && filters.goal.length > 0) {
+      result = result.filter((p) => filters.goal.includes(p.goal))
     }
     if (Array.isArray(filters.equipment) && filters.equipment.length > 0) {
       result = result.filter((p) => {
@@ -1066,7 +1076,7 @@ function Programs() {
   const handleClearFilters = () => {
     setSearchName("")
     setSortOrder("asc")
-    setFilters({ difficulty: [], category: "", goal: "", equipment: [] })
+    setFilters({ difficulty: [], category: [], goal: [], equipment: [] })
     setCurrentPage(1)
   }
 
@@ -1680,46 +1690,28 @@ function Programs() {
           </div>
 
           <div className="programs-filter-group">
-            <label className="programs-filter-label" htmlFor="filter-category">
-              Category
-            </label>
-            <select
-              id="filter-category"
-              className="programs-filter-select"
-              value={filters.category}
-              onChange={(e) => handleFilterChange("category", e.target.value)}
-            >
-              <option value="">All</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+            <span className="programs-filter-label">Category</span>
+            <MultiSelect
+              options={categoryFilterOptions}
+              value={filterCategoryValues}
+              onChange={(selected) => handleFilterChange("category", selected)}
+              name="filter-category"
+            />
           </div>
 
           <div className="programs-filter-group">
-            <label className="programs-filter-label" htmlFor="filter-goal">
-              Goal
-            </label>
-            <select
-              id="filter-goal"
-              className="programs-filter-select"
-              value={filters.goal}
-              onChange={(e) => handleFilterChange("goal", e.target.value)}
-            >
-              <option value="">All</option>
-              {goals.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
-              ))}
-            </select>
+            <span className="programs-filter-label">Goal</span>
+            <MultiSelect
+              options={goalFilterOptions}
+              value={filterGoalValues}
+              onChange={(selected) => handleFilterChange("goal", selected)}
+              name="filter-goal"
+            />
           </div>
 
           <div className="programs-filter-group">
             <span className="programs-filter-label">Equipment</span>
-            <EquipmentMultiSelect
+            <MultiSelect
               options={equipments}
               value={filterEquipmentValues}
               onChange={(selected) => handleFilterChange("equipment", selected)}
@@ -1934,7 +1926,7 @@ function Programs() {
 
                 <label className="programs-modal-field">
                   <span>Equipment</span>
-                  <EquipmentMultiSelect
+                  <MultiSelect
                     options={equipments}
                     value={createEquipmentSelection}
                     onChange={(selected) => {
@@ -2195,7 +2187,7 @@ function Programs() {
                 <label className="programs-modal-field">
                   <span>Equipment</span>
                   {isDetailsEditMode ? (
-                    <EquipmentMultiSelect
+                    <MultiSelect
                       options={equipments}
                       value={editEquipmentSelection}
                       onChange={(selected) => {
