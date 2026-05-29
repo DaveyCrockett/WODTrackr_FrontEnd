@@ -105,6 +105,76 @@ describe("Programs Component", () => {
     })
   })
 
+  it("shows exercises in workout plan after a program update", async () => {
+    const listedProgram = {
+      ...mockProgram,
+      duration_weeks: 1,
+      equipment: ["barbell"],
+      exercises: [{ id: 101 }],
+      workout_plan: buildWorkoutPlan(1),
+    }
+
+    // API returns item records with exercise 101
+    const itemRecords = [{ id: 1, exercise: 101, week: 1, day: 1, position: 1 }]
+
+    // The PUT response deliberately omits workout_plan to simulate a backend
+    // that does not echo back the workout plan — this was the source of the bug.
+    const putResponse = {
+      ...mockProgram,
+      name: "Updated Strength Cycle",
+      duration_weeks: 1,
+      equipment: ["barbell"],
+    }
+
+    axios.get.mockImplementation((url) => {
+      if (url === API_URL) return Promise.resolve({ data: { data: [listedProgram] } })
+      if (url === `${API_URL}choices/`) return Promise.resolve(mockChoicesResponse)
+      if (url === `${API_URL}1/`) {
+        return Promise.resolve({
+          data: {
+            ...listedProgram,
+            equipment: [{ id: 9, name: "barbell" }],
+            exercises: [{ id: 101 }],
+            workout_plan: buildWorkoutPlan(1),
+          },
+        })
+      }
+      if (url === `${API_URL}1/item/`) {
+        return Promise.resolve({ data: { data: itemRecords } })
+      }
+      return Promise.resolve({ data: {} })
+    })
+    axios.put.mockResolvedValue({ data: putResponse })
+
+    render(<Programs />)
+
+    // Open details and edit
+    await screen.findByText("Strength Cycle")
+    await userEvent.click(screen.getByRole("button", { name: "View Details" }))
+    await screen.findByRole("dialog")
+    await userEvent.click(screen.getByRole("button", { name: "Edit Program" }))
+    await screen.findByRole("textbox", { name: "Name" })
+
+    // Submit the update (no workout_plan changes, just verifying state is preserved)
+    await userEvent.click(screen.getByRole("button", { name: "Save Changes" }))
+
+    await waitFor(() => {
+      expect(axios.put).toHaveBeenCalled()
+    })
+
+    // Re-open the program detail — exercises should still be visible in the plan
+    await userEvent.click(screen.getByRole("button", { name: "View Details" }))
+    const dialog = await screen.findByRole("dialog")
+    await userEvent.click(within(dialog).getByRole("button", { name: "Edit Program" }))
+
+    // The workout plan should still show the exercise entry (not "No workout plan set")
+    await waitFor(() => {
+      expect(within(dialog).queryByText("No workout plan set for this program yet.")).not.toBeInTheDocument()
+      expect(within(dialog).getByText("Exercise #101")).toBeInTheDocument()
+    })
+  })
+
+
   it("deletes a program from details modal", async () => {
     axios.get.mockImplementation((url) => {
       if (url === API_URL) return Promise.resolve({ data: { data: [mockProgram] } })
