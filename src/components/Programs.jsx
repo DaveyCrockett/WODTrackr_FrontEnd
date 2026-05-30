@@ -1369,6 +1369,17 @@ function Programs() {
           const itemsResponse = await axios.get(buildProgramItemsApiUrl(programId), buildRequestConfig())
           const itemRecords = normalizeProgramItemsPayload(itemsResponse?.data)
           setProgramItemRecordsById((prev) => ({ ...prev, [programId]: itemRecords }))
+          const itemsPlan = buildWorkoutPlanFromProgramItems(itemRecords, cachedDetail?.duration_weeks)
+          if (itemsPlan.length > 0) {
+            setProgramDetailsById((prev) => ({
+              ...prev,
+              [programId]: {
+                ...prev[programId],
+                workout_plan: itemsPlan,
+                exercises: [...new Set(itemsPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))],
+              },
+            }))
+          }
         } catch {
           setProgramItemRecordsById((prev) => ({ ...prev, [programId]: [] }))
         }
@@ -1492,6 +1503,8 @@ function Programs() {
         [selectedProgramId]: {
           ...prev[selectedProgramId],
           ...updatedProgram,
+          workout_plan: normalizedDetailWorkoutPlan,
+          exercises: selectedExerciseIds,
           equipment:
             canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices).length > 0
               ? canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices)
