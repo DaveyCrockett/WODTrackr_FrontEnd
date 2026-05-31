@@ -30,7 +30,6 @@ function Register() {
     setErrorMessage("")
 
     try {
-      console.log("Submitting registration with values:", formValues)
       await axios.post("http://127.0.0.1:8000/api/users/auth/register/", {
         username: formValues.username,
         email: formValues.email,

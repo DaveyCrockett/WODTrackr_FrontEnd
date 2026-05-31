@@ -432,6 +432,9 @@ const normalizeEquipmentChoices = (choices) => {
       }
 
       if (choice && typeof choice === "object") {
+        // Use numeric pk/id as the canonical value so payloads send integers.
+        // Also capture the original string slug so aliases can be registered.
+        const slug = String(choice.value ?? choice.key ?? choice.slug ?? choice.code ?? "").trim()
         const value =
           choice.pk ??
           choice.id ??
@@ -448,10 +451,10 @@ const normalizeEquipmentChoices = (choices) => {
           choice.equipment_name ??
           choice.equipmentName ??
           String(value)
-        return { value, label }
+        return { value, label, slug: slug || String(value) }
       }
 
-      return { value: choice, label: String(choice) }
+      return { value: choice, label: String(choice), slug: String(choice) }
     })
     .filter((choice) => choice.value !== "" && choice.value !== null && choice.value !== undefined)
 }
@@ -692,25 +695,56 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
   const aliasToCanonical = new Map()
   const allowedValues = new Set()
 
+  const registerAlias = (alias, canonical) => {
+    const key = getAliasKey(alias)
+    aliasToCanonical.set(key, canonical)
+    // Register both underscore and space variants so "body_weight" ↔ "body weight" resolve identically.
+    aliasToCanonical.set(key.replace(/_/g, " "), canonical)
+    aliasToCanonical.set(key.replace(/\s+/g, "_"), canonical)
+  }
+
   for (const choice of equipmentChoices) {
     const canonicalValue = normalizeEquipmentEntry(choice?.value)
     if (!canonicalValue) continue
 
     allowedValues.add(canonicalValue)
     aliasToCanonical.set(canonicalValue, canonicalValue)
-    aliasToCanonical.set(getAliasKey(canonicalValue), canonicalValue)
+    registerAlias(String(canonicalValue), canonicalValue)
 
     const label = normalizeEquipmentEntry(choice?.label)
     if (label) {
-      aliasToCanonical.set(label, canonicalValue)
-      aliasToCanonical.set(getAliasKey(label), canonicalValue)
+      registerAlias(String(label), canonicalValue)
     }
+
+    // Also register the raw string value field from the choice if different from pk/id canonical.
+    // Also register the string slug preserved from normalizeEquipmentChoices (e.g. "box", "ski_erg").
+    const slugValue = choice?.slug ? normalizeEquipmentEntry(choice.slug) : null
+    if (slugValue && slugValue !== canonicalValue) {
+      registerAlias(String(slugValue), canonicalValue)
+    }
+    // Also register any other raw string value field if different from pk/id canonical.
+    const rawValue = normalizeEquipmentEntry(choice?.value_str ?? choice?.code ?? "")
+    if (rawValue && rawValue !== canonicalValue) {
+      registerAlias(String(rawValue), canonicalValue)
+    }
+  }
+
+  const lookupAlias = (key) => {
+    const lower = getAliasKey(key)
+    return (
+      aliasToCanonical.get(lower) ??
+      aliasToCanonical.get(lower.replace(/_/g, " ")) ??
+      aliasToCanonical.get(lower.replace(/\s+/g, "_")) ??
+      ""
+    )
   }
 
   const mappedValues = normalized
     .map((entry) => {
       const normalizedEntry = normalizeEquipmentEntry(entry)
-      return aliasToCanonical.get(normalizedEntry) ?? aliasToCanonical.get(getAliasKey(normalizedEntry)) ?? ""
+      return (typeof normalizedEntry === "number"
+        ? aliasToCanonical.get(normalizedEntry)
+        : undefined) ?? lookupAlias(String(normalizedEntry)) ?? ""
     })
     .filter((entry) => Boolean(entry) && allowedValues.has(entry))
 
@@ -1482,7 +1516,17 @@ function Programs() {
           // Keep program update success even if item sync fails.
         }
       }
-      const updatedProgram = normalizeProgramDetailPayload(response?.data) ?? payload
+      let updatedProgram = normalizeProgramDetailPayload(response?.data) ?? payload
+      // Re-fetch the updated program to keep cards/details in sync with backend-normalized data.
+      try {
+        const refreshedDetailResponse = await axios.get(`${API_URL}${selectedProgramId}/`, buildRequestConfig())
+        const refreshedDetail = normalizeProgramDetailPayload(refreshedDetailResponse?.data)
+        if (refreshedDetail) {
+          updatedProgram = refreshedDetail
+        }
+      } catch {
+        // Keep update success even if the post-save refresh fails.
+      }
       setPrograms((prev) =>
         prev.map((program) =>
           program.id === selectedProgramId
