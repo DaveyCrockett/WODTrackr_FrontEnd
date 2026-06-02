@@ -962,26 +962,30 @@ function Programs() {
   }, [programs, difficultyChoices])
 
   const categories = useMemo(() => {
-    const apiValues = categoryChoices.map((c) => c.value)
-    if (apiValues.length > 0) return [...new Set(apiValues)].sort()
+    if (categoryChoices.length > 0) {
+      const seen = new Map()
+      for (const c of categoryChoices) {
+        if (!seen.has(c.value)) seen.set(c.value, c)
+      }
+      return [...seen.values()].sort((a, b) => String(a.value).localeCompare(String(b.value)))
+    }
     const fromPrograms = programs.map((p) => p?.category).filter(Boolean)
-    return [...new Set(fromPrograms)].sort()
+    return [...new Set(fromPrograms)].sort().map((v) => ({ value: v, label: v }))
   }, [programs, categoryChoices])
-  const categoryFilterOptions = useMemo(
-    () => categories.map((category) => ({ value: category, label: category })),
-    [categories],
-  )
+  const categoryFilterOptions = categories
 
   const goals = useMemo(() => {
-    const apiValues = goalChoices.map((c) => c.value)
-    if (apiValues.length > 0) return [...new Set(apiValues)].sort()
+    if (goalChoices.length > 0) {
+      const seen = new Map()
+      for (const c of goalChoices) {
+        if (!seen.has(c.value)) seen.set(c.value, c)
+      }
+      return [...seen.values()].sort((a, b) => String(a.value).localeCompare(String(b.value)))
+    }
     const fromPrograms = programs.map((p) => p?.goal).filter(Boolean)
-    return [...new Set(fromPrograms)].sort()
+    return [...new Set(fromPrograms)].sort().map((v) => ({ value: v, label: v }))
   }, [programs, goalChoices])
-  const goalFilterOptions = useMemo(
-    () => goals.map((goal) => ({ value: goal, label: goal })),
-    [goals],
-  )
+  const goalFilterOptions = goals
 
   const equipments = useMemo(() => {
     if (equipmentChoices.length > 0) {
@@ -1956,8 +1960,8 @@ function Programs() {
                   >
                     <option value="">Select category</option>
                     {categories.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
+                      <option key={category.value} value={category.value}>
+                        {category.label}
                       </option>
                     ))}
                   </select>
@@ -1974,8 +1978,8 @@ function Programs() {
                   >
                     <option value="">Select goal</option>
                     {goals.map((goal) => (
-                      <option key={goal} value={goal}>
-                        {goal}
+                      <option key={goal.value} value={goal.value}>
+                        {goal.label}
                       </option>
                     ))}
                   </select>
@@ -2215,8 +2219,8 @@ function Programs() {
                   >
                     <option value="">Select category</option>
                     {categories.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
+                      <option key={category.value} value={category.value}>
+                        {category.label}
                       </option>
                     ))}
                   </select>
@@ -2234,8 +2238,8 @@ function Programs() {
                   >
                     <option value="">Select goal</option>
                     {goals.map((goal) => (
-                      <option key={goal} value={goal}>
-                        {goal}
+                      <option key={goal.value} value={goal.value}>
+                        {goal.label}
                       </option>
                     ))}
                   </select>
