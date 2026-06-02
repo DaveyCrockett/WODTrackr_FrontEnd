@@ -7,11 +7,17 @@ const getComparableValue = (entry) => {
   return entry
 }
 
+const toSelectionKey = (entry) => {
+  const comparable = getComparableValue(entry)
+  if (comparable === null || comparable === undefined) return ""
+  return String(comparable).trim()
+}
+
 export default function MultiSelect({ options, value, onChange, disabled, name, emitOptionObjects = false }) {
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef(null)
   const selectedValues = Array.isArray(value) ? value : []
-  const selectedKeys = selectedValues.map((entry) => String(getComparableValue(entry)))
+  const selectedKeys = selectedValues.map((entry) => toSelectionKey(entry)).filter(Boolean)
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -31,12 +37,12 @@ export default function MultiSelect({ options, value, onChange, disabled, name, 
   }, [open])
 
   const handleCheckboxChange = (optionValue) => {
-    const normalizedOptionValue = String(optionValue)
+    const normalizedOptionValue = toSelectionKey(optionValue)
     if (selectedKeys.includes(normalizedOptionValue)) {
-      onChange(selectedValues.filter((entry) => String(getComparableValue(entry)) !== normalizedOptionValue))
+      onChange(selectedValues.filter((entry) => toSelectionKey(entry) !== normalizedOptionValue))
     } else {
       const selectedOption = (Array.isArray(options) ? options : []).find(
-        (option) => String(option?.value) === normalizedOptionValue,
+        (option) => toSelectionKey(option?.value) === normalizedOptionValue,
       )
       const valueToAppend = emitOptionObjects
         ? {
@@ -48,9 +54,22 @@ export default function MultiSelect({ options, value, onChange, disabled, name, 
     }
   }
 
-  const selectedLabels = options
-    .filter((opt) => selectedKeys.includes(String(opt.value)))
-    .map((opt) => opt.label)
+  const optionLabelByKey = new Map(
+    (Array.isArray(options) ? options : [])
+      .map((opt) => [toSelectionKey(opt?.value), opt?.label])
+      .filter(([key]) => Boolean(key)),
+  )
+
+  const selectedLabels = selectedValues
+    .map((entry) => {
+      const key = toSelectionKey(entry)
+      if (!key) return ""
+      const labelFromOptions = optionLabelByKey.get(key)
+      if (labelFromOptions) return String(labelFromOptions)
+      if (entry && typeof entry === "object" && entry.label) return String(entry.label)
+      return key
+    })
+    .filter(Boolean)
 
   return (
     <div className="multiselect-dropdown" ref={dropdownRef}>
@@ -73,7 +92,7 @@ export default function MultiSelect({ options, value, onChange, disabled, name, 
                 type="checkbox"
                 name={name}
                 value={option.value}
-                checked={selectedKeys.includes(String(option.value))}
+                checked={selectedKeys.includes(toSelectionKey(option.value))}
                 onChange={() => handleCheckboxChange(option.value)}
                 disabled={disabled}
               />

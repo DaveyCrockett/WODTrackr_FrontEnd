@@ -984,12 +984,11 @@ function Programs() {
   )
 
   const equipments = useMemo(() => {
-    const apiValues = equipmentChoices.map((c) => normalizeEquipmentEntry(c.value))
-    if (apiValues.length > 0) {
+    if (equipmentChoices.length > 0) {
       return equipmentChoices
         .map((c) => ({
-          value: normalizeEquipmentEntry(c.value),
-          label: String(c.label || c.value),
+          value: c.slug || String(c.value),
+          label: String(c.label || c.slug || c.value),
         }))
         .filter((entry) => Boolean(entry.value))
     }
@@ -1019,7 +1018,7 @@ function Programs() {
   const editEquipmentValues = normalizeEquipmentValues(editFormValues.equipment)
   const filterCategoryValues = Array.isArray(filters.category) ? filters.category : []
   const filterGoalValues = Array.isArray(filters.goal) ? filters.goal : []
-  const filterEquipmentValues = normalizeEquipmentValues(filters.equipment)
+  const filterEquipmentValues = Array.isArray(filters.equipment) ? filters.equipment : []
 
   const filteredAndSortedPrograms = useMemo(() => {
     let result = [...programs]
@@ -1768,11 +1767,13 @@ function Programs() {
 
           <div className="programs-filter-group">
             <span className="programs-filter-label">Equipment</span>
+            {console.log("equipment", equipments)}
             <MultiSelect
               options={equipments}
               value={filterEquipmentValues}
               onChange={(selected) => handleFilterChange("equipment", selected)}
               name="filter-equipment"
+              emitOptionObjects
             />
           </div>
 
