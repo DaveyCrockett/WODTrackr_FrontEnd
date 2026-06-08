@@ -2264,7 +2264,25 @@ function Programs() {
                     <ul className="equipment-list">
                       {editEquipmentValues.map((eq) => {
                         const normalizedEq = normalizeEquipmentEntry(eq)
-                        const label = (equipments.find((e) => normalizeEquipmentEntry(e.value) === normalizedEq) || {}).label || normalizedEq
+                        const normalizedEqString = String(normalizedEq)
+                        const matchedChoice = equipmentChoices.find((choice) => {
+                          const normalizedChoiceValue = normalizeEquipmentEntry(choice?.value)
+                          if (String(normalizedChoiceValue) === normalizedEqString) return true
+
+                          const normalizedChoiceSlug = normalizeEquipmentEntry(choice?.slug)
+                          if (String(normalizedChoiceSlug) === normalizedEqString) return true
+
+                          const normalizedChoiceLabel = normalizeEquipmentEntry(choice?.label)
+                          return String(normalizedChoiceLabel) === normalizedEqString
+                        })
+                        const matchedEquipment = equipments.find((entry) => {
+                          const normalizedEntryValue = normalizeEquipmentEntry(entry?.value)
+                          if (String(normalizedEntryValue) === normalizedEqString) return true
+
+                          const normalizedEntryLabel = normalizeEquipmentEntry(entry?.label)
+                          return String(normalizedEntryLabel) === normalizedEqString
+                        })
+                        const label = matchedChoice?.label || matchedEquipment?.label || normalizedEq
                         return <li key={normalizedEq}>{label}</li>
                       })}
                     </ul>
