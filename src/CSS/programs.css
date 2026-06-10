@@ -350,6 +350,55 @@
   color: #475569;
 }
 
+/* ── Banner image ── */
+.programs-banner-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.programs-banner-preview {
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  background: #f1f5f9;
+}
+
+.programs-banner-img {
+  width: 100%;
+  max-height: 200px;
+  object-fit: cover;
+  display: block;
+}
+
+.programs-banner-input-hidden {
+  display: none;
+}
+
+.programs-banner-upload {
+  display: flex;
+  align-items: center;
+}
+
+.programs-banner-upload-btn {
+  display: inline-block;
+  padding: 0.45rem 1rem;
+  border-radius: 8px;
+  border: 1.5px solid #1d4ed8;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.programs-banner-upload-btn:hover {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
 /* ── Difficulty badges ── */
 .programs-badge {
   flex-shrink: 0;

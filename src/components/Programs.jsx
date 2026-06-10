@@ -780,6 +780,8 @@ function Programs() {
   const [isEditSubmitting, setIsEditSubmitting] = useState(false)
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false)
   const [isDetailsEditMode, setIsDetailsEditMode] = useState(false)
+  const [editImageFile, setEditImageFile] = useState(null)
+  const [editImagePreview, setEditImagePreview] = useState("")
   const [detailWorkoutPlan, setDetailWorkoutPlan] = useState([])
   const [detailPlanWeek, setDetailPlanWeek] = useState(1)
   const [detailPlanExerciseId, setDetailPlanExerciseId] = useState("")
@@ -951,6 +953,7 @@ function Programs() {
       ...buildProgramFormValues(sourceProgram),
       equipment: canonicalizeEquipmentValues(getProgramEquipmentValues(sourceProgram), equipmentChoices),
     })
+    setEditImagePreview(sourceProgram?.image ?? "")
   }, [selectedProgramId, programDetailsById, selectedProgram, isDetailsEditMode, equipmentChoices])
 
   const difficulties = useMemo(() => {
@@ -1320,6 +1323,8 @@ function Programs() {
     setDetailWorkoutPlan([])
     setDetailPlanWeek(1)
     setDetailPlanExerciseId("")
+    setEditImageFile(null)
+    setEditImagePreview("")
   }
 
   const validateEditForm = () => {
@@ -1371,6 +1376,18 @@ function Programs() {
     setEditFieldErrors((prev) => clearFormFieldError(prev, name, name === "duration_weeks"))
   }
 
+  const handleEditImageChange = (event) => {
+    const file = event.target.files?.[0] ?? null
+    setEditImageFile(file)
+    if (file) {
+      const objectUrl = URL.createObjectURL(file)
+      setEditImagePreview((prev) => {
+        if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev)
+        return objectUrl
+      })
+    }
+  }
+
   const handleStartEditProgram = () => {
     if (!selectedProgramId || !canEditSelectedProgram) return
 
@@ -1383,6 +1400,8 @@ function Programs() {
       const nextWorkoutPlan = buildWorkoutPlanFromProgram(sourceProgram)
       setDetailWorkoutPlan(nextWorkoutPlan)
       setDetailPlanWeek(nextWorkoutPlan[0]?.week_number || 1)
+      setEditImageFile(null)
+      setEditImagePreview(sourceProgram?.image ?? "")
     }
     setEditFieldErrors({})
     setEditErrorMessage("")
@@ -1517,6 +1536,42 @@ function Programs() {
           }
         } catch {
           // Keep program update success even if item sync fails.
+        }
+      }
+      if (editImageFile) {
+        const imageFormData = new FormData()
+        imageFormData.append("image", editImageFile)
+        const authToken = getAuthToken()
+        const imageRequestConfig = authToken
+          ? { headers: { Authorization: `Bearer ${authToken}` } }
+          : {}
+        try {
+          const imageUploadUrl = `${API_URL}${selectedProgramId}/`
+          console.log("[Programs] Uploading banner image", {
+            url: imageUploadUrl,
+            programId: selectedProgramId,
+            fileName: editImageFile?.name,
+            fileType: editImageFile?.type,
+            fileSize: editImageFile?.size,
+          })
+          const imageUploadResponse = await axios.patch(imageUploadUrl, imageFormData, imageRequestConfig)
+          console.log("[Programs] Banner upload success", {
+            status: imageUploadResponse?.status,
+            data: imageUploadResponse?.data,
+          })
+        } catch (imageError) {
+          console.error("[Programs] Banner upload failed", {
+            status: imageError?.response?.status,
+            data: imageError?.response?.data,
+            message: imageError?.message,
+          })
+          const imageErrorMessage =
+            imageError?.response?.data?.image?.[0] ||
+            imageError?.response?.data?.detail ||
+            "Image upload failed. Other changes were saved."
+          setEditErrorMessage(imageErrorMessage)
+          setIsEditSubmitting(false)
+          return
         }
       }
       let updatedProgram = normalizeProgramDetailPayload(response?.data) ?? payload
@@ -2142,6 +2197,27 @@ function Programs() {
 
               {editErrorMessage ? (
                 <p className="programs-modal-error" role="alert">{editErrorMessage}</p>
+              ) : null}
+
+              {editImagePreview ? (
+                <div className="programs-banner-preview">
+                  <img src={editImagePreview} alt="Program banner" className="programs-banner-img" />
+                </div>
+              ) : null}
+
+              {isDetailsEditMode ? (
+                <div className="programs-banner-upload">
+                  <input
+                    id="edit-banner-input"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleEditImageChange}
+                    className="programs-banner-input-hidden"
+                  />
+                  <label htmlFor="edit-banner-input" className="programs-banner-upload-btn">
+                    {editImagePreview ? "Change Image" : "Add Image"}
+                  </label>
+                </div>
               ) : null}
 
               <label className="programs-modal-field">
