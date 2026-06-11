@@ -1,7 +1,7 @@
 import "../CSS/programs.css"
 import "../CSS/multiselect.css"
 import axios from "axios"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import MultiSelect from "./MultiSelect"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
@@ -220,6 +220,31 @@ const getWorkoutPlanValidationMessage = (durationValue, workoutPlan) => {
   }
 
   return ""
+}
+
+const areWorkoutPlansEqual = (leftPlan, rightPlan) => {
+  const normalizePlan = (plan) =>
+    (Array.isArray(plan) ? plan : [])
+      .map((weekEntry) => ({
+        week_number: Number(weekEntry?.week_number),
+        exercise_ids: [...new Set((Array.isArray(weekEntry?.exercise_ids) ? weekEntry.exercise_ids : [])
+          .map((exerciseId) => Number(exerciseId))
+          .filter((exerciseId) => Number.isFinite(exerciseId)))].sort((a, b) => a - b),
+      }))
+      .filter((weekEntry) => Number.isFinite(weekEntry.week_number) && weekEntry.week_number > 0)
+      .sort((a, b) => a.week_number - b.week_number)
+
+  const left = normalizePlan(leftPlan)
+  const right = normalizePlan(rightPlan)
+  if (left.length !== right.length) return false
+
+  return left.every((weekEntry, index) => {
+    const rightWeekEntry = right[index]
+    if (!rightWeekEntry) return false
+    if (weekEntry.week_number !== rightWeekEntry.week_number) return false
+    if (weekEntry.exercise_ids.length !== rightWeekEntry.exercise_ids.length) return false
+    return weekEntry.exercise_ids.every((exerciseId, exerciseIndex) => exerciseId === rightWeekEntry.exercise_ids[exerciseIndex])
+  })
 }
 
 const clearFormFieldError = (previousErrors, fieldName, clearWorkoutPlan = false) => ({
@@ -782,6 +807,7 @@ function Programs() {
   const [isDetailsEditMode, setIsDetailsEditMode] = useState(false)
   const [editImageFile, setEditImageFile] = useState(null)
   const [editImagePreview, setEditImagePreview] = useState("")
+  const editImageInputRef = useRef(null)
   const [detailWorkoutPlan, setDetailWorkoutPlan] = useState([])
   const [detailPlanWeek, setDetailPlanWeek] = useState(1)
   const [detailPlanExerciseId, setDetailPlanExerciseId] = useState("")
@@ -1325,6 +1351,9 @@ function Programs() {
     setDetailPlanExerciseId("")
     setEditImageFile(null)
     setEditImagePreview("")
+    if (editImageInputRef.current) {
+      editImageInputRef.current.value = ""
+    }
   }
 
   const validateEditForm = () => {
@@ -1378,6 +1407,12 @@ function Programs() {
 
   const handleEditImageChange = (event) => {
     const file = event.target.files?.[0] ?? null
+    console.log("[Programs] handleEditImageChange", {
+      hasFile: Boolean(file),
+      fileName: file?.name,
+      fileType: file?.type,
+      fileSize: file?.size,
+    })
     setEditImageFile(file)
     if (file) {
       const objectUrl = URL.createObjectURL(file)
@@ -1402,6 +1437,9 @@ function Programs() {
       setDetailPlanWeek(nextWorkoutPlan[0]?.week_number || 1)
       setEditImageFile(null)
       setEditImagePreview(sourceProgram?.image ?? "")
+      if (editImageInputRef.current) {
+        editImageInputRef.current.value = ""
+      }
     }
     setEditFieldErrors({})
     setEditErrorMessage("")
@@ -1489,11 +1527,17 @@ function Programs() {
 
   const handleUpdateProgram = async (event) => {
     event.preventDefault()
+    console.log("[Programs] handleUpdateProgram start", {
+      selectedProgramId,
+      isDetailsEditMode,
+      canEditSelectedProgram,
+    })
     if (!selectedProgramId) return
 
     setEditErrorMessage("")
     const nextErrors = validateEditForm()
     if (Object.keys(nextErrors).length > 0) {
+      console.warn("[Programs] Edit validation blocked submit", nextErrors)
       setEditFieldErrors(nextErrors)
       return
     }
@@ -1538,9 +1582,16 @@ function Programs() {
           // Keep program update success even if item sync fails.
         }
       }
-      if (editImageFile) {
+      const pendingImageFile = editImageInputRef.current?.files?.[0] ?? editImageFile
+      console.log("[Programs] pendingImageFile check", {
+        hasPendingImageFile: Boolean(pendingImageFile),
+        fromInputRef: Boolean(editImageInputRef.current?.files?.[0]),
+        fromState: Boolean(editImageFile),
+        pendingFileName: pendingImageFile?.name,
+      })
+      if (pendingImageFile) {
         const imageFormData = new FormData()
-        imageFormData.append("image", editImageFile)
+        imageFormData.append("image", pendingImageFile)
         const authToken = getAuthToken()
         const imageRequestConfig = authToken
           ? { headers: { Authorization: `Bearer ${authToken}` } }
@@ -1550,9 +1601,9 @@ function Programs() {
           console.log("[Programs] Uploading banner image", {
             url: imageUploadUrl,
             programId: selectedProgramId,
-            fileName: editImageFile?.name,
-            fileType: editImageFile?.type,
-            fileSize: editImageFile?.size,
+            fileName: pendingImageFile?.name,
+            fileType: pendingImageFile?.type,
+            fileSize: pendingImageFile?.size,
           })
           const imageUploadResponse = await axios.patch(imageUploadUrl, imageFormData, imageRequestConfig)
           console.log("[Programs] Banner upload success", {
@@ -1573,6 +1624,8 @@ function Programs() {
           setIsEditSubmitting(false)
           return
         }
+      } else {
+        console.warn("[Programs] No image file detected at save time; skipping image PATCH")
       }
       let updatedProgram = normalizeProgramDetailPayload(response?.data) ?? payload
       // Re-fetch the updated program to keep cards/details in sync with backend-normalized data.
@@ -1826,7 +1879,6 @@ function Programs() {
 
           <div className="programs-filter-group">
             <span className="programs-filter-label">Equipment</span>
-            {console.log("equipment", equipments)}
             <MultiSelect
               options={equipments}
               value={filterEquipmentValues}
@@ -2213,6 +2265,7 @@ function Programs() {
                     accept="image/*"
                     onChange={handleEditImageChange}
                     className="programs-banner-input-hidden"
+                    ref={editImageInputRef}
                   />
                   <label htmlFor="edit-banner-input" className="programs-banner-upload-btn">
                     {editImagePreview ? "Change Image" : "Add Image"}
