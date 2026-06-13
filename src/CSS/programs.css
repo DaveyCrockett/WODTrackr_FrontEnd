@@ -485,7 +485,7 @@
 }
 
 .programs-modal {
-  width: min(680px, 100%);
+  width: min(900px, 100%);
   max-height: calc(100vh - 2rem);
   overflow: auto;
   background: #ffffff;
@@ -494,6 +494,8 @@
   box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
   padding: 1rem;
 }
+
+
 
 .programs-modal-header {
   display: flex;

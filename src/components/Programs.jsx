@@ -587,6 +587,20 @@ const formatTimestamp = (value) => {
   return parsed.toLocaleString()
 }
 
+const getProgramImageUrl = (program) => {
+  if (!program || typeof program !== "object") return ""
+
+  return String(
+    program?.image ??
+      program?.program_image ??
+      program?.banner ??
+      program?.banner_image ??
+      program?.image_url ??
+      program?.imageUrl ??
+      "",
+  ).trim()
+}
+
 const normalizeEquipmentEntry = (value) => {
   const normalizeScalar = (entry) => {
     if (entry === null || entry === undefined) return ""
@@ -825,6 +839,7 @@ function Programs() {
 
       try {
         const response = await axios.get(API_URL, buildRequestConfig())
+        console.log("Raw programs response:", response)
         setPrograms(normalizeProgramsPayload(response?.data))
       } catch (error) {
         if (error?.response?.status === 401 || error?.response?.status === 403) {
@@ -979,7 +994,7 @@ function Programs() {
       ...buildProgramFormValues(sourceProgram),
       equipment: canonicalizeEquipmentValues(getProgramEquipmentValues(sourceProgram), equipmentChoices),
     })
-    setEditImagePreview(sourceProgram?.image ?? "")
+    setEditImagePreview(getProgramImageUrl(sourceProgram))
   }, [selectedProgramId, programDetailsById, selectedProgram, isDetailsEditMode, equipmentChoices])
 
   const difficulties = useMemo(() => {
@@ -1123,6 +1138,7 @@ function Programs() {
     selectedProgramOwnerId !== undefined &&
     String(currentUserId) === String(selectedProgramOwnerId)
   const canEditSelectedProgram = Boolean(selectedProgramId && currentUsername && (ownerMissing || ownerMatchesByUsername || ownerMatchesById))
+  const selectedProgramImageUrl = getProgramImageUrl(selectedProgramDetails) || getProgramImageUrl(selectedProgram) || editImagePreview
 
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }))
@@ -1436,7 +1452,7 @@ function Programs() {
       setDetailWorkoutPlan(nextWorkoutPlan)
       setDetailPlanWeek(nextWorkoutPlan[0]?.week_number || 1)
       setEditImageFile(null)
-      setEditImagePreview(sourceProgram?.image ?? "")
+      setEditImagePreview(getProgramImageUrl(sourceProgram))
       if (editImageInputRef.current) {
         editImageInputRef.current.value = ""
       }
@@ -1489,6 +1505,10 @@ function Programs() {
         axios.get(`${API_URL}${programId}/`, buildRequestConfig()),
         axios.get(buildProgramItemsApiUrl(programId), buildRequestConfig()).catch(() => null),
       ])
+      console.log("[Programs] Loaded program detail and items", {
+        detailResponse,
+        itemsResponse,
+      })
       const detail = normalizeProgramDetailPayload(detailResponse?.data)
       if (!detail) {
         throw new Error("No detail payload")
@@ -1590,26 +1610,57 @@ function Programs() {
         pendingFileName: pendingImageFile?.name,
       })
       if (pendingImageFile) {
-        const imageFormData = new FormData()
-        imageFormData.append("image", pendingImageFile)
         const authToken = getAuthToken()
         const imageRequestConfig = authToken
           ? { headers: { Authorization: `Bearer ${authToken}` } }
           : {}
         try {
           const imageUploadUrl = `${API_URL}${selectedProgramId}/`
+          const imageFormData = new FormData()
+          imageFormData.append("program_image", pendingImageFile)
           console.log("[Programs] Uploading banner image", {
             url: imageUploadUrl,
             programId: selectedProgramId,
             fileName: pendingImageFile?.name,
             fileType: pendingImageFile?.type,
             fileSize: pendingImageFile?.size,
+            fieldName: "program_image",
           })
-          const imageUploadResponse = await axios.patch(imageUploadUrl, imageFormData, imageRequestConfig)
+          let imageUploadResponse
+          try {
+            imageUploadResponse = await axios.patch(imageUploadUrl, imageFormData, imageRequestConfig)
+          } catch (primaryUploadError) {
+            const fallbackFormData = new FormData()
+            fallbackFormData.append("image", pendingImageFile)
+            console.warn("[Programs] program_image upload failed, retrying with image field", {
+              status: primaryUploadError?.response?.status,
+              data: primaryUploadError?.response?.data,
+            })
+            imageUploadResponse = await axios.patch(imageUploadUrl, fallbackFormData, imageRequestConfig)
+          }
           console.log("[Programs] Banner upload success", {
             status: imageUploadResponse?.status,
             data: imageUploadResponse?.data,
           })
+          // Immediately update the cache with the image URL from the PATCH response
+          // so the banner shows correctly when the details modal is re-opened.
+          const patchedDetail = normalizeProgramDetailPayload(imageUploadResponse?.data)
+          const resolvedImageUrl = getProgramImageUrl(patchedDetail)
+          console.log("[Programs] Resolved image URL from PATCH response", { resolvedImageUrl, patchedDetail })
+          if (resolvedImageUrl) {
+            setProgramDetailsById((prev) => ({
+              ...prev,
+              [selectedProgramId]: {
+                ...prev[selectedProgramId],
+                program_image: resolvedImageUrl,
+              },
+            }))
+            setPrograms((prev) =>
+              prev.map((p) =>
+                p.id === selectedProgramId ? { ...p, program_image: resolvedImageUrl } : p,
+              ),
+            )
+          }
         } catch (imageError) {
           console.error("[Programs] Banner upload failed", {
             status: imageError?.response?.status,
@@ -1617,6 +1668,7 @@ function Programs() {
             message: imageError?.message,
           })
           const imageErrorMessage =
+            imageError?.response?.data?.program_image?.[0] ||
             imageError?.response?.data?.image?.[0] ||
             imageError?.response?.data?.detail ||
             "Image upload failed. Other changes were saved."
@@ -1979,7 +2031,7 @@ function Programs() {
       {isCreateModalOpen ? (
         <div className="programs-modal-backdrop" role="presentation" onClick={handleCloseCreateModal}>
           <aside
-            className="programs-modal"
+            className="programs-modal custom-scroll"
             role="dialog"
             aria-modal="true"
             aria-labelledby="programs-modal-title"
@@ -2251,9 +2303,9 @@ function Programs() {
                 <p className="programs-modal-error" role="alert">{editErrorMessage}</p>
               ) : null}
 
-              {editImagePreview ? (
+              {selectedProgramImageUrl ? (
                 <div className="programs-banner-preview">
-                  <img src={editImagePreview} alt="Program banner" className="programs-banner-img" />
+                  <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
                 </div>
               ) : null}
 
