@@ -2282,12 +2282,19 @@ function Programs() {
             onClick={(event) => event.stopPropagation()}
           >
             <header className="programs-modal-header">
-              <h2 id="programs-detail-modal-title">
-                {selectedProgramDetails?.name || selectedProgram?.name || "Program Details"}
-              </h2>
               <button type="button" className="programs-modal-secondary-btn" onClick={handleCloseDetailsModal}>
-                Close
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
               </button>
+               {selectedProgramImageUrl ? (
+                <div className="programs-banner-preview">
+                  <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
+                </div>
+              ) : null}
+              {/* <h2 id="programs-detail-modal-title">
+                {selectedProgramDetails?.name || selectedProgram?.name || "Program Details"}
+              </h2> */}
             </header>
 
             <form className="programs-modal-form" onSubmit={handleUpdateProgram}>
@@ -2301,12 +2308,6 @@ function Programs() {
 
               {editErrorMessage ? (
                 <p className="programs-modal-error" role="alert">{editErrorMessage}</p>
-              ) : null}
-
-              {selectedProgramImageUrl ? (
-                <div className="programs-banner-preview">
-                  <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
-                </div>
               ) : null}
 
               {isDetailsEditMode ? (

@@ -492,7 +492,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
-  padding: 1rem;
+  
 }
 
 
@@ -500,20 +500,27 @@
 .programs-modal-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  justify-content: space-between; 
 }
 
-.programs-modal-header h2 {
-  margin: 0;
-  color: #0f172a;
-  font-size: 1.15rem;
+.programs-modal-header button {
+  border: none;
+  background: transparent;
+  position: fixed;
+  top: 1.5rem;
+  left: 9rem;
+  
+}
+
+.programs-modal-header button:hover {
+  background: transparent;
 }
 
 .programs-modal-form {
   margin-top: 0.9rem;
   display: grid;
   gap: 0.75rem;
+  padding: 1rem;
 }
 
 .programs-modal-grid {
