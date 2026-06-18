@@ -2039,8 +2039,8 @@ function Programs() {
           >
             <header className="programs-modal-header">
               <h2 id="programs-modal-title">Create New Program</h2>
-              <button type="button" className="programs-modal-secondary-btn" onClick={handleCloseCreateModal}>
-                Close
+              <button type="button" className="programs-btn-base programs-modal-close-btn" onClick={handleCloseCreateModal} aria-label="Close create program">
+                &times;
               </button>
             </header>
 
