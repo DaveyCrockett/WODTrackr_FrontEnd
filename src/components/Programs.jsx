@@ -2038,9 +2038,29 @@ function Programs() {
             onClick={(event) => event.stopPropagation()}
           >
             <header className="programs-modal-header">
+              {selectedProgramImageUrl ? (
+                <div className="programs-banner-preview">
+                  <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
+                </div>
+              ) : null}
+              <div className="programs-banner-upload" id="gym-banner-btn">
+                <input
+                  id="edit-banner-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleEditImageChange}
+                  className="programs-banner-input-hidden"
+                  ref={editImageInputRef}
+                />
+                <label htmlFor="edit-banner-input" className="programs-banner-upload-btn">
+                  {editImagePreview ? "Change Gym Banner" : "Add Gym Banner"}
+                </label>
+              </div>
               <h2 id="programs-modal-title">Create New Program</h2>
               <button type="button" className="programs-btn-base programs-modal-close-btn" onClick={handleCloseCreateModal} aria-label="Close create program">
-                &times;
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
               </button>
             </header>
 
@@ -2260,9 +2280,6 @@ function Programs() {
               </label>
 
               <div className="programs-modal-actions">
-                <button type="button" className="programs-modal-secondary-btn" onClick={handleCloseCreateModal}>
-                  Cancel
-                </button>
                 <button type="submit" className="programs-modal-primary-btn" disabled={isCreateSubmitting}>
                   {isCreateSubmitting ? "Creating..." : "Create Program"}
                 </button>
@@ -2282,7 +2299,7 @@ function Programs() {
             onClick={(event) => event.stopPropagation()}
           >
             <header className="programs-modal-header">
-              <button type="button" className="programs-modal-secondary-btn" onClick={handleCloseDetailsModal}>
+              <button type="button" className="programs-btn-base programs-modal-secondary-btn" onClick={handleCloseDetailsModal}>
                 <svg viewBox="0 0 24 24" width="24" height="24">
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                 </svg>

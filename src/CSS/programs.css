@@ -485,6 +485,7 @@
 }
 
 .programs-modal {
+  position: fixed;
   width: min(900px, 100%);
   max-height: calc(100vh - 2rem);
   overflow: auto;
@@ -498,9 +499,19 @@
 
 
 .programs-modal-header {
-  display: flex;
+  display: block;
   align-items: center;
   justify-content: space-between; 
+}
+
+.programs-modal-header #gym-banner-btn {
+  display: flex;
+  align-items: center;
+}
+
+#programs-modal-title {
+  display: block;
+  text-align: center;
 }
 
 
@@ -578,7 +589,7 @@
   top: 1.5rem;
   left: 9rem;
   z-index: 2;
-  color: #ffffff;
+  color: #334155;
   width: 40px;  /* Set a defined width/height to make a perfect circle */
   height: 40px;
   border-radius: 50%;
@@ -612,10 +623,12 @@
 
 /* 3. SECONDARY BUTTON */
 .programs-modal-secondary-btn {
-  border: 1px solid #cbd5e1;
+  position: absolute;
+  top: 0.5rem;
+  border: 1px solid transparent;
   border-radius: 10px;
   padding: 0.55rem 0.8rem;
-  background: #ffffff;
+  background: transparent;
   color: #334155;
   overflow: hidden; /* Keeps the overlay background inside the rounded corners */
 }
@@ -624,8 +637,11 @@
 .programs-modal-secondary-btn::before {
   content: "";
   position: absolute;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background-color: #f8fafc; /* Your hover color choice */
+  top: 0; 
+  left: 0; 
+  width: 100%; 
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.15); /* Soft white tint over dark images */
   opacity: 0;
   transition: opacity 0.2s ease;
   z-index: -1;
@@ -633,7 +649,7 @@
 
 /* Hover effects for Secondary Button */
 .programs-modal-secondary-btn:hover {
-  transform: scale(1.04);
+  transform: scale(1.08);
 }
 .programs-modal-secondary-btn:hover::before {
   opacity: 1;
@@ -714,6 +730,17 @@
 
 .programs-plan-add-btn {
   white-space: nowrap;
+  position: relative;
+  top: 0;
+  border: none;
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.programs-modal-secondary-btn.programs-plan-add-btn:hover {
+  transform: none;
 }
 
 .programs-plan-weeks {
