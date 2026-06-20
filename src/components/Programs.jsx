@@ -1874,10 +1874,6 @@ function Programs() {
         </div>
       </header>
 
-      <button type="button" className="programs-fab" onClick={handleOpenCreateModal} aria-label="Create new program">
-        New Program
-      </button>
-
       <div className="programs-shell">
         <aside className="programs-filter-panel" aria-label="Program Filters">
           <div className="programs-filter-header">
@@ -2056,7 +2052,7 @@ function Programs() {
                   {editImagePreview ? "Change Gym Banner" : "Add Gym Banner"}
                 </label>
               </div>
-              <h2 id="programs-modal-title">Create New Program</h2>
+              <h2 className="programs-modal-title">Create New Program</h2>
               <button type="button" className="programs-btn-base programs-modal-close-btn" onClick={handleCloseCreateModal} aria-label="Close create program">
                 <svg viewBox="0 0 24 24" width="24" height="24">
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -2309,9 +2305,9 @@ function Programs() {
                   <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
                 </div>
               ) : null}
-              {/* <h2 id="programs-detail-modal-title">
+              <h2 className="programs-modal-title">
                 {selectedProgramDetails?.name || selectedProgram?.name || "Program Details"}
-              </h2> */}
+              </h2>
             </header>
 
             <form className="programs-modal-form" onSubmit={handleUpdateProgram}>

@@ -509,7 +509,7 @@
   align-items: center;
 }
 
-#programs-modal-title {
+.programs-modal-title {
   display: block;
   text-align: center;
 }
