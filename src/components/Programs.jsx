@@ -2034,12 +2034,30 @@ function Programs() {
             onClick={(event) => event.stopPropagation()}
           >
             <header className="programs-modal-header">
+              <button type="button" className="programs-btn-base programs-modal-close-btn" onClick={handleCloseCreateModal} aria-label="Close create program">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
               {selectedProgramImageUrl ? (
                 <div className="programs-banner-preview">
                   <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
                 </div>
+              ) : (
+                <div className="programs-banner-preview">
+                  <img src="src/assets/Defaultbanner.jpg" alt="Program banner" className="programs-banner-img" />
+                </div>
+              )}
+              <h2 className="programs-modal-title">Create New Program</h2>
+              
+            </header>
+
+            <form className="programs-modal-form" onSubmit={handleCreateProgram}>
+              {createErrorMessage ? (
+                <p className="programs-modal-error" role="alert">{createErrorMessage}</p>
               ) : null}
-              <div className="programs-banner-upload" id="gym-banner-btn">
+
+              <div className="programs-banner-upload" id="create-gym-banner-btn">
                 <input
                   id="edit-banner-input"
                   type="file"
@@ -2049,21 +2067,9 @@ function Programs() {
                   ref={editImageInputRef}
                 />
                 <label htmlFor="edit-banner-input" className="programs-banner-upload-btn">
-                  {editImagePreview ? "Change Gym Banner" : "Add Gym Banner"}
+                  {editImagePreview ? "+ Upload" : "+ Upload"}
                 </label>
               </div>
-              <h2 className="programs-modal-title">Create New Program</h2>
-              <button type="button" className="programs-btn-base programs-modal-close-btn" onClick={handleCloseCreateModal} aria-label="Close create program">
-                <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </button>
-            </header>
-
-            <form className="programs-modal-form" onSubmit={handleCreateProgram}>
-              {createErrorMessage ? (
-                <p className="programs-modal-error" role="alert">{createErrorMessage}</p>
-              ) : null}
 
               <label className="programs-modal-field">
                 <span>Name</span>
