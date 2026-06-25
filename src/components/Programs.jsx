@@ -2039,15 +2039,12 @@ function Programs() {
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               </button>
+              {console.log("[Programs] Create modal selectedProgramImageUrl", { selectedProgramImageUrl })}
               {selectedProgramImageUrl ? (
                 <div className="programs-banner-preview">
                   <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
                 </div>
-              ) : (
-                <div className="programs-banner-preview">
-                  <img src="src/assets/Defaultbanner.jpg" alt="Program banner" className="programs-banner-img" />
-                </div>
-              )}
+              ) : null}
               <h2 className="programs-modal-title">Create New Program</h2>
               
             </header>
