@@ -588,6 +588,8 @@ const formatTimestamp = (value) => {
 }
 
 const getProgramImageUrl = (program) => {
+  console.log("getProgramImageUrl called with program:", program)
+  // program is null here.
   if (!program || typeof program !== "object") return ""
 
   return String(
@@ -984,7 +986,7 @@ function Programs() {
     () => programs.find((program) => program.id === selectedProgramId) ?? null,
     [programs, selectedProgramId],
   )
-
+// verify dependencies for programDetailsById, selectedProgram, isDetailsEditMode, and equipmentChoices
   useEffect(() => {
     if (!selectedProgramId) return
     if (isDetailsEditMode) return
