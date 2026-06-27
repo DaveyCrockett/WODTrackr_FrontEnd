@@ -990,6 +990,7 @@ function Programs() {
   useEffect(() => {
     if (!selectedProgramId) return
     if (isDetailsEditMode) return
+    // Check request for sourceProgram and why is this being used for default image in New Program form?
     const sourceProgram = programDetailsById[selectedProgramId] ?? selectedProgram
     if (!sourceProgram) return
     setEditFormValues({
@@ -1286,6 +1287,7 @@ function Programs() {
         is_public: Boolean(createFormValues.is_public),
         exercises: selectedExerciseIds,
         workout_plan: normalizedWorkoutPlan,
+        program_image: createFormValues.program_image,
       }
 
       const response = await axios.post(API_URL, payload, buildRequestConfig())
@@ -1591,6 +1593,7 @@ function Programs() {
         is_public: Boolean(editFormValues.is_public),
         exercises: selectedExerciseIds,
         workout_plan: normalizedDetailWorkoutPlan,
+        program_image: editFormValues.program_image,
       }
       const response = await axios.put(`${API_URL}${selectedProgramId}/`, payload, buildRequestConfig())
       if (!areWorkoutPlansEqual(normalizedDetailWorkoutPlan, existingWorkoutPlan)) {
