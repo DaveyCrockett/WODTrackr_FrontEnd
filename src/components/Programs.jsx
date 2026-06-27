@@ -991,7 +991,7 @@ function Programs() {
     if (!selectedProgramId) return
     if (isDetailsEditMode) return
     // Check request for sourceProgram and why is this being used for default image in New Program form?
-    const sourceProgram = programDetailsById[selectedProgramId] ?? selectedProgram
+    const sourceProgram = programDetailsById[selectedProgramId] ?? selectedProgram // Maybe add an OR gate here to set defaultProgram?
     if (!sourceProgram) return
     setEditFormValues({
       ...buildProgramFormValues(sourceProgram),
