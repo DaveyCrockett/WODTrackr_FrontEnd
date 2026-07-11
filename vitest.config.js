@@ -4,6 +4,9 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react({ jsxImportSource: 'react' })],
+  server: {
+    sourcemap: true,
+  },
   test: {
     globals: true,
     environment: 'jsdom',
