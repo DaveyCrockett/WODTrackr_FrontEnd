@@ -364,6 +364,7 @@ const buildProgramFormValues = (program) => ({
   goal: String(program?.goal ?? ""),
   equipment: getProgramEquipmentValues(program),
   is_public: Boolean(program?.is_public),
+  program_default_image_url: String(program?.image ?? ""),
 })
 
 const getAuthToken = () => {
@@ -586,10 +587,8 @@ const formatTimestamp = (value) => {
   if (Number.isNaN(parsed.getTime())) return String(value)
   return parsed.toLocaleString()
 }
-
 const getProgramImageUrl = (program) => {
-  console.log("getProgramImageUrl called with program:", program)
-  // program is null here.
+  console.log("[Programs] getProgramImageUrl", { program }, typeof program)
   if (!program || typeof program !== "object") return ""
 
   return String(
@@ -602,7 +601,6 @@ const getProgramImageUrl = (program) => {
       "",
   ).trim()
 }
-
 const normalizeEquipmentEntry = (value) => {
   const normalizeScalar = (entry) => {
     if (entry === null || entry === undefined) return ""
@@ -822,7 +820,7 @@ function Programs() {
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false)
   const [isDetailsEditMode, setIsDetailsEditMode] = useState(false)
   const [editImageFile, setEditImageFile] = useState(null)
-  const [editImagePreview, setEditImagePreview] = useState("")
+  const [editImagePreview, setEditImagePreview] = useState(null)
   const editImageInputRef = useRef(null)
   const [detailWorkoutPlan, setDetailWorkoutPlan] = useState([])
   const [detailPlanWeek, setDetailPlanWeek] = useState(1)
@@ -983,15 +981,15 @@ function Programs() {
   }, [])
 
   const selectedProgram = useMemo(
-    () => programs.find((program) => program.id === selectedProgramId) ?? null,
-    [programs, selectedProgramId],
-  )
-// verify dependencies for programDetailsById, selectedProgram, isDetailsEditMode, and equipmentChoices
+    () => {
+      const found = programs.find((program) => program.id === selectedProgramId)
+      return found ?? programs[0] ?? null
+    }, [programs, selectedProgramId])
+
   useEffect(() => {
     if (!selectedProgramId) return
     if (isDetailsEditMode) return
-    // Check request for sourceProgram and why is this being used for default image in New Program form?
-    const sourceProgram = programDetailsById[selectedProgramId] ?? selectedProgram // Maybe add an OR gate here to set defaultProgram?
+    const sourceProgram = programDetailsById[selectedProgramId] ?? selectedProgram
     if (!sourceProgram) return
     setEditFormValues({
       ...buildProgramFormValues(sourceProgram),
@@ -1142,7 +1140,6 @@ function Programs() {
     String(currentUserId) === String(selectedProgramOwnerId)
   const canEditSelectedProgram = Boolean(selectedProgramId && currentUsername && (ownerMissing || ownerMatchesByUsername || ownerMatchesById))
   const selectedProgramImageUrl = getProgramImageUrl(selectedProgramDetails) || getProgramImageUrl(selectedProgram) || editImagePreview
-
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }))
     setCurrentPage(1)
@@ -1643,10 +1640,7 @@ function Programs() {
             })
             imageUploadResponse = await axios.patch(imageUploadUrl, fallbackFormData, imageRequestConfig)
           }
-          console.log("[Programs] Banner upload success", {
-            status: imageUploadResponse?.status,
-            data: imageUploadResponse?.data,
-          })
+          
           // Immediately update the cache with the image URL from the PATCH response
           // so the banner shows correctly when the details modal is re-opened.
           const patchedDetail = normalizeProgramDetailPayload(imageUploadResponse?.data)
@@ -2044,14 +2038,7 @@ function Programs() {
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               </button>
-              {console.log("[Programs] Create modal selectedProgramImageUrl", { selectedProgramImageUrl })}
-              {selectedProgramImageUrl ? (
-                <div className="programs-banner-preview">
-                  <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
-                </div>
-              ) : null}
               <h2 className="programs-modal-title">Create New Program</h2>
-              
             </header>
 
             <form className="programs-modal-form" onSubmit={handleCreateProgram}>
@@ -2060,6 +2047,12 @@ function Programs() {
               ) : null}
 
               <div className="programs-banner-upload" id="create-gym-banner-btn">
+                {console.log("Create Program Image Preview", {selectedProgramImageUrl})}
+                {selectedProgramImageUrl ? (
+                <div className="programs-banner-preview">
+                  <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
+                </div>
+                ) : null}
                 <input
                   id="edit-banner-input"
                   type="file"
