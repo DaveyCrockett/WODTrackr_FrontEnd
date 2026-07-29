@@ -587,8 +587,10 @@ const formatTimestamp = (value) => {
   if (Number.isNaN(parsed.getTime())) return String(value)
   return parsed.toLocaleString()
 }
+
+const getDefaultProgramImageUrl = () => "../assets/DefaultBanner.jpg"
+
 const getProgramImageUrl = (program) => {
-  console.log("[Programs] getProgramImageUrl", { program }, typeof program)
   if (!program || typeof program !== "object") return ""
 
   return String(
@@ -983,7 +985,9 @@ function Programs() {
   const selectedProgram = useMemo(
     () => {
       const found = programs.find((program) => program.id === selectedProgramId)
-      return found ?? programs[0] ?? null
+      if (found) return found
+      const backendDefault = programs.find((program) => program.is_default === true)
+      return backendDefault ?? null
     }, [programs, selectedProgramId])
 
   useEffect(() => {
@@ -1139,7 +1143,7 @@ function Programs() {
     selectedProgramOwnerId !== undefined &&
     String(currentUserId) === String(selectedProgramOwnerId)
   const canEditSelectedProgram = Boolean(selectedProgramId && currentUsername && (ownerMissing || ownerMatchesByUsername || ownerMatchesById))
-  const selectedProgramImageUrl = getProgramImageUrl(selectedProgramDetails) || getProgramImageUrl(selectedProgram) || editImagePreview
+  const selectedProgramImageUrl = getProgramImageUrl(selectedProgramDetails) || getProgramImageUrl(selectedProgram) || editImagePreview || getDefaultProgramImageUrl()
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }))
     setCurrentPage(1)
