@@ -2069,8 +2069,8 @@ function Programs() {
                   {editImagePreview ? "+ Upload" : "+ Upload"}
                 </label>
               </div>
-
-              <label className="programs-modal-field">
+              <div className="programs-modal-field">  
+              <label>
                 <span>Name</span>
                 <input
                   type="text"
@@ -2083,7 +2083,7 @@ function Programs() {
                 {createFieldErrors.name ? <small className="programs-modal-error">{createFieldErrors.name}</small> : null}
               </label>
 
-              <label className="programs-modal-field">
+              <label>
                 <span>Description</span>
                 <textarea
                   name="description"
@@ -2093,11 +2093,12 @@ function Programs() {
                   rows={3}
                   required
                 />
+              
                 {createFieldErrors.description ? <small className="programs-modal-error">{createFieldErrors.description}</small> : null}
               </label>
-
+              </div>
               <div className="programs-modal-grid">
-                <label className="programs-modal-field">
+                <label>
                   <span>Difficulty</span>
                   <select
                     name="difficulty"
@@ -2115,7 +2116,7 @@ function Programs() {
                   {createFieldErrors.difficulty ? <small className="programs-modal-error">{createFieldErrors.difficulty}</small> : null}
                 </label>
 
-                <label className="programs-modal-field">
+                <label>
                   <span>Duration (weeks)</span>
                   <input
                     type="number"
@@ -2130,7 +2131,7 @@ function Programs() {
                   {createFieldErrors.duration_weeks ? <small className="programs-modal-error">{createFieldErrors.duration_weeks}</small> : null}
                 </label>
 
-                <label className="programs-modal-field">
+                <label>
                   <span>Category</span>
                   <select
                     name="category"
@@ -2148,7 +2149,7 @@ function Programs() {
                   {createFieldErrors.category ? <small className="programs-modal-error">{createFieldErrors.category}</small> : null}
                 </label>
 
-                <label className="programs-modal-field">
+                <label>
                   <span>Goal</span>
                   <select
                     name="goal"
@@ -2166,7 +2167,7 @@ function Programs() {
                   {createFieldErrors.goal ? <small className="programs-modal-error">{createFieldErrors.goal}</small> : null}
                 </label>
 
-                <label className="programs-modal-field">
+                <label>
                   <span>Equipment</span>
                   <MultiSelect
                     options={equipments}

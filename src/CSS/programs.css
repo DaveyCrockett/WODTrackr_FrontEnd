@@ -491,7 +491,7 @@
 .programs-modal {
   position: fixed;
   width: min(900px, 100%);
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100vh - 10rem);
   overflow: auto;
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -528,12 +528,27 @@
 
 .programs-modal-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.7rem;
+}
+
+.programs-modal-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 .programs-modal-field {
   display: grid;
+  gap: 0.35rem;
+  place-content: center;
+}
+
+.programs-modal-field label {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  align-items: center;
   gap: 0.35rem;
 }
 
