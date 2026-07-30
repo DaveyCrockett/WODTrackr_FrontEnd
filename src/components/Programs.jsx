@@ -588,7 +588,7 @@ const formatTimestamp = (value) => {
   return parsed.toLocaleString()
 }
 
-const getDefaultProgramImageUrl = () => "../assets/DefaultBanner.jpg"
+const getDefaultProgramImageUrl = () => "../src/assets/DefaultBanner.jpg"
 
 const getProgramImageUrl = (program) => {
   if (!program || typeof program !== "object") return ""
@@ -2050,7 +2050,7 @@ function Programs() {
                 <p className="programs-modal-error" role="alert">{createErrorMessage}</p>
               ) : null}
 
-              <div className="programs-banner-upload" id="create-gym-banner-btn">
+              <div className="programs-banner-upload">
                 {console.log("Create Program Image Preview", {selectedProgramImageUrl})}
                 {selectedProgramImageUrl ? (
                 <div className="programs-banner-preview">
@@ -2305,6 +2305,7 @@ function Programs() {
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               </button>
+              {console.log("Selected Program Image URL", {selectedProgramImageUrl})}
                {selectedProgramImageUrl ? (
                 <div className="programs-banner-preview">
                   <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
@@ -2329,7 +2330,7 @@ function Programs() {
               ) : null}
 
               {isDetailsEditMode ? (
-                <div className="programs-banner-upload">
+                <div className="programs-banner-upload" id="create-gym-banner-btn">
                   <input
                     id="edit-banner-input"
                     type="file"

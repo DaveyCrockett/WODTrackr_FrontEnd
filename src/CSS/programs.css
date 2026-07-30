@@ -377,17 +377,15 @@
 }
 
 .programs-banner-upload {
-  position: absolute;
-  top: 10rem;
-  left: 47rem;
+  position: relative;
 }
 
 #create-gym-banner-btn {
-  top: 8rem;
-  left: 50.5rem;
+  top: -5rem;
 }
 
 .programs-banner-upload-btn {
+  margin-top: 0.5rem;
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 8px;
