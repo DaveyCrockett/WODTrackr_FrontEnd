@@ -37,16 +37,23 @@
   overflow-y: auto;
   margin-top: 2px;
   padding: 0.5rem 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
 }
 
 .multiselect-label {
-  display: flex;
-  align-items: center;
   padding: 0.25rem 1rem;
   cursor: pointer;
   font-size: 1rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
 }
 
 .multiselect-label input[type="checkbox"] {
   margin-right: 0.5rem;
+}
+
+.multiselect-option {
+  
 }

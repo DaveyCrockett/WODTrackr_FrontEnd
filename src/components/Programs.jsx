@@ -2070,8 +2070,8 @@ function Programs() {
                 </label>
               </div>
               <div className="programs-modal-field">  
-              <label>
-                <span>Name</span>
+              <label id="program-title-label">
+                <span>Title</span>
                 <input
                   type="text"
                   name="name"
@@ -2083,14 +2083,16 @@ function Programs() {
                 {createFieldErrors.name ? <small className="programs-modal-error">{createFieldErrors.name}</small> : null}
               </label>
 
-              <label>
+              <label id="program-description-label">
                 <span>Description</span>
                 <textarea
                   name="description"
                   value={createFormValues.description}
                   onChange={handleCreateFieldChange}
                   placeholder="What this program is for"
+                  maxLength={500}
                   rows={3}
+                  style={{ resize: "none", width: "500px", minHeight: "100px", boxSizing: "border-box" }}
                   required
                 />
               
@@ -2347,7 +2349,7 @@ function Programs() {
               ) : null}
 
               <label className="programs-modal-field">
-                <span>Name</span>
+                <span>Title</span>
                 <input
                   type="text"
                   name="name"

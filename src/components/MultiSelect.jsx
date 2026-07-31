@@ -96,7 +96,7 @@ export default function MultiSelect({ options, value, onChange, disabled, name, 
                 onChange={() => handleCheckboxChange(option.value)}
                 disabled={disabled}
               />
-              {option.label}
+              <div className="multiselect-option">{option.label}</div>
             </label>
           ))}
         </div>

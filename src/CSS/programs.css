@@ -541,14 +541,17 @@
 .programs-modal-field {
   display: grid;
   gap: 0.35rem;
-  place-content: center;
+  /* place-content: center; */
+  grid-template-columns: 100%;
+  
 }
 
 .programs-modal-field label {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   height: 100%;
-  align-items: center;
+  place-content: stretch;
+  align-items: left;
   gap: 0.35rem;
 }
 
@@ -556,6 +559,16 @@
   font-size: 0.88rem;
   font-weight: 600;
   color: #334155;
+}
+
+#program-title-label {
+  width: 50%;
+  margin-left: 14rem;
+}
+
+#program-description-label {
+  width: 50%;
+  margin-left: 12rem;
 }
 
 .programs-modal-field input,
@@ -848,10 +861,6 @@
 
   .programs-fab:hover {
     background: #1e40af;
-  }
-
-  .programs-modal-grid {
-    grid-template-columns: 1fr;
   }
 
   .programs-plan-controls {
