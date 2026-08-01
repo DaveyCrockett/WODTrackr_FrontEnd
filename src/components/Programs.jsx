@@ -1054,12 +1054,12 @@ function Programs() {
   const exerciseOptions = useMemo(() => {
     return [...exerciseLibrary]
       .filter((exercise) => Number.isFinite(Number(exercise?.id)))
-      .sort((a, b) => String(a?.name ?? "").localeCompare(String(b?.name ?? "")))
+      .sort((a, b) => String(a?.title ?? "").localeCompare(String(b?.title ?? "")))
   }, [exerciseLibrary])
   const exerciseNameById = useMemo(
     () =>
       exerciseOptions.reduce((accumulator, exercise) => {
-        accumulator[Number(exercise.id)] = String(exercise.name || `Exercise #${exercise.id}`)
+        accumulator[Number(exercise.id)] = String(exercise.title || `Exercise #${exercise.id}`)
         return accumulator
       }, {}),
     [exerciseOptions],
@@ -1203,6 +1203,7 @@ function Programs() {
       const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
         if (weekEntry.week_number !== weekNumber) return weekEntry
         if (weekEntry.exercise_ids.includes(exerciseId)) return weekEntry
+        console.log(`Adding exercise ID ${exerciseId} to week ${weekNumber} of workout plan.`)
         return {
           ...weekEntry,
           exercise_ids: [...weekEntry.exercise_ids, exerciseId],
@@ -1231,8 +1232,8 @@ function Programs() {
   const validateCreateForm = () => {
     const nextErrors = {}
 
-    if (!createFormValues.name.trim()) {
-      nextErrors.name = "Program name is required."
+    if (!createFormValues.title.trim()) {
+      nextErrors.title = "Program title is required."
     }
     if (!createFormValues.description.trim()) {
       nextErrors.description = "Description is required."
@@ -1278,7 +1279,7 @@ function Programs() {
       const normalizedWorkoutPlan = buildWorkoutPlanForDuration(createFormValues.duration_weeks, workoutPlan)
       const selectedExerciseIds = [...new Set(normalizedWorkoutPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))]
       const payload = {
-        name: createFormValues.name.trim(),
+        title: createFormValues.title.trim(),
         description: createFormValues.description.trim(),
         difficulty: createFormValues.difficulty,
         duration_weeks: Number(createFormValues.duration_weeks),
@@ -1335,7 +1336,7 @@ function Programs() {
       const responseData = error?.response?.data
       if (responseData && typeof responseData === "object") {
         const knownFields = [
-          "name",
+          "title",
           "description",
           "difficulty",
           "duration_weeks",
@@ -1380,8 +1381,8 @@ function Programs() {
   const validateEditForm = () => {
     const nextErrors = {}
 
-    if (!editFormValues.name.trim()) {
-      nextErrors.name = "Program name is required."
+    if (!editFormValues.title.trim()) {
+      nextErrors.title = "Program title is required."
     }
     if (!editFormValues.description.trim()) {
       nextErrors.description = "Description is required."
@@ -2225,7 +2226,7 @@ function Programs() {
                       <option value="">Select exercise</option>
                       {exerciseOptions.map((exercise) => (
                         <option key={exercise.id} value={String(exercise.id)}>
-                          {exercise.name}
+                          {exercise.title}
                         </option>
                       ))}
                     </select>
@@ -2253,6 +2254,7 @@ function Programs() {
                         ) : (
                           <ul className="programs-plan-exercise-list">
                             {weekEntry.exercise_ids.map((exerciseId) => (
+                              console.log("Rendering exercise list item", { weekNumber: weekEntry.week_number, exerciseId }),
                               <li key={`${weekEntry.week_number}-${exerciseId}`}>
                                 <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
                                 <button
