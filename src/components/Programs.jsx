@@ -341,7 +341,7 @@ const buildWorkoutPlanFromProgram = (program) => {
 }
 
 const EMPTY_PROGRAM_FORM_VALUES = {
-  name: "",
+  title: "",
   description: "",
   difficulty: "",
   duration_weeks: "",
@@ -353,7 +353,7 @@ const EMPTY_PROGRAM_FORM_VALUES = {
 }
 
 const buildProgramFormValues = (program) => ({
-  name: String(program?.name ?? ""),
+  title: String(program?.title ?? ""),
   description: String(program?.description ?? ""),
   difficulty: program?.difficulty ?? "",
   duration_weeks:
@@ -1143,6 +1143,7 @@ function Programs() {
     selectedProgramOwnerId !== undefined &&
     String(currentUserId) === String(selectedProgramOwnerId)
   const canEditSelectedProgram = Boolean(selectedProgramId && currentUsername && (ownerMissing || ownerMatchesByUsername || ownerMatchesById))
+  const createProgramImageUrl = editImagePreview || getDefaultProgramImageUrl()
   const selectedProgramImageUrl = getProgramImageUrl(selectedProgramDetails) || getProgramImageUrl(selectedProgram) || editImagePreview || getDefaultProgramImageUrl()
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }))
@@ -1172,11 +1173,21 @@ function Programs() {
     setCreateErrorMessage("")
     setCreatePlanWeek(1)
     setCreatePlanExerciseId("")
+    setEditImageFile(null)
+    setEditImagePreview("")
+    if (editImageInputRef.current) {
+      editImageInputRef.current.value = ""
+    }
     setIsCreateModalOpen(true)
   }
 
 
   const handleCloseCreateModal = () => {
+    setEditImageFile(null)
+    setEditImagePreview("")
+    if (editImageInputRef.current) {
+      editImageInputRef.current.value = ""
+    }
     setIsCreateModalOpen(false)
   }
 
@@ -1186,6 +1197,7 @@ function Programs() {
 
     setCreateFormValues((prev) => {
       const nextFormValues = { ...prev, [name]: nextValue }
+      console.log(`Updated create form field "${name}" to value:`, nextValue)
       if (name === "duration_weeks") {
         nextFormValues.workout_plan = buildWorkoutPlanForDuration(nextValue, prev.workout_plan)
       }
@@ -1291,8 +1303,9 @@ function Programs() {
         workout_plan: normalizedWorkoutPlan,
         program_image: createFormValues.program_image,
       }
-
       const response = await axios.post(API_URL, payload, buildRequestConfig())
+      console.log("Program creation response:", response)
+      
       const createdProgram = normalizeProgramDetailPayload(response?.data)
       if (createdProgram?.id) {
         const itemsPayload = buildProgramItemsFromWorkoutPlan(normalizedWorkoutPlan)
@@ -1585,7 +1598,7 @@ function Programs() {
       }
       const existingWorkoutPlan = buildWorkoutPlanFromProgram(currentProgram)
       const payload = {
-        name: editFormValues.name.trim(),
+        title: editFormValues.title.trim(),
         description: editFormValues.description.trim(),
         difficulty: editFormValues.difficulty,
         duration_weeks: Number(editFormValues.duration_weeks),
@@ -1728,7 +1741,7 @@ function Programs() {
       const responseData = error?.response?.data
       if (responseData && typeof responseData === "object") {
         const knownFields = [
-          "name",
+          "title",
           "description",
           "difficulty",
           "duration_weeks",
@@ -2043,7 +2056,7 @@ function Programs() {
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               </button>
-              <h2 className="programs-modal-title">Create New Program</h2>
+              <h2 className="programs-modal-title" id="create-new-program-header">Create New Program</h2>
             </header>
 
             <form className="programs-modal-form" onSubmit={handleCreateProgram}>
@@ -2052,10 +2065,9 @@ function Programs() {
               ) : null}
 
               <div className="programs-banner-upload">
-                {console.log("Create Program Image Preview", {selectedProgramImageUrl})}
-                {selectedProgramImageUrl ? (
+                {createProgramImageUrl ? (
                 <div className="programs-banner-preview">
-                  <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
+                  <img src={createProgramImageUrl} alt="Program banner" className="programs-banner-img" />
                 </div>
                 ) : null}
                 <input
@@ -2075,13 +2087,13 @@ function Programs() {
                 <span>Title</span>
                 <input
                   type="text"
-                  name="name"
-                  value={createFormValues.name}
+                  name="title"
+                  value={createFormValues.title}
                   onChange={handleCreateFieldChange}
                   placeholder="Program name"
                   required
                 />
-                {createFieldErrors.name ? <small className="programs-modal-error">{createFieldErrors.name}</small> : null}
+                {createFieldErrors.title ? <small className="programs-modal-error">{createFieldErrors.title}</small> : null}
               </label>
 
               <label id="program-description-label">
@@ -2317,7 +2329,7 @@ function Programs() {
                 </div>
               ) : null}
               <h2 className="programs-modal-title">
-                {selectedProgramDetails?.name || selectedProgram?.name || "Program Details"}
+                {selectedProgramDetails?.title || selectedProgram?.title || "Program Details"}
               </h2>
             </header>
 
@@ -2354,14 +2366,14 @@ function Programs() {
                 <span>Title</span>
                 <input
                   type="text"
-                  name="name"
-                  value={editFormValues.name}
+                  name="title"
+                  value={editFormValues.title}
                   onChange={handleEditFieldChange}
                   placeholder="Program name"
                   readOnly={!isDetailsEditMode}
                   required
                 />
-                {editFieldErrors.name ? <small className="programs-modal-error">{editFieldErrors.name}</small> : null}
+                {editFieldErrors.title ? <small className="programs-modal-error">{editFieldErrors.title}</small> : null}
               </label>
 
               <label className="programs-modal-field">

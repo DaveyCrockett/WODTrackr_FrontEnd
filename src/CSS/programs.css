@@ -378,6 +378,7 @@
 
 .programs-banner-upload {
   position: relative;
+  top: -5rem;
 }
 
 #create-gym-banner-btn {
@@ -508,6 +509,11 @@
   justify-content: space-between; 
 }
 
+#create-new-program-header{
+  position: relative;
+  top: 200px;
+}
+
 .programs-modal-header #gym-banner-btn {
   display: flex;
   align-items: center;
@@ -615,6 +621,7 @@
 
 /* 2. CLOSE BUTTON */
 .programs-modal-close-btn {
+  z-index: 1; /* Ensures the "X" text is above the background overlay */
   border: 1px solid transparent;
   padding: 0.55rem 0.8rem;
   background: transparent;
