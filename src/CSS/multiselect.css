@@ -1,7 +1,7 @@
 .multiselect-dropdown {
   position: relative;
   display: inline-block;
-  width: 100%;
+  width: 80%;
 }
 
 .multiselect-toggle {
@@ -12,7 +12,7 @@
   background: #fff;
   text-align: left;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: .9rem;
   position: relative;
 }
 
@@ -29,7 +29,7 @@
   left: 0;
   right: 0;
   z-index: 10;
-  background: #fff;
+  background: #ffffff;
   border: 1px solid #ccc;
   border-radius: 0 0 4px 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -37,23 +37,19 @@
   overflow-y: auto;
   margin-top: 2px;
   padding: 0.5rem 0;
-  display: grid;
-  grid-template-columns: 1fr;
+  /* display: grid;
+  grid-template-columns: 1fr; */
   align-items: center;
 }
 
-.multiselect-label {
+.multiselect-list .multiselect-label {
   padding: 0.25rem 1rem;
   cursor: pointer;
   font-size: 1rem;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: row;
 }
 
 .multiselect-label input[type="checkbox"] {
   margin-right: 0.5rem;
-}
-
-.multiselect-option {
-  
 }
