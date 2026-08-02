@@ -834,6 +834,12 @@ function Programs() {
   const [durationRange, setDurationRange] = useState({ min: DEFAULT_DURATION_MIN, max: DEFAULT_DURATION_MAX })
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
 
+  // Schedule-to-calendar state
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false)
+  const [scheduleStartDate, setScheduleStartDate] = useState("")
+  const [scheduleError, setScheduleError] = useState("")
+  const [scheduleSuccess, setScheduleSuccess] = useState("")
+
   useEffect(() => {
     const loadPrograms = async () => {
       setIsLoading(true)
@@ -1841,6 +1847,112 @@ function Programs() {
     return "programs-badge"
   }
 
+  const handleOpenScheduleModal = () => {
+    const todayStr = new Date().toISOString().slice(0, 10)
+    setScheduleStartDate(todayStr)
+    setScheduleError("")
+    setScheduleSuccess("")
+    setIsScheduleModalOpen(true)
+  }
+
+  const handleCloseScheduleModal = () => {
+    setIsScheduleModalOpen(false)
+    setScheduleError("")
+    setScheduleSuccess("")
+  }
+
+  const handleScheduleProgram = () => {
+    if (!scheduleStartDate) {
+      setScheduleError("Please select a start date.")
+      return
+    }
+
+    const program = programDetailsById[selectedProgramId] ?? selectedProgram
+    if (!program) {
+      setScheduleError("Program details not available.")
+      return
+    }
+
+    const plan = Array.isArray(detailWorkoutPlan) && detailWorkoutPlan.length > 0
+      ? detailWorkoutPlan
+      : buildWorkoutPlanFromProgram(program)
+
+    if (plan.length === 0) {
+      setScheduleError("This program has no workout plan to schedule.")
+      return
+    }
+
+    const programName = String(program?.name || program?.title || "Unnamed Program")
+    const programId = program.id
+
+    // Parse start date without timezone shift
+    const [sy, sm, sd] = scheduleStartDate.split("-").map(Number)
+    const startDate = new Date(sy, sm - 1, sd)
+
+    const toDateKey = (d) => {
+      const year = d.getFullYear()
+      const month = String(d.getMonth() + 1).padStart(2, "0")
+      const day = String(d.getDate()).padStart(2, "0")
+      return `${year}-${month}-${day}`
+    }
+
+    const generateEntryId = () => `prog-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    const CALENDAR_KEY = "wodtrackrCalendarEntries"
+    let existingEntries = {}
+    try {
+      const raw = localStorage.getItem(CALENDAR_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === "object") {
+          existingEntries = parsed
+        }
+      }
+    } catch {
+      existingEntries = {}
+    }
+
+    const nextEntries = { ...existingEntries }
+
+    for (const weekEntry of plan) {
+      const weekNumber = Number(weekEntry?.week_number)
+      if (!Number.isFinite(weekNumber) || weekNumber < 1) continue
+
+      const exerciseIds = Array.isArray(weekEntry?.exercise_ids)
+        ? weekEntry.exercise_ids.map(Number).filter((id) => Number.isFinite(id))
+        : []
+
+      // Place workout on Monday of that week (startDate is day 1 of week 1)
+      const weekOffset = (weekNumber - 1) * 7
+      const workoutDate = new Date(startDate)
+      workoutDate.setDate(startDate.getDate() + weekOffset)
+      const dateKey = toDateKey(workoutDate)
+
+      const newEntry = {
+        id: generateEntryId(),
+        title: `${programName} – Week ${weekNumber}`,
+        time: "",
+        notes: `Week ${weekNumber} of ${programName} (${plan.length}-week program)`,
+        programId,
+        programName,
+        weekNumber,
+        exerciseIds,
+      }
+
+      nextEntries[dateKey] = [...(nextEntries[dateKey] || []), newEntry]
+    }
+
+    try {
+      localStorage.setItem(CALENDAR_KEY, JSON.stringify(nextEntries))
+    } catch {
+      setScheduleError("Unable to save to calendar. Storage may be full.")
+      return
+    }
+
+    setScheduleSuccess(`Scheduled ${plan.length} week${plan.length !== 1 ? "s" : ""} starting ${scheduleStartDate}. Check your Calendar!`)
+    setScheduleError("")
+  }
+
   useEffect(() => {
     if (!selectedProgramId) return
     if (isDetailsEditMode) return
@@ -2629,6 +2741,16 @@ function Programs() {
                     Edit Program
                   </button>
                 ) : null}
+                {!isDetailsEditMode ? (
+                  <button
+                    type="button"
+                    className="programs-schedule-btn"
+                    onClick={handleOpenScheduleModal}
+                    disabled={detailLoadingId === selectedProgramId}
+                  >
+                    Schedule to Calendar
+                  </button>
+                ) : null}
                 {canEditSelectedProgram && isDetailsEditMode ? (
                   <button
                     type="button"
@@ -2646,6 +2768,84 @@ function Programs() {
                 ) : null}
               </div>
             </form>
+          </aside>
+        </div>
+      ) : null}
+
+      {isScheduleModalOpen ? (
+        <div className="programs-modal-backdrop" role="presentation" onClick={handleCloseScheduleModal}>
+          <aside
+            className="programs-modal programs-schedule-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Schedule program to calendar"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="programs-modal-header">
+              <button type="button" className="programs-btn-base programs-modal-secondary-btn" onClick={handleCloseScheduleModal} aria-label="Close schedule modal">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+              <h2 className="programs-modal-title">Schedule to Calendar</h2>
+            </header>
+
+            <div className="programs-modal-form">
+              <p className="programs-schedule-description">
+                Choose a start date for <strong>{(programDetailsById[selectedProgramId] ?? selectedProgram)?.name || (programDetailsById[selectedProgramId] ?? selectedProgram)?.title || "this program"}</strong>.
+                One workout entry will be added to your calendar for each week of the program.
+              </p>
+
+              {scheduleError ? (
+                <p className="programs-modal-error" role="alert">{scheduleError}</p>
+              ) : null}
+
+              {scheduleSuccess ? (
+                <p className="programs-schedule-success" role="status">{scheduleSuccess}</p>
+              ) : null}
+
+              {!scheduleSuccess ? (
+                <>
+                  <label className="programs-modal-field programs-schedule-date-field">
+                    <span>Start Date</span>
+                    <input
+                      type="date"
+                      value={scheduleStartDate}
+                      onChange={(e) => {
+                        setScheduleStartDate(e.target.value)
+                        setScheduleError("")
+                      }}
+                    />
+                  </label>
+
+                  <p className="programs-plan-helper">
+                    {detailWorkoutPlan.length > 0
+                      ? `This will create ${detailWorkoutPlan.length} calendar entr${detailWorkoutPlan.length !== 1 ? "ies" : "y"} (one per week).`
+                      : "No workout plan found. Please add weeks to this program first."}
+                  </p>
+
+                  <div className="programs-modal-actions">
+                    <button
+                      type="button"
+                      className="programs-modal-primary-btn"
+                      onClick={handleScheduleProgram}
+                      disabled={detailWorkoutPlan.length === 0}
+                    >
+                      Confirm Schedule
+                    </button>
+                    <button type="button" className="programs-modal-secondary-btn" onClick={handleCloseScheduleModal}>
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="programs-modal-actions">
+                  <button type="button" className="programs-modal-primary-btn" onClick={handleCloseScheduleModal}>
+                    Done
+                  </button>
+                </div>
+              )}
+            </div>
           </aside>
         </div>
       ) : null}

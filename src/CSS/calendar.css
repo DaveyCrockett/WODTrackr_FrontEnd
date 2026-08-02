@@ -8,6 +8,7 @@
     align-items: center;
     gap: 1rem;
     margin-bottom: 1rem;
+    flex-wrap: wrap;
 }
 
 .calendar-header h1 {
@@ -20,6 +21,35 @@
     color: #475569;
 }
 
+/* View toggle (Month / Week) */
+.calendar-view-toggle {
+    display: flex;
+    gap: 0;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.calendar-view-btn {
+    border: none;
+    border-radius: 0;
+    padding: 0.45rem 0.85rem;
+    background: #ffffff;
+    color: #475569;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.calendar-view-btn:hover {
+    background: #f8fafc;
+}
+
+.calendar-view-btn.is-active {
+    background: #1d4ed8;
+    color: #ffffff;
+}
+
 .calendar-nav-controls {
     display: flex;
     align-items: center;
@@ -28,7 +58,7 @@
 
 .calendar-nav-controls p {
     margin: 0;
-    min-width: 130px;
+    min-width: 160px;
     text-align: center;
     font-weight: 700;
     color: #0f172a;
@@ -268,6 +298,370 @@
     color: #b91c1c;
 }
 
+/* Editor heading with Add button */
+.calendar-editor-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.85rem;
+}
+
+.calendar-editor-heading h2 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.1rem;
+}
+
+.calendar-add-btn {
+    border: 1px solid #1d4ed8;
+    border-radius: 8px;
+    padding: 0.35rem 0.7rem;
+    background: #1d4ed8;
+    color: #ffffff;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.calendar-add-btn:hover {
+    background: #1e40af;
+}
+
+/* Form error message */
+.calendar-form-error {
+    color: #b91c1c;
+    font-size: 0.85rem;
+    margin: 0 0 0.5rem;
+}
+
+/* Empty state with inline link */
+.calendar-empty-state {
+    margin: 0;
+    color: #64748b;
+}
+
+.calendar-empty-add-link {
+    background: none;
+    border: none;
+    color: #1d4ed8;
+    cursor: pointer;
+    font-weight: 600;
+    padding: 0;
+    font-size: inherit;
+    text-decoration: underline;
+}
+
+/* Program entry badge */
+.calendar-entry-program-badge {
+    display: inline-block;
+    margin-top: 0.3rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 6px;
+    background: #dbeafe;
+    color: #1e40af;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+/* Program info line in detail panel */
+.calendar-entry-program-info {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0.35rem 0 0;
+    color: #334155;
+    font-size: 0.9rem;
+}
+
+/* Program-linked entry item highlight */
+.calendar-entry-item.is-program {
+    border-left: 3px solid #3b82f6;
+}
+
+/* Entry count with program indicator */
+.calendar-entry-count.has-program {
+    color: #1e40af;
+}
+
+/* Entry actions row */
+.calendar-entry-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.6rem;
+}
+
+.calendar-entry-actions button {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0.35rem 0.6rem;
+    background: #ffffff;
+    color: #0f172a;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.calendar-entry-actions button:hover {
+    background: #f8fafc;
+}
+
+.calendar-entry-actions .calendar-btn-delete {
+    border-color: #fca5a5;
+    color: #b91c1c;
+}
+
+.calendar-entry-actions .calendar-btn-delete:hover {
+    background: #fef2f2;
+}
+
+/* ── Week view ─────────────────────────────────── */
+.calendar-week-day-header {
+    border: none;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
+    padding: 0.6rem 0.3rem;
+    background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    cursor: pointer;
+    font: inherit;
+}
+
+.calendar-week-day-header:last-child {
+    border-right: none;
+}
+
+.calendar-week-day-header.is-today .calendar-week-date {
+    color: #1d4ed8;
+    font-weight: 800;
+}
+
+.calendar-week-day-header.is-selected {
+    background: #dbeafe;
+}
+
+.calendar-week-label {
+    font-size: 0.8rem;
+    color: #64748b;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.calendar-week-date {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.calendar-week-body {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    min-height: 480px;
+}
+
+.calendar-week-col {
+    border-right: 1px solid #e2e8f0;
+    padding: 0.5rem 0.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    cursor: pointer;
+    background: #ffffff;
+}
+
+.calendar-week-col:last-child {
+    border-right: none;
+}
+
+.calendar-week-col.is-selected {
+    background: #eff6ff;
+}
+
+.calendar-week-col:hover {
+    background: #f8fafc;
+}
+
+.calendar-week-col.is-selected:hover {
+    background: #dbeafe;
+}
+
+.calendar-week-empty {
+    margin: 0;
+    color: #cbd5e1;
+    text-align: center;
+    font-size: 1.2rem;
+}
+
+.calendar-week-entry {
+    width: 100%;
+    text-align: left;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.3rem 0.4rem;
+    background: #ffffff;
+    cursor: pointer;
+    font: inherit;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    font-size: 0.8rem;
+    overflow: hidden;
+}
+
+.calendar-week-entry:hover {
+    background: #f8fafc;
+}
+
+.calendar-week-entry.is-program {
+    border-left: 3px solid #3b82f6;
+    background: #eff6ff;
+}
+
+.calendar-week-entry.is-program:hover {
+    background: #dbeafe;
+}
+
+.calendar-week-entry-time {
+    color: #64748b;
+    font-size: 0.75rem;
+}
+
+.calendar-week-entry-title {
+    color: #0f172a;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Program event modal ───────────────────────── */
+.calendar-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    padding: 1rem;
+}
+
+.calendar-modal {
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+    width: 100%;
+    max-width: 480px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.calendar-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 1.2rem 1.2rem 0.6rem;
+    border-bottom: 1px solid #e2e8f0;
+    gap: 0.5rem;
+}
+
+.calendar-modal-header h2 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.15rem;
+}
+
+.calendar-modal-close-btn {
+    border: none;
+    background: none;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 1.1rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+
+.calendar-modal-close-btn:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+.calendar-modal-body {
+    padding: 1rem 1.2rem 1.2rem;
+    display: grid;
+    gap: 0.6rem;
+}
+
+.calendar-modal-detail {
+    margin: 0;
+    color: #334155;
+    font-size: 0.95rem;
+}
+
+.calendar-modal-exercises h3 {
+    margin: 0 0 0.4rem;
+    color: #0f172a;
+    font-size: 0.95rem;
+}
+
+.calendar-modal-exercises ul {
+    list-style: disc;
+    margin: 0;
+    padding-left: 1.25rem;
+    display: grid;
+    gap: 0.2rem;
+}
+
+.calendar-modal-exercises li {
+    color: #334155;
+    font-size: 0.9rem;
+}
+
+.calendar-modal-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.4rem;
+}
+
+.calendar-modal-actions button {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0.45rem 0.8rem;
+    background: #ffffff;
+    color: #0f172a;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.calendar-modal-actions button:hover {
+    background: #f8fafc;
+}
+
+.calendar-modal-actions .calendar-btn-delete {
+    border-color: #fca5a5;
+    color: #b91c1c;
+}
+
+.calendar-modal-actions .calendar-btn-delete:hover {
+    background: #fef2f2;
+}
+
+/* ── Schedule indicator on month cell ─────────── */
+.calendar-cell-program-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #3b82f6;
+    margin-top: auto;
+}
+
 @media (max-width: 1080px) {
     .calendar-layout {
         grid-template-columns: 1fr;
@@ -286,5 +680,13 @@
 
     .calendar-cell {
         min-height: 74px;
+    }
+
+    .calendar-week-body {
+        min-height: 300px;
+    }
+
+    .calendar-week-entry-title {
+        font-size: 0.7rem;
     }
 }
