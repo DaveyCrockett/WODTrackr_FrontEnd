@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import React from "react"
-import { render, screen, waitFor, within } from "@testing-library/react"
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import axios from "axios"
 import Programs from "../components/Programs"
@@ -47,6 +47,122 @@ describe("Programs Component", () => {
         return JSON.stringify({ username: "coach", authToken: "token" })
       }
       return null
+    })
+  })
+
+  it("adds a program to the calendar when a start date is selected", async () => {
+    const listedProgram = {
+      ...mockProgram,
+      duration_weeks: 2,
+      equipment: ["barbell"],
+      exercises: [{ id: 101 }],
+      workout_plan: buildWorkoutPlan(2),
+    }
+
+    axios.get.mockImplementation((url) => {
+      if (url === API_URL) return Promise.resolve({ data: { data: [listedProgram] } })
+      if (url === `${API_URL}choices/`) return Promise.resolve(mockChoicesResponse)
+      if (url === `${API_URL}1/`) {
+        return Promise.resolve({
+          data: {
+            ...listedProgram,
+            equipment: [{ id: 9, name: "barbell" }],
+            exercises: [{ id: 101 }],
+            workout_plan: buildWorkoutPlan(2),
+          },
+        })
+      }
+      if (url === `${API_URL}1/item/`) {
+        return Promise.resolve({
+          data: {
+            data: [
+              { id: 1, exercise: 101, week: 1, day: 1, position: 1 },
+              { id: 2, exercise: 101, week: 2, day: 1, position: 1 },
+            ],
+          },
+        })
+      }
+      return Promise.resolve({ data: {} })
+    })
+
+    let storedCalendarData = null
+    vi.mocked(localStorage.setItem).mockImplementation((key, value) => {
+      if (key === "wodtrackrCalendarEntries") {
+        storedCalendarData = value
+      }
+    })
+
+    render(<Programs />)
+
+    await screen.findByText("Strength Cycle")
+    await userEvent.click(screen.getByRole("button", { name: "View Details" }))
+    await screen.findByRole("dialog")
+
+    const addToCalendarBtn = await screen.findByRole("button", { name: "Add to Calendar" })
+    await userEvent.click(addToCalendarBtn)
+
+    const scheduleSection = await screen.findByRole("region", { name: "Schedule to Calendar" })
+    const dateInput = within(scheduleSection).getByLabelText("Start Date")
+    fireEvent.change(dateInput, { target: { value: "2025-03-10" } })
+
+    await userEvent.click(within(scheduleSection).getByRole("button", { name: "Schedule Program" }))
+
+    await waitFor(() => {
+      expect(storedCalendarData).not.toBeNull()
+      const entries = JSON.parse(storedCalendarData)
+      const dates = Object.keys(entries)
+      expect(dates).toHaveLength(2)
+      expect(entries["2025-03-10"]).toBeDefined()
+      expect(entries["2025-03-10"][0].title).toBe("Strength Cycle – Week 1")
+    })
+  })
+
+  it("shows a success message after scheduling a program to the calendar", async () => {
+    const listedProgram = {
+      ...mockProgram,
+      duration_weeks: 1,
+      equipment: ["barbell"],
+      exercises: [{ id: 101 }],
+      workout_plan: buildWorkoutPlan(1),
+    }
+
+    axios.get.mockImplementation((url) => {
+      if (url === API_URL) return Promise.resolve({ data: { data: [listedProgram] } })
+      if (url === `${API_URL}choices/`) return Promise.resolve(mockChoicesResponse)
+      if (url === `${API_URL}1/`) {
+        return Promise.resolve({
+          data: {
+            ...listedProgram,
+            equipment: [{ id: 9, name: "barbell" }],
+            exercises: [{ id: 101 }],
+            workout_plan: buildWorkoutPlan(1),
+          },
+        })
+      }
+      if (url === `${API_URL}1/item/`) {
+        return Promise.resolve({
+          data: { data: [{ id: 1, exercise: 101, week: 1, day: 1, position: 1 }] },
+        })
+      }
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<Programs />)
+
+    await screen.findByText("Strength Cycle")
+    await userEvent.click(screen.getByRole("button", { name: "View Details" }))
+    await screen.findByRole("dialog")
+
+    await userEvent.click(await screen.findByRole("button", { name: "Add to Calendar" }))
+
+    const scheduleSection = await screen.findByRole("region", { name: "Schedule to Calendar" })
+    const dateInput = within(scheduleSection).getByLabelText("Start Date")
+    fireEvent.change(dateInput, { target: { value: "2025-06-01" } })
+
+    await userEvent.click(within(scheduleSection).getByRole("button", { name: "Schedule Program" }))
+
+    await waitFor(() => {
+      expect(screen.getByText("Strength Cycle has been added to your calendar!")).toBeInTheDocument()
     })
   })
 

@@ -833,6 +833,9 @@ function Programs() {
   const [equipmentChoices, setEquipmentChoices] = useState([])
   const [durationRange, setDurationRange] = useState({ min: DEFAULT_DURATION_MIN, max: DEFAULT_DURATION_MAX })
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
+  const [isSchedulingToCalendar, setIsSchedulingToCalendar] = useState(false)
+  const [scheduleStartDate, setScheduleStartDate] = useState("")
+  const [scheduleSuccessMessage, setScheduleSuccessMessage] = useState("")
 
   useEffect(() => {
     const loadPrograms = async () => {
@@ -1386,6 +1389,9 @@ function Programs() {
     setDetailPlanExerciseId("")
     setEditImageFile(null)
     setEditImagePreview("")
+    setIsSchedulingToCalendar(false)
+    setScheduleStartDate("")
+    setScheduleSuccessMessage("")
     if (editImageInputRef.current) {
       editImageInputRef.current.value = ""
     }
@@ -1839,6 +1845,67 @@ function Programs() {
     if (normalized === "advanced") return "programs-badge programs-badge-advanced"
     if (normalized === "alllevels") return "programs-badge programs-badge-all-levels"
     return "programs-badge"
+  }
+
+  const toCalendarDateKey = (dateValue) => {
+    const year = dateValue.getFullYear()
+    const month = String(dateValue.getMonth() + 1).padStart(2, "0")
+    const day = String(dateValue.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+  }
+
+  const handleScheduleProgram = () => {
+    if (!selectedProgramId || !scheduleStartDate) return
+
+    const program = programDetailsById[selectedProgramId] ?? selectedProgram
+    if (!program) return
+
+    const programName = program.name || program.title || "Program"
+    const workoutPlan = buildWorkoutPlanFromProgram(program)
+
+    if (workoutPlan.length === 0) return
+
+    const [year, month, day] = scheduleStartDate.split("-").map(Number)
+    const startDate = new Date(year, month - 1, day)
+
+    let entriesByDate = {}
+    try {
+      const stored = localStorage.getItem("wodtrackrCalendarEntries")
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (parsed && typeof parsed === "object") {
+          entriesByDate = parsed
+        }
+      }
+    } catch {
+      entriesByDate = {}
+    }
+
+    for (const weekEntry of workoutPlan) {
+      const weekNumber = weekEntry.week_number
+      const weekDate = new Date(startDate)
+      weekDate.setDate(weekDate.getDate() + (weekNumber - 1) * 7)
+
+      const dateKey = toCalendarDateKey(weekDate)
+      const exerciseNames = weekEntry.exercise_ids
+        .map((id) => exerciseNameById[id] || `Exercise #${id}`)
+        .join(", ")
+
+      const entry = {
+        id: `prog-${selectedProgramId}-w${weekNumber}-${Date.now()}`,
+        title: `${programName} – Week ${weekNumber}`,
+        notes: exerciseNames ? `Exercises: ${exerciseNames}` : "",
+      }
+
+      if (!entriesByDate[dateKey]) {
+        entriesByDate[dateKey] = []
+      }
+      entriesByDate[dateKey].push(entry)
+    }
+
+    localStorage.setItem("wodtrackrCalendarEntries", JSON.stringify(entriesByDate))
+    setScheduleSuccessMessage(`${programName} has been added to your calendar!`)
+    setIsSchedulingToCalendar(false)
   }
 
   useEffect(() => {
@@ -2618,7 +2685,59 @@ function Programs() {
                 </div>
               </section>
 
+              {!isDetailsEditMode && isSchedulingToCalendar ? (
+                <section className="programs-schedule-section" aria-label="Schedule to Calendar">
+                  <h3>Schedule to Calendar</h3>
+                  <p className="programs-plan-helper">
+                    Choose a start date. Each week of the program will be added as a separate calendar entry.
+                  </p>
+                  <label className="programs-modal-field">
+                    <span>Start Date</span>
+                    <input
+                      type="date"
+                      value={scheduleStartDate}
+                      onChange={(e) => setScheduleStartDate(e.target.value)}
+                    />
+                  </label>
+                  <div className="programs-schedule-actions">
+                    <button
+                      type="button"
+                      className="programs-modal-primary-btn"
+                      onClick={handleScheduleProgram}
+                      disabled={!scheduleStartDate}
+                    >
+                      Schedule Program
+                    </button>
+                    <button
+                      type="button"
+                      className="programs-calendar-cancel-btn"
+                      onClick={() => setIsSchedulingToCalendar(false)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </section>
+              ) : null}
+
+              {scheduleSuccessMessage ? (
+                <p className="programs-schedule-success" role="status">{scheduleSuccessMessage}</p>
+              ) : null}
+
               <div className="programs-modal-actions">
+                {!isDetailsEditMode ? (
+                  <button
+                    type="button"
+                    className="programs-calendar-btn"
+                    onClick={() => {
+                      setScheduleStartDate(toCalendarDateKey(new Date()))
+                      setScheduleSuccessMessage("")
+                      setIsSchedulingToCalendar((prev) => !prev)
+                    }}
+                    disabled={detailLoadingId === selectedProgramId}
+                  >
+                    Add to Calendar
+                  </button>
+                ) : null}
                 {canEditSelectedProgram && !isDetailsEditMode ? (
                   <button
                     type="button"
