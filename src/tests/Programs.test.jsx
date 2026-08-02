@@ -84,6 +84,9 @@ describe("Programs Component", () => {
     render(<Programs />)
 
     await screen.findByText("Strength Cycle")
+    await waitFor(() => {
+      expect(window.location.search).toBe("")
+    })
     await userEvent.click(screen.getByRole("button", { name: "View Details" }))
 
     const dialog = await screen.findByRole("dialog")
@@ -305,5 +308,76 @@ describe("Programs Component", () => {
 
     expect(axios.post).not.toHaveBeenCalled()
     expect(await screen.findByText("Each week in the workout plan must include at least 1 exercise.")).toBeInTheDocument()
+  })
+
+  it("starts checkout from details modal using program name as title fallback", async () => {
+    const listedProgram = {
+      ...mockProgram,
+      title: "",
+      name: "Strength Cycle",
+      created_by_username: "other-coach",
+      workout_plan: buildWorkoutPlan(1),
+      exercises: [{ id: 101 }],
+    }
+
+    axios.get.mockImplementation((url) => {
+      if (url === API_URL) return Promise.resolve({ data: { data: [listedProgram] } })
+      if (url === `${API_URL}choices/`) return Promise.resolve(mockChoicesResponse)
+      if (url === `${API_URL}1/`) return Promise.resolve({ data: listedProgram })
+      if (url === "/api/wodtrackr/exercises/") {
+        return Promise.resolve({ data: { data: [{ id: 101, name: "Back Squat" }] } })
+      }
+      if (url === `${API_URL}1/item/`) {
+        return Promise.resolve({ data: { data: [{ id: 1, exercise: 101, week: 1, day: 1 }] } })
+      }
+      return Promise.resolve({ data: {} })
+    })
+    axios.post.mockResolvedValue({ data: {} })
+
+    render(<Programs />)
+
+    await screen.findByText("Strength Cycle")
+    await userEvent.click(screen.getByRole("button", { name: "View Details" }))
+    await screen.findByRole("dialog")
+    await userEvent.click(screen.getByRole("button", { name: "Buy Program" }))
+
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalledWith(
+        "/api/wodtrackr/billing/checkout-session/",
+        expect.objectContaining({
+          program_id: 1,
+          program_title: "Strength Cycle",
+          program_name: "Strength Cycle",
+        }),
+        expect.anything(),
+      )
+    })
+    expect(await screen.findByText("Checkout session response did not include a redirect URL or session ID.")).toBeInTheDocument()
+  })
+
+  it("marks purchase from pending checkout id when success return has no programId", async () => {
+    window.history.replaceState({}, "", "/programs?checkout=success")
+    vi.mocked(localStorage.getItem).mockImplementation((key) => {
+      if (key === "wodtrackrUser") return JSON.stringify({ username: "coach", authToken: "token" })
+      if (key === "wodtrackrPendingCheckoutProgramId") return "1"
+      if (key === "wodtrackrPurchasedProgramIds") return "[]"
+      return null
+    })
+
+    axios.get.mockImplementation((url) => {
+      if (url === API_URL) return Promise.resolve({ data: { data: [mockProgram] } })
+      if (url === `${API_URL}choices/`) return Promise.resolve(mockChoicesResponse)
+      if (url === "/api/wodtrackr/exercises/") return Promise.resolve({ data: { data: [] } })
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<Programs />)
+
+    await screen.findByText("Strength Cycle")
+    await userEvent.click(screen.getByRole("button", { name: "View Details" }))
+    const dialog = await screen.findByRole("dialog")
+
+    expect(within(dialog).queryByRole("button", { name: "Buy Program" })).not.toBeInTheDocument()
+    expect(within(dialog).getByText("Purchased workout plan view.")).toBeInTheDocument()
   })
 })

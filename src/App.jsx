@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import './CSS/app.css'
 import Calendar from './components/Calendar'
 import Exercises from './components/Exercises'
@@ -10,6 +10,18 @@ import Profile from './components/Profile'
 import Programs from './components/Programs'
 import Register from './components/Register'
 import Settings from './components/Settings'
+
+function BillingReturnRedirect({ status }) {
+  const location = useLocation()
+  const query = new URLSearchParams(location.search)
+
+  if (!query.get('checkout')) {
+    query.set('checkout', status)
+  }
+
+  const nextQuery = query.toString()
+  return <Navigate to={`/programs${nextQuery ? `?${nextQuery}` : ''}`} replace />
+}
 
 function App() {
   return (
@@ -23,6 +35,8 @@ function App() {
           <Route path="exercises" element={<Exercises />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="programs" element={<Programs />} />
+          <Route path="billing/success" element={<BillingReturnRedirect status="success" />} />
+          <Route path="billing/cancel" element={<BillingReturnRedirect status="cancel" />} />
           <Route path="settings" element={<Settings />} />
           <Route path="help" element={<Help />} />
         </Route>

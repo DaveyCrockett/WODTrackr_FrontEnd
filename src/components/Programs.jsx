@@ -11,6 +11,7 @@ const STRIPE_CHECKOUT_API_URL = String(
   import.meta.env.VITE_CHECKOUT_SESSION_API_URL || "/api/wodtrackr/billing/checkout-session/",
 ).trim()
 const PURCHASED_PROGRAMS_STORAGE_KEY = "wodtrackrPurchasedProgramIds"
+const PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY = "wodtrackrPendingCheckoutProgramId"
 const PROGRAMS_PER_PAGE = 10
 const DEFAULT_DIFFICULTIES = ["All Levels", "Beginner", "Intermediate", "Advanced"]
 const DEFAULT_DURATION_MIN = 1
@@ -614,7 +615,48 @@ const savePurchasedProgramIds = (programIds) => {
   localStorage.setItem(PURCHASED_PROGRAMS_STORAGE_KEY, JSON.stringify(normalized))
 }
 
+const savePendingCheckoutProgramId = (programId) => {
+  const normalizedProgramId = Number(programId)
+  if (!Number.isFinite(normalizedProgramId)) {
+    localStorage.removeItem(PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY)
+    return
+  }
+  localStorage.setItem(PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY, String(normalizedProgramId))
+}
+
+const getPendingCheckoutProgramId = () => {
+  const rawValue = localStorage.getItem(PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY)
+  const programId = Number(rawValue)
+  return Number.isFinite(programId) ? programId : null
+}
+
+const clearPendingCheckoutProgramId = () => {
+  localStorage.removeItem(PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY)
+}
+
 const getStripePublishableKey = () => String(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "").trim()
+
+const getProgramCheckoutTitle = (programDetails, programSummary, formValues) =>
+  String(
+    formValues?.title ||
+      programDetails?.title ||
+      programDetails?.name ||
+      programSummary?.title ||
+      programSummary?.name ||
+      "Program",
+  ).trim()
+
+const parseCheckoutSessionResponse = (responseData) => {
+  const payload = responseData?.data ?? responseData
+  const checkoutUrl = String(
+    payload?.checkout_url ?? payload?.checkoutUrl ?? payload?.url ?? "",
+  ).trim()
+  const sessionId = String(
+    payload?.session_id ?? payload?.sessionId ?? payload?.id ?? "",
+  ).trim()
+
+  return { checkoutUrl, sessionId }
+}
 
 const buildCheckoutReturnUrl = (type, programId) => {
   const basePath = window.location.origin + window.location.pathname
@@ -901,16 +943,35 @@ function Programs() {
   useEffect(() => {
     const query = new URLSearchParams(window.location.search)
     const checkoutStatus = query.get("checkout")
-    const programId = Number(query.get("programId"))
-    if (checkoutStatus !== "success" || !Number.isFinite(programId)) return
+    const queryProgramIdRaw = query.get("programId")
+    const queryProgramId = queryProgramIdRaw === null ? Number.NaN : Number(queryProgramIdRaw)
+    const pendingProgramId = getPendingCheckoutProgramId()
+    const resolvedProgramId = Number.isFinite(queryProgramId) ? queryProgramId : pendingProgramId
+
+    if (checkoutStatus === "cancel") {
+      setCheckoutErrorMessage("Checkout was canceled. You can try again anytime.")
+      clearPendingCheckoutProgramId()
+      const nextUrl = `${window.location.origin}${window.location.pathname}`
+      window.history.replaceState({}, document.title, nextUrl)
+      return
+    }
+    if (checkoutStatus !== "success") return
+
+    if (!Number.isFinite(resolvedProgramId)) {
+      setCheckoutErrorMessage("Checkout completed. Re-open the program details to continue.")
+      const nextUrl = `${window.location.origin}${window.location.pathname}`
+      window.history.replaceState({}, document.title, nextUrl)
+      return
+    }
 
     setPurchasedProgramIds((prev) => {
-      const next = [...new Set([...prev, programId])]
+      const next = [...new Set([...prev, resolvedProgramId])]
       savePurchasedProgramIds(next)
       return next
     })
+    clearPendingCheckoutProgramId()
 
-    if (selectedProgramId === programId) {
+    if (selectedProgramId === resolvedProgramId) {
       setIsWorkoutPlanUnlocked(true)
       setCheckoutErrorMessage("")
     }
@@ -1861,17 +1922,19 @@ function Programs() {
     try {
       const successUrl = buildCheckoutReturnUrl("success", selectedProgramId)
       const cancelUrl = buildCheckoutReturnUrl("cancel", selectedProgramId)
+      const programTitle = getProgramCheckoutTitle(selectedProgramDetails, selectedProgram, editFormValues)
       const payload = {
         program_id: selectedProgramId,
-        program_title: editFormValues.title || selectedProgramDetails?.title || selectedProgram?.title || "Program",
+        program_title: programTitle,
+        program_name: programTitle,
         success_url: successUrl,
         cancel_url: cancelUrl,
       }
       const response = await axios.post(STRIPE_CHECKOUT_API_URL, payload, buildRequestConfig())
-      const checkoutUrl = String(response?.data?.checkout_url ?? response?.data?.url ?? "").trim()
-      const sessionId = String(response?.data?.session_id ?? "").trim()
+      const { checkoutUrl, sessionId } = parseCheckoutSessionResponse(response?.data)
 
       if (checkoutUrl) {
+        savePendingCheckoutProgramId(selectedProgramId)
         window.location.assign(checkoutUrl)
         return
       }
@@ -1884,8 +1947,10 @@ function Programs() {
         const { loadStripe } = await import("@stripe/stripe-js")
         const stripe = await loadStripe(publishableKey)
         if (!stripe) throw new Error("Unable to initialize Stripe checkout.")
+        savePendingCheckoutProgramId(selectedProgramId)
         const result = await stripe.redirectToCheckout({ sessionId })
         if (result?.error?.message) {
+          clearPendingCheckoutProgramId()
           throw new Error(result.error.message)
         }
         return
