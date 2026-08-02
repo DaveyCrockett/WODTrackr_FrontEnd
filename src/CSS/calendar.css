@@ -129,6 +129,14 @@
     background: #dbeafe;
 }
 
+.calendar-cell.is-current-week {
+    background: #f8fbff;
+}
+
+.calendar-cell.is-selected.is-current-week {
+    background: #dbeafe;
+}
+
 .calendar-cell.is-today .calendar-day-number {
     color: #1d4ed8;
 }

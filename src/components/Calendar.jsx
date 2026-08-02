@@ -1,57 +1,22 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
+import CalendarEventModal from "./CalendarEventModal"
+import useCalendarEntries from "../hooks/useCalendarEntries"
+import { dayLabels, fromDateKey, isDateInSameWeek, toDateKey } from "../utils/calendarUtils"
 import "../CSS/calendar.css"
 
-const STORAGE_KEY = "wodtrackrCalendarEntries"
-
-const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-
-const toDateKey = (dateValue) => {
-  const year = dateValue.getFullYear()
-  const month = String(dateValue.getMonth() + 1).padStart(2, "0")
-  const day = String(dateValue.getDate()).padStart(2, "0")
-  return `${year}-${month}-${day}`
-}
-
-const fromDateKey = (dateKey) => {
-  const [year, month, day] = dateKey.split("-").map(Number)
-  return new Date(year, month - 1, day)
-}
-
 function Calendar() {
-  const today = new Date()
+  const today = useMemo(() => new Date(), [])
   const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
   const [selectedDateKey, setSelectedDateKey] = useState(toDateKey(today))
-  const [entriesByDate, setEntriesByDate] = useState({})
+  const [entriesByDate] = useCalendarEntries()
   const [selectedEntryId, setSelectedEntryId] = useState(null)
-
-  useEffect(() => {
-    try {
-      const storedValue = localStorage.getItem(STORAGE_KEY)
-      if (storedValue) {
-        const parsed = JSON.parse(storedValue)
-        if (parsed && typeof parsed === "object") {
-          setEntriesByDate(parsed)
-        }
-      }
-    } catch {
-      setEntriesByDate({})
-    }
-  }, [])
+  const [modalEntryId, setModalEntryId] = useState(null)
 
   const selectedEntries = entriesByDate[selectedDateKey] || []
-  const selectedEntry = selectedEntries.find((entry) => entry.id === selectedEntryId) || null
-
-  useEffect(() => {
-    if (selectedEntries.length === 0) {
-      setSelectedEntryId(null)
-      return
-    }
-
-    const hasSelectedEntry = selectedEntries.some((entry) => entry.id === selectedEntryId)
-    if (!hasSelectedEntry) {
-      setSelectedEntryId(null)
-    }
-  }, [selectedDateKey, selectedEntries, selectedEntryId])
+  const activeSelectedEntryId = selectedEntries.some((entry) => entry.id === selectedEntryId) ? selectedEntryId : null
+  const activeModalEntryId = selectedEntries.some((entry) => entry.id === modalEntryId) ? modalEntryId : null
+  const selectedEntry = selectedEntries.find((entry) => entry.id === activeSelectedEntryId) || null
+  const modalEntry = selectedEntries.find((entry) => entry.id === activeModalEntryId) || null
 
   const monthLabel = currentMonth.toLocaleDateString(undefined, {
     month: "long",
@@ -130,15 +95,18 @@ function Calendar() {
               const entryCount = (entriesByDate[cell.dateKey] || []).length
               const isSelected = selectedDateKey === cell.dateKey
               const isToday = toDateKey(today) === cell.dateKey
+              const isCurrentWeek = isDateInSameWeek(cell.dateValue, today)
 
               return (
                 <button
                   type="button"
                   key={cell.dateKey}
-                  className={`calendar-cell${isSelected ? " is-selected" : ""}${isToday ? " is-today" : ""}`}
+                  className={`calendar-cell${isSelected ? " is-selected" : ""}${isToday ? " is-today" : ""}${isCurrentWeek ? " is-current-week" : ""}`}
+                  aria-current={isToday ? "date" : undefined}
                   onClick={() => {
                     setSelectedDateKey(cell.dateKey)
                     setSelectedEntryId(null)
+                    setModalEntryId(null)
                   }}
                 >
                   <span className="calendar-day-number">{cell.dateValue.getDate()}</span>
@@ -161,6 +129,9 @@ function Calendar() {
                 <p className="calendar-entry-title">{selectedEntry.title}</p>
                 <p className="calendar-entry-meta">{selectedEntry.time || "No time set"}</p>
                 <p className="calendar-entry-notes">{selectedEntry.notes || "No notes for this event."}</p>
+                <button type="button" className="calendar-detail-modal-btn" onClick={() => setModalEntryId(selectedEntry.id)}>
+                  Open workout details
+                </button>
               </div>
             )}
           </section>
@@ -176,7 +147,10 @@ function Calendar() {
                     <button
                       type="button"
                       className={`calendar-entry-item${selectedEntryId === entry.id ? " is-selected" : ""}`}
-                      onClick={() => setSelectedEntryId(entry.id)}
+                      onClick={() => {
+                        setSelectedEntryId(entry.id)
+                        setModalEntryId(entry.id)
+                      }}
                     >
                       <p className="calendar-entry-title">{entry.title}</p>
                       <p className="calendar-entry-meta">{entry.time || "No time set"}</p>
@@ -189,6 +163,8 @@ function Calendar() {
           </div>
         </aside>
       </div>
+
+      <CalendarEventModal entry={modalEntry} dateLabel={selectedDateLabel} onClose={() => setModalEntryId(null)} />
     </section>
   )
 }
