@@ -8,7 +8,7 @@ const API_URL = "/api/wodtrackr/exercise-programs/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 const EQUIPMENT_API_URL = "/api/wodtrackr/equipment/"
 const STRIPE_CHECKOUT_API_URL = String(
-  import.meta.env.VITE_CHECKOUT_SESSION_API_URL || "/api/wodtrackr/billing/checkout-session/",
+  import.meta.env.VITE_CHECKOUT_SESSION_API_URL || "/api/billing/create-session/",
 ).trim()
 const PURCHASED_PROGRAMS_STORAGE_KEY = "wodtrackrPurchasedProgramIds"
 const PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY = "wodtrackrPendingCheckoutProgramId"
@@ -1918,8 +1918,11 @@ function Programs() {
     if (!selectedProgramId) return
 
     setCheckoutErrorMessage("")
+    console.log("[Programs] handleBuyProgram start", { selectedProgramId, selectedProgramDetails, selectedProgram })
     setIsCheckoutSubmitting(true)
+    console.log("[Programs] handleBuyProgram checkout submitting state set to true")
     try {
+      console.log("[Programs] handleBuyProgram building checkout URLs and payload")
       const successUrl = buildCheckoutReturnUrl("success", selectedProgramId)
       const cancelUrl = buildCheckoutReturnUrl("cancel", selectedProgramId)
       const programTitle = getProgramCheckoutTitle(selectedProgramDetails, selectedProgram, editFormValues)
@@ -1931,6 +1934,7 @@ function Programs() {
         cancel_url: cancelUrl,
       }
       const response = await axios.post(STRIPE_CHECKOUT_API_URL, payload, buildRequestConfig())
+      console.log("[Programs] handleBuyProgram received checkout session response", { response })
       const { checkoutUrl, sessionId } = parseCheckoutSessionResponse(response?.data)
 
       if (checkoutUrl) {
