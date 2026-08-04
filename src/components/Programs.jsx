@@ -8,7 +8,7 @@ const API_URL = "/api/wodtrackr/exercise-programs/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 const EQUIPMENT_API_URL = "/api/wodtrackr/equipment/"
 const STRIPE_CHECKOUT_API_URL = String(
-  import.meta.env.VITE_CHECKOUT_SESSION_API_URL || "/api/billing/create-session/",
+  import.meta.env.VITE_CHECKOUT_SESSION_API_URL || "/api/users/billing/stripe/checkout-session/",
 ).trim()
 const PURCHASED_PROGRAMS_STORAGE_KEY = "wodtrackrPurchasedProgramIds"
 const PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY = "wodtrackrPendingCheckoutProgramId"

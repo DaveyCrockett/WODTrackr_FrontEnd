@@ -66,7 +66,7 @@ Create a `.env.local` file at the project root:
 
 ```bash
 VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_publishable_key_here
-VITE_CHECKOUT_SESSION_API_URL=/api/wodtrackr/billing/checkout-session/
+VITE_CHECKOUT_SESSION_API_URL=/api/wodtrackr/billing/stripe/checkout-session/
 ```
 
 Use your own Stripe account's publishable key from the Stripe dashboard:
@@ -79,7 +79,7 @@ If your backend uses a different route or host, point `VITE_CHECKOUT_SESSION_API
 ### 2) Implement backend checkout session endpoint
 
 Frontend request:
-- `POST /api/wodtrackr/billing/checkout-session/`
+- `POST /api/wodtrackr/billing/stripe/checkout-session/`
 - Auth: Bearer token (same as other protected endpoints)
 - Body:
 
@@ -119,6 +119,6 @@ For production, this should be validated server-side as well (for example via we
 If Buy Program returns 404, the frontend is reaching Django but Django does not have the route.
 
 Check these in order:
-1. Confirm your backend route exists for `POST /api/wodtrackr/billing/checkout-session/`.
+1. Confirm your backend route exists for `POST /api/wodtrackr/billing/stripe/checkout-session/`.
 2. If your backend path differs, set `VITE_CHECKOUT_SESSION_API_URL` to the correct path.
 3. Restart the Vite dev server after editing `.env.local`.

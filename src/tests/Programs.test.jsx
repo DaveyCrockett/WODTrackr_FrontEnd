@@ -343,7 +343,7 @@ describe("Programs Component", () => {
 
     await waitFor(() => {
       expect(axios.post).toHaveBeenCalledWith(
-        "/api/wodtrackr/billing/checkout-session/",
+        "/api/wodtrackr/billing/stripe/checkout-session/",
         expect.objectContaining({
           program_id: 1,
           program_title: "Strength Cycle",
