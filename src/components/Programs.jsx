@@ -660,10 +660,12 @@ const parseCheckoutSessionResponse = (responseData) => {
 
 const buildCheckoutReturnUrl = (type, programId) => {
   const basePath = window.location.origin + window.location.pathname
+  console.log("Building checkout return URL with basePath:", basePath, "type:", type, "programId:", programId)
   const query = new URLSearchParams({
     checkout: type,
     programId: String(programId),
   })
+  console.log("Constructed query parameters:", query.toString())
   return `${basePath}?${query.toString()}`
 }
 
@@ -1936,7 +1938,7 @@ function Programs() {
       const response = await axios.post(STRIPE_CHECKOUT_API_URL, payload, buildRequestConfig())
       console.log("[Programs] handleBuyProgram received checkout session response", { response })
       const { checkoutUrl, sessionId } = parseCheckoutSessionResponse(response?.data)
-
+      console.log("[Programs] handleBuyProgram parsed checkout session response", { checkoutUrl, sessionId })
       if (checkoutUrl) {
         savePendingCheckoutProgramId(selectedProgramId)
         window.location.assign(checkoutUrl)
