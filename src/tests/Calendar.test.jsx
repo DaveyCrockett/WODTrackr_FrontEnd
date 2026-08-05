@@ -7,6 +7,7 @@ import Calendar from "../components/Calendar"
 vi.mock("../CSS/calendar.css")
 
 const STORAGE_KEY = "wodtrackrCalendarEntries"
+const LEGACY_SCHEDULED_PROGRAMS_KEY = "wodtrackrScheduledPrograms"
 
 describe("Calendar Component", () => {
   beforeEach(() => {
@@ -100,6 +101,36 @@ describe("Calendar Component", () => {
 
     render(<Calendar />)
     expect(await screen.findByText("Stored Workout")).toBeInTheDocument()
+  })
+
+  it("loads scheduled program entries from legacy scheduled storage key", async () => {
+    const today = new Date()
+    const pad = (n) => String(n).padStart(2, "0")
+    const dateKey = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
+    const storedProgramEntries = {
+      [dateKey]: [
+        {
+          id: "legacy-prog-1",
+          title: "Legacy Program - Week 1",
+          time: "",
+          notes: "",
+          programId: 88,
+          programName: "Legacy Program",
+          weekNumber: 1,
+          exerciseIds: [101],
+        },
+      ],
+    }
+
+    vi.mocked(localStorage.getItem).mockImplementation((key) => {
+      if (key === STORAGE_KEY) return null
+      if (key === LEGACY_SCHEDULED_PROGRAMS_KEY) return JSON.stringify(storedProgramEntries)
+      return null
+    })
+
+    render(<Calendar />)
+    expect(await screen.findByText("Legacy Program - Week 1")).toBeInTheDocument()
+    expect(screen.getByText(/Program: Legacy Program/)).toBeInTheDocument()
   })
 
   it("shows entry details when an entry is selected", async () => {

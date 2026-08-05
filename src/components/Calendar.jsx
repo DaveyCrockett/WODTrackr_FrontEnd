@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import "../CSS/calendar.css"
 
 const STORAGE_KEY = "wodtrackrCalendarEntries"
@@ -21,6 +21,64 @@ const fromDateKey = (dateKey) => {
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
 const EMPTY_ENTRY_FORM = { title: "", time: "", notes: "" }
+
+const normalizeEntriesByDate = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+
+  return Object.entries(value).reduce((accumulator, [dateKey, entries]) => {
+    if (!Array.isArray(entries)) return accumulator
+    accumulator[dateKey] = entries.filter((entry) => entry && typeof entry === "object")
+    return accumulator
+  }, {})
+}
+
+const mergeEntriesByDate = (baseEntries, incomingEntries) => {
+  const merged = { ...baseEntries }
+
+  for (const [dateKey, entries] of Object.entries(incomingEntries)) {
+    if (!Array.isArray(entries) || entries.length === 0) continue
+
+    const existingEntries = Array.isArray(merged[dateKey]) ? merged[dateKey] : []
+    const dedupeKeys = new Set(
+      existingEntries.map((entry) =>
+        `${entry?.id ?? ""}|${entry?.title ?? ""}|${entry?.time ?? ""}|${entry?.programId ?? ""}|${entry?.weekNumber ?? ""}`,
+      ),
+    )
+
+    const nextEntries = [...existingEntries]
+    for (const entry of entries) {
+      const dedupeKey = `${entry?.id ?? ""}|${entry?.title ?? ""}|${entry?.time ?? ""}|${entry?.programId ?? ""}|${entry?.weekNumber ?? ""}`
+      if (dedupeKeys.has(dedupeKey)) continue
+      dedupeKeys.add(dedupeKey)
+      nextEntries.push(entry)
+    }
+
+    merged[dateKey] = nextEntries
+  }
+
+  return merged
+}
+
+const parseStoredEntries = (storageValue) => {
+  if (!storageValue) return {}
+  try {
+    return normalizeEntriesByDate(JSON.parse(storageValue))
+  } catch {
+    return {}
+  }
+}
+
+const loadEntriesFromStorage = () => {
+  const calendarEntries = parseStoredEntries(localStorage.getItem(STORAGE_KEY))
+  const legacyScheduledPrograms = parseStoredEntries(localStorage.getItem(SCHEDULED_PROGRAMS_KEY))
+  return mergeEntriesByDate(calendarEntries, legacyScheduledPrograms)
+}
+
+const countProgramEntries = (entriesByDate) =>
+  Object.values(entriesByDate).reduce((count, entries) => {
+    if (!Array.isArray(entries)) return count
+    return count + entries.filter((entry) => Boolean(entry?.programId)).length
+  }, 0)
 
 function Calendar() {
   const today = new Date()
@@ -45,19 +103,61 @@ function Calendar() {
 
   // Program event detail modal
   const [programModalEntry, setProgramModalEntry] = useState(null)
+  const [syncNotice, setSyncNotice] = useState("")
+  const syncNoticeTimerRef = useRef(null)
+  const programEntryCountRef = useRef(0)
+
+  const showSyncNotice = (message) => {
+    setSyncNotice(message)
+    if (syncNoticeTimerRef.current) {
+      window.clearTimeout(syncNoticeTimerRef.current)
+    }
+    syncNoticeTimerRef.current = window.setTimeout(() => {
+      setSyncNotice("")
+      syncNoticeTimerRef.current = null
+    }, 4000)
+  }
 
   // Load from localStorage on mount
   useEffect(() => {
-    try {
-      const storedValue = localStorage.getItem(STORAGE_KEY)
-      if (storedValue) {
-        const parsed = JSON.parse(storedValue)
-        if (parsed && typeof parsed === "object") {
-          setEntriesByDate(parsed)
-        }
+    const initialEntries = loadEntriesFromStorage()
+    setEntriesByDate(initialEntries)
+    programEntryCountRef.current = countProgramEntries(initialEntries)
+    if (programEntryCountRef.current > 0) {
+      showSyncNotice("Program schedule synced to Calendar.")
+    }
+  }, [])
+
+  useEffect(() => {
+    const syncEntriesFromStorage = () => {
+      const nextEntries = loadEntriesFromStorage()
+      const nextProgramEntryCount = countProgramEntries(nextEntries)
+      const hadProgramEntries = programEntryCountRef.current > 0
+      const hasMoreProgramEntries = nextProgramEntryCount > programEntryCountRef.current
+
+      setEntriesByDate(nextEntries)
+      programEntryCountRef.current = nextProgramEntryCount
+
+      if ((!hadProgramEntries && nextProgramEntryCount > 0) || hasMoreProgramEntries) {
+        showSyncNotice("Program schedule synced to Calendar.")
       }
-    } catch {
-      setEntriesByDate({})
+    }
+
+    const handleStorage = (event) => {
+      if (!event?.key || event.key === STORAGE_KEY || event.key === SCHEDULED_PROGRAMS_KEY) {
+        syncEntriesFromStorage()
+      }
+    }
+
+    window.addEventListener("storage", handleStorage)
+    document.addEventListener("visibilitychange", syncEntriesFromStorage)
+
+    return () => {
+      window.removeEventListener("storage", handleStorage)
+      document.removeEventListener("visibilitychange", syncEntriesFromStorage)
+      if (syncNoticeTimerRef.current) {
+        window.clearTimeout(syncNoticeTimerRef.current)
+      }
     }
   }, [])
 
@@ -151,6 +251,20 @@ function Calendar() {
       d.setDate(d.getDate() + 7)
       return d
     })
+  }
+
+  const goToToday = () => {
+    const now = new Date()
+    const nowKey = toDateKey(now)
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay())
+
+    setSelectedDateKey(nowKey)
+    setSelectedEntryId(null)
+    setPanelMode("detail")
+    setFormError("")
+    setCurrentMonth(new Date(now.getFullYear(), now.getMonth(), 1))
+    setWeekStart(new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate()))
   }
 
   const selectDate = (dateKey) => {
@@ -304,8 +418,17 @@ function Calendar() {
           <button type="button" onClick={viewMode === "month" ? goToNextMonth : goToNextWeek}>
             Next
           </button>
+          <button type="button" className="calendar-today-btn" onClick={goToToday}>
+            Today
+          </button>
         </div>
       </header>
+
+      {syncNotice ? (
+        <p className="calendar-sync-notice" role="status">
+          {syncNotice}
+        </p>
+      ) : null}
 
       <div className="calendar-layout">
         {/* ── Month view ── */}

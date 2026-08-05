@@ -82,6 +82,21 @@
     background: #f8fafc;
 }
 
+.calendar-today-btn {
+    border-color: #93c5fd;
+    color: #1d4ed8;
+}
+
+.calendar-sync-notice {
+    margin: 0 0 1rem;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    background: #eff6ff;
+    color: #1e3a8a;
+    font-weight: 600;
+}
+
 .calendar-layout {
     display: grid;
     grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
