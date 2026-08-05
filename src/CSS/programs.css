@@ -874,3 +874,61 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Schedule to Calendar button ── */
+.programs-schedule-btn {
+  border: 1px solid #16a34a;
+  border-radius: 10px;
+  padding: 0.55rem 0.9rem;
+  background: #ffffff;
+  color: #16a34a;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.programs-schedule-btn:hover {
+  background: #f0fdf4;
+}
+
+.programs-schedule-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Schedule modal ── */
+.programs-schedule-modal {
+  max-width: 420px;
+}
+
+.programs-schedule-description {
+  margin: 0 0 0.75rem;
+  color: #334155;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.programs-schedule-date-field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.programs-schedule-date-field input[type="date"] {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.programs-schedule-success {
+  color: #16a34a;
+  font-weight: 600;
+  margin: 0 0 0.6rem;
+  padding: 0.6rem 0.8rem;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
