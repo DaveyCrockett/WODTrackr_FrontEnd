@@ -1381,13 +1381,17 @@ function Programs() {
   }
 
   const handleAddWorkoutToPlanWeek = () => {
-    const weekNumber = Number(createPlanWeek)
-    console.log("Adding workout to plan week:", weekNumber, "with selected exercises:", createPlanExercise)
-    const selectedExerciseIds = [...new Set(
-      (Array.isArray(createPlanExercise) ? createPlanExercise : [])
-        .map((exercise) => (console.log("Parsing exercise ID:", exercise.id), Number(exercise.id)))
-    )]
-    if (!Number.isFinite(weekNumber) || selectedExerciseIds.length === 0) return
+
+    loadExerciseLibrary()
+
+    // const weekNumber = Number(createPlanWeek)
+    // console.log("Adding workout to plan week:", weekNumber, "with selected exercises:", createPlanExercise)
+    
+    // const selectedExerciseIds = [...new Set(
+    //   (Array.isArray(createPlanExercise) ? createPlanExercise : [])
+    //     .map((exercise) => (console.log("Parsing exercise ID:", exercise.id), Number(exercise.id)))
+    // )]
+    // if (!Number.isFinite(weekNumber) || selectedExerciseIds.length === 0) return
 
     setCreateFormValues((prev) => {
       const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
@@ -1489,7 +1493,9 @@ function Programs() {
     setIsCreateSubmitting(true)
     try {
       const normalizedWorkoutPlan = buildWorkoutPlanForDuration(createFormValues.duration_weeks, workoutPlan)
+      console.log("Normalized workout plan for submission:", normalizedWorkoutPlan)
       const selectedExerciseIds = [...new Set(normalizedWorkoutPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))]
+      console.log("Selected exercise IDs for submission:", selectedExerciseIds) 
       const payload = {
         title: createFormValues.title.trim(),
         description: createFormValues.description.trim(),
@@ -1504,7 +1510,6 @@ function Programs() {
         program_image: createFormValues.program_image,
       }
       const response = await axios.post(API_URL, payload, buildRequestConfig())
-      console.log("Program creation response:", response)
       
       const createdProgram = normalizeProgramDetailPayload(response?.data)
       if (createdProgram?.id) {
