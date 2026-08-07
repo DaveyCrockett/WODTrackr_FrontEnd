@@ -249,6 +249,7 @@ const getExerciseFormValues = (exercise) => ({
   is_public: Boolean(exercise?.is_public),
 })
 
+
 function Exercises() {
   const [exercises, setExercises] = useState([])
   const [searchName, setSearchName] = useState("")
@@ -262,6 +263,8 @@ function Exercises() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isLibraryModalOpen, setIsLibraryModalOpen] = useState(true)
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSlowLoading, setIsSlowLoading] = useState(false)
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
@@ -640,6 +643,19 @@ function Exercises() {
     setIsEditModalOpen(false)
   }
 
+  const handleCloseLibraryModal = () => {
+    setIsLibraryModalOpen(false)
+    setIsDetailsModalOpen(false)
+  }
+
+  const handleOpenLibraryModal = () => {
+    setIsLibraryModalOpen(true)
+  }
+
+  const handleCloseExerciseDetailsModal = () => {
+    setIsDetailsModalOpen(false)
+  }
+
   const handleEditSubmit = async (event) => {
     event.preventDefault()
     if (!selectedExercise?.id) {
@@ -736,6 +752,11 @@ function Exercises() {
     setVisibleCount((prev) => prev + PAGE_SIZE)
   }
 
+  const handleOpenExerciseDetailsModal = (exerciseId) => {
+    setSelectedExerciseId(exerciseId)
+    setIsDetailsModalOpen(true)
+  }
+
   const filteredExercises = exercises
   const displayedExercises = filteredExercises.slice(0, visibleCount)
   const hasMoreExercises = filteredExercises.length > displayedExercises.length
@@ -782,218 +803,254 @@ function Exercises() {
 
   return (
     <main className="exercise-page" aria-label="Exercise Library">
-      <section className="exercise-shell">
-        <section className="exercise-library-panel">
-          <header className="exercise-panel-header">
-            <div className="exercise-panel-header-top">
+      <section className="exercise-top-actions">
+        {!isLibraryModalOpen ? (
+          <button type="button" className="exercise-primary-btn" onClick={handleOpenLibraryModal}>
+            Open Exercise Library
+          </button>
+        ) : null}
+      </section>
+
+      {isLibraryModalOpen ? (
+        <div className="exercise-modal-backdrop" role="presentation" onClick={handleCloseLibraryModal}>
+          <aside
+            className="exercise-modal exercise-library-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="exercise-library-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="exercise-modal-header">
               <div>
-                <h1>Exercise Library</h1>
+                <h2 id="exercise-library-modal-title">Exercise Library</h2>
                 <p>Search and review your exercise list.</p>
               </div>
-              <div className="exercise-header-actions">
-                <button
-                  type="button"
-                  className="exercise-primary-btn"
-                  onClick={handleOpenAddModal}
-                  ref={addModalTriggerRef}
-                >
-                  Add Exercise
+              <button type="button" className="exercise-secondary-btn" onClick={handleCloseLibraryModal}>
+                Close
+              </button>
+            </header>
+
+            <section className="exercise-library-panel">
+              <header className="exercise-panel-header">
+                <div className="exercise-panel-header-top">
+                  <div>
+                    <h1>Exercise Library</h1>
+                    <p>Search and review your exercise list.</p>
+                  </div>
+                  <div className="exercise-header-actions">
+                    <button
+                      type="button"
+                      className="exercise-primary-btn"
+                      onClick={handleOpenAddModal}
+                      ref={addModalTriggerRef}
+                    >
+                      Add Exercise
+                    </button>
+                  </div>
+                </div>
+                <div className="exercise-counts" aria-live="polite" aria-atomic="true">
+                  <span>{exercises.length} total</span>
+                  <span>{displayedExercises.length} shown</span>
+                </div>
+              </header>
+
+              <div className="exercise-search-grid">
+                <label className="exercise-field exercise-field-wide">
+                  <span>Search by name</span>
+                  <input
+                    type="text"
+                    name="name"
+                    value={searchName}
+                    onChange={(event) => setSearchName(event.target.value)}
+                    placeholder="Back squat, pull-up, row"
+                  />
+                </label>
+
+                <label className="exercise-field">
+                  <span>Category</span>
+                  <select
+                    name="category"
+                    value={filters.category}
+                    onChange={(event) =>
+                      setFilters((prev) => ({ ...prev, category: event.target.value }))
+                    }
+                    disabled={isChoicesLoading}
+                  >
+                    <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
+                    {categoryChoices.map((choice) => (
+                      <option key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="exercise-field">
+                  <span>Equipment</span>
+                  <select
+                    name="equipment"
+                    value={filters.equipment}
+                    onChange={(event) =>
+                      setFilters((prev) => ({ ...prev, equipment: event.target.value }))
+                    }
+                    disabled={isChoicesLoading}
+                  >
+                    <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
+                    {equipmentChoices.map((choice) => (
+                      <option key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="exercise-field">
+                  <span>Muscle</span>
+                  <select
+                    name="muscle"
+                    value={filters.muscle}
+                    onChange={(event) =>
+                      setFilters((prev) => ({ ...prev, muscle: event.target.value }))
+                    }
+                    disabled={isChoicesLoading}
+                  >
+                    <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
+                    {muscleChoices.map((choice) => (
+                      <option key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="exercise-field exercise-field-wide">
+                  <span>Sort by</span>
+                  <select
+                    name="ordering"
+                    value={ordering}
+                    onChange={(event) => setOrdering(event.target.value)}
+                  >
+                    <option value="name">Name (A-Z)</option>
+                    <option value="-name">Name (Z-A)</option>
+                    <option value="created_at">Created (oldest)</option>
+                    <option value="-created_at">Created (newest)</option>
+                    <option value="updated_at">Updated (oldest)</option>
+                    <option value="-updated_at">Updated (newest)</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="exercise-search-actions">
+                <button type="button" className="exercise-secondary-btn" onClick={handleClearFilters}>
+                  Clear Filters
                 </button>
               </div>
-            </div>
-            <div className="exercise-counts" aria-live="polite" aria-atomic="true">
-              <span>{exercises.length} total</span>
-              <span>{displayedExercises.length} shown</span>
-            </div>
-          </header>
 
-          <div className="exercise-search-grid">
-            <label className="exercise-field exercise-field-wide">
-              <span>Search by name</span>
-              <input
-                type="text"
-                name="name"
-                value={searchName}
-                onChange={(event) => setSearchName(event.target.value)}
-                placeholder="Back squat, pull-up, row"
-              />
-            </label>
+              {isLoading && isSlowLoading ? (
+                <p className="exercise-loading-note" role="status">Still loading exercises. Thanks for hanging tight.</p>
+              ) : null}
+              {errorMessage ? <p className="exercise-error" role="alert">{errorMessage}</p> : null}
+              {successMessage ? <p className="exercise-success" role="status">{successMessage}</p> : null}
 
-            <label className="exercise-field">
-              <span>Category</span>
-              <select
-                name="category"
-                value={filters.category}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, category: event.target.value }))
-                }
-                disabled={isChoicesLoading}
+              <div
+                className="exercise-list"
+                role={!isLoading && filteredExercises.length > 0 ? "listbox" : undefined}
+                aria-label={!isLoading && filteredExercises.length > 0 ? "Exercises" : undefined}
+                aria-busy={isLoading}
+                onKeyDown={(event) => {
+                  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
+                  if (filteredExercises.length === 0) return
+                  event.preventDefault()
+                  const currentIndex = displayedExercises.findIndex((ex) => (ex.id ?? null) === selectedExerciseId)
+                  let nextIndex = currentIndex
+                  if (event.key === "ArrowDown") nextIndex = Math.min(currentIndex + 1, displayedExercises.length - 1)
+                  else if (event.key === "ArrowUp") nextIndex = Math.max(currentIndex - 1, 0)
+                  else if (event.key === "Home") nextIndex = 0
+                  else if (event.key === "End") nextIndex = displayedExercises.length - 1
+                  if (nextIndex !== currentIndex) {
+                    const nextExercise = displayedExercises[nextIndex]
+                    setSelectedExerciseId(nextExercise.id ?? null)
+                    const optionEl = nextExercise.id
+                      ? event.currentTarget.querySelector(`#exercise-option-${nextExercise.id}`)
+                      : null
+                    optionEl?.focus()
+                  }
+                }}
               >
-                <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
-                {categoryChoices.map((choice) => (
-                  <option key={choice.value} value={choice.value}>
-                    {choice.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {isLoading ? (
+                  Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (
+                    <div className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`} aria-hidden="true">
+                      <div className="exercise-skeleton exercise-skeleton-title" />
+                      <div className="exercise-skeleton exercise-skeleton-line" />
+                      <div className="exercise-skeleton exercise-skeleton-line exercise-skeleton-line-short" />
+                      <div className="exercise-skeleton exercise-skeleton-line" />
+                    </div>
+                  ))
+                ) : filteredExercises.length === 0 ? (
+                  <p className="exercise-empty" role="status">No exercises found.</p>
+                ) : (
+                  displayedExercises.map((exercise, index) => (
+                    <article
+                      className={`exercise-item ${(exercise.id ?? null) === selectedExerciseId ? "exercise-item-selected" : ""}`}
+                      key={exercise.id ?? index}
+                      id={exercise.id ? `exercise-option-${exercise.id}` : undefined}
+                      role="option"
+                      aria-selected={(exercise.id ?? null) === selectedExerciseId}
+                      tabIndex={(exercise.id ?? null) === selectedExerciseId ? 0 : -1}
+                      onClick={() => handleOpenExerciseDetailsModal(exercise.id ?? null)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault()
+                          handleOpenExerciseDetailsModal(exercise.id ?? null)
+                        }
+                      }}
+                    >
+                      <div className="exercise-header">
+                        <h3>{exercise.name}</h3>
+                        <span>{categoryLookup[exercise.category] || exercise.category}</span>
+                      </div>
+                      <p className="exercise-meta">
+                        {equipmentLookup[exercise.equipment] || exercise.equipment} · {exercise.primary_muscle_group}
+                      </p>
+                      <p className="exercise-meta">
+                        Created by {exercise.created_by_username || exercise.username || exercise.created_by || "Unknown"} · {exercise.is_public ? "Public" : "Private"}
+                      </p>
+                      <p className="exercise-meta">
+                        Created {formatTimestamp(exercise.created_at)} · Updated {formatTimestamp(exercise.updated_at)}
+                      </p>
+                    </article>
+                  ))
+                )}
+              </div>
 
-            <label className="exercise-field">
-              <span>Equipment</span>
-              <select
-                name="equipment"
-                value={filters.equipment}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, equipment: event.target.value }))
-                }
-                disabled={isChoicesLoading}
-              >
-                <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
-                {equipmentChoices.map((choice) => (
-                  <option key={choice.value} value={choice.value}>
-                    {choice.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="exercise-field">
-              <span>Muscle</span>
-              <select
-                name="muscle"
-                value={filters.muscle}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, muscle: event.target.value }))
-                }
-                disabled={isChoicesLoading}
-              >
-                <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
-                {muscleChoices.map((choice) => (
-                  <option key={choice.value} value={choice.value}>
-                    {choice.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="exercise-field exercise-field-wide">
-              <span>Sort by</span>
-              <select
-                name="ordering"
-                value={ordering}
-                onChange={(event) => setOrdering(event.target.value)}
-              >
-                <option value="name">Name (A-Z)</option>
-                <option value="-name">Name (Z-A)</option>
-                <option value="created_at">Created (oldest)</option>
-                <option value="-created_at">Created (newest)</option>
-                <option value="updated_at">Updated (oldest)</option>
-                <option value="-updated_at">Updated (newest)</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="exercise-search-actions">
-            <button type="button" className="exercise-secondary-btn" onClick={handleClearFilters}>
-              Clear Filters
-            </button>
-          </div>
-
-          {isLoading && isSlowLoading ? (
-            <p className="exercise-loading-note" role="status">Still loading exercises. Thanks for hanging tight.</p>
-          ) : null}
-          {errorMessage ? <p className="exercise-error" role="alert">{errorMessage}</p> : null}
-          {successMessage ? <p className="exercise-success" role="status">{successMessage}</p> : null}
-
-          <div
-            className="exercise-list"
-            role={!isLoading && filteredExercises.length > 0 ? "listbox" : undefined}
-            aria-label={!isLoading && filteredExercises.length > 0 ? "Exercises" : undefined}
-            aria-busy={isLoading}
-            onKeyDown={(event) => {
-              if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
-              if (filteredExercises.length === 0) return
-              event.preventDefault()
-              const currentIndex = displayedExercises.findIndex((ex) => (ex.id ?? null) === selectedExerciseId)
-              let nextIndex = currentIndex
-              if (event.key === "ArrowDown") nextIndex = Math.min(currentIndex + 1, displayedExercises.length - 1)
-              else if (event.key === "ArrowUp") nextIndex = Math.max(currentIndex - 1, 0)
-              else if (event.key === "Home") nextIndex = 0
-              else if (event.key === "End") nextIndex = displayedExercises.length - 1
-              if (nextIndex !== currentIndex) {
-                const nextExercise = displayedExercises[nextIndex]
-                setSelectedExerciseId(nextExercise.id ?? null)
-                const optionEl = nextExercise.id
-                  ? event.currentTarget.querySelector(`#exercise-option-${nextExercise.id}`)
-                  : null
-                optionEl?.focus()
-              }
-            }}
-          >
-            {isLoading ? (
-              Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (
-                <div className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`} aria-hidden="true">
-                  <div className="exercise-skeleton exercise-skeleton-title" />
-                  <div className="exercise-skeleton exercise-skeleton-line" />
-                  <div className="exercise-skeleton exercise-skeleton-line exercise-skeleton-line-short" />
-                  <div className="exercise-skeleton exercise-skeleton-line" />
+              {!isLoading && hasMoreExercises ? (
+                <div className="exercise-list-actions">
+                  <button type="button" className="exercise-secondary-btn" onClick={handleLoadMore}>
+                    Load More
+                  </button>
                 </div>
-              ))
-            ) : filteredExercises.length === 0 ? (
-              <p className="exercise-empty" role="status">No exercises found.</p>
-            ) : (
-              displayedExercises.map((exercise, index) => (
-                <article
-                  className={`exercise-item ${(exercise.id ?? null) === selectedExerciseId ? "exercise-item-selected" : ""}`}
-                  key={exercise.id ?? index}
-                  id={exercise.id ? `exercise-option-${exercise.id}` : undefined}
-                  role="option"
-                  aria-selected={(exercise.id ?? null) === selectedExerciseId}
-                  tabIndex={(exercise.id ?? null) === selectedExerciseId ? 0 : -1}
-                  onClick={() => setSelectedExerciseId(exercise.id ?? null)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault()
-                      setSelectedExerciseId(exercise.id ?? null)
-                    }
-                  }}
-                >
-                  <div className="exercise-header">
-                    <h3>{exercise.name}</h3>
-                    <span>{categoryLookup[exercise.category] || exercise.category}</span>
-                  </div>
-                  <p className="exercise-meta">
-                    {equipmentLookup[exercise.equipment] || exercise.equipment} · {exercise.primary_muscle_group}
-                  </p>
-                  <p className="exercise-meta">
-                    Created by {exercise.created_by_username || exercise.username || exercise.created_by || "Unknown"} · {exercise.is_public ? "Public" : "Private"}
-                  </p>
-                  <p className="exercise-meta">
-                    Created {formatTimestamp(exercise.created_at)} · Updated {formatTimestamp(exercise.updated_at)}
-                  </p>
-                </article>
-              ))
-            )}
-          </div>
+              ) : null}
+            </section>
+          </aside>
+        </div>
+      ) : null}
 
-          {!isLoading && hasMoreExercises ? (
-            <div className="exercise-list-actions">
-              <button type="button" className="exercise-secondary-btn" onClick={handleLoadMore}>
-                Load More
-              </button>
-            </div>
-          ) : null}
-        </section>
-
-        <aside className="exercise-form-panel" aria-label="Exercise Details">
-          <header className="exercise-panel-header">
-            <div className="exercise-panel-header-top">
+      {isDetailsModalOpen && selectedExercise ? (
+        <div className="exercise-modal-backdrop" role="presentation" onClick={handleCloseExerciseDetailsModal}>
+          <aside
+            className="exercise-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="exercise-details-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="exercise-modal-header">
               <div>
-                <h2>Exercise Details</h2>
+                <h2 id="exercise-details-modal-title">Exercise Details</h2>
                 <p>Select an exercise from the library to review details.</p>
               </div>
-              {canEditSelectedExercise ? (
-                <div className="exercise-header-actions">
+              <div className="exercise-header-actions">
+                {canEditSelectedExercise ? (
                   <button
                     type="button"
                     className="exercise-secondary-btn"
@@ -1002,12 +1059,13 @@ function Exercises() {
                   >
                     Edit Exercise
                   </button>
-                </div>
-              ) : null}
-            </div>
-          </header>
+                ) : null}
+                <button type="button" className="exercise-secondary-btn" onClick={handleCloseExerciseDetailsModal}>
+                  Close
+                </button>
+              </div>
+            </header>
 
-          {selectedExercise ? (
             <section className="exercise-details" aria-live="polite">
               <h3>{selectedExercise.name}</h3>
               <p className="exercise-meta">
@@ -1045,22 +1103,9 @@ function Exercises() {
                 </button>
               ) : null}
             </section>
-          ) : isLoading ? (
-            <section className="exercise-details" aria-live="polite" aria-label="Loading exercise details" aria-busy="true">
-              {isSlowLoading ? <p className="exercise-loading-note" role="status">Exercise details are still loading.</p> : null}
-              <div className="exercise-skeleton exercise-skeleton-title" />
-              <div className="exercise-skeleton exercise-skeleton-line" />
-              <div className="exercise-skeleton exercise-skeleton-line" />
-              <div className="exercise-skeleton exercise-skeleton-line exercise-skeleton-line-short" />
-              <div className="exercise-skeleton exercise-skeleton-block" />
-            </section>
-          ) : errorMessage ? (
-            <p className="exercise-error">Unable to show exercise details until the library finishes loading.</p>
-          ) : (
-            <p className="exercise-empty">No exercise selected.</p>
-          )}
-        </aside>
-      </section>
+          </aside>
+        </div>
+      ) : null}
 
       {isAddModalOpen ? (
         <div

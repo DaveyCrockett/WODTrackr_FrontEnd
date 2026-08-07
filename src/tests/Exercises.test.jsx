@@ -26,9 +26,9 @@ describe('Exercises Component', () => {
 
       render(<Exercises />)
 
-      expect(screen.getByText('Exercise Library')).toBeInTheDocument()
-      expect(screen.getByText('Search and review your exercise list.')).toBeInTheDocument()
-      expect(screen.getByText('Exercise Details')).toBeInTheDocument()
+      expect(screen.getAllByText('Exercise Library').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Search and review your exercise list.').length).toBeGreaterThan(0)
+      expect(screen.getByText('Add Exercise')).toBeInTheDocument()
     })
 
     it('should render search and filter controls', async () => {
@@ -336,13 +336,13 @@ describe('Exercises Component', () => {
       })
 
       // Initially should show 12 exercises
-      expect(screen.queryByText('Exercise 13')).not.toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Exercise 13' })).not.toBeInTheDocument()
 
-      const loadMoreButton = screen.getByText('Load More')
+      const loadMoreButton = await screen.findByRole('button', { name: 'Load More' })
       await userEvent.click(loadMoreButton)
 
       // Should now show more exercises
-      expect(screen.getByText('Exercise 13')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Exercise 13' })).toBeInTheDocument()
     })
   })
 
@@ -369,12 +369,23 @@ describe('Exercises Component', () => {
       render(<Exercises />)
 
       await waitFor(() => {
-        expect(screen.getByText(/A fundamental strength movement/)).toBeInTheDocument()
+        expect(screen.getByText('Back Squat')).toBeInTheDocument()
+      })
+
+      const exerciseHeading = await screen.findByRole('heading', { name: 'Back Squat' })
+      const exerciseCard = exerciseHeading.closest('article')
+      expect(exerciseCard).not.toBeNull()
+      await userEvent.click(exerciseCard)
+
+      const detailsDialog = await screen.findByRole('dialog', { name: 'Exercise Details' })
+
+      await waitFor(() => {
+        expect(within(detailsDialog).getByText(/A fundamental strength movement/)).toBeInTheDocument()
       })
 
       // Details should be visible
-      expect(screen.getByText(/A fundamental strength movement/)).toBeInTheDocument()
-      expect(screen.getAllByText(/coach1/).length).toBeGreaterThan(0)
+      expect(within(detailsDialog).getByText(/A fundamental strength movement/)).toBeInTheDocument()
+      expect(within(detailsDialog).getByText(/coach1/)).toBeInTheDocument()
     })
 
     it('should show delete button for exercises owned by current user and delete the exercise', async () => {
@@ -406,7 +417,18 @@ describe('Exercises Component', () => {
 
       render(<Exercises />)
 
-      const deleteButton = await screen.findByRole('button', { name: 'Delete Exercise' })
+      await waitFor(() => {
+        expect(screen.getByText('Back Squat')).toBeInTheDocument()
+      })
+
+      const exerciseHeading = await screen.findByRole('heading', { name: 'Back Squat' })
+      const exerciseCard = exerciseHeading.closest('article')
+      expect(exerciseCard).not.toBeNull()
+      await userEvent.click(exerciseCard)
+
+      const detailsDialog = await screen.findByRole('dialog', { name: 'Exercise Details' })
+
+      const deleteButton = await within(detailsDialog).findByRole('button', { name: 'Delete Exercise' })
       await userEvent.click(deleteButton)
 
       await waitFor(() => {
@@ -417,7 +439,7 @@ describe('Exercises Component', () => {
       })
 
       await waitFor(() => {
-        expect(screen.queryByText('Back Squat')).not.toBeInTheDocument()
+        expect(screen.queryByRole('dialog', { name: 'Exercise Details' })).not.toBeInTheDocument()
       })
     })
 
@@ -510,7 +532,7 @@ describe('Exercises Component', () => {
         expect(nameInput).toBeInTheDocument()
       })
 
-      const dialog = screen.getByRole('dialog')
+      const dialog = screen.getByRole('dialog', { name: 'Add Exercise' })
       const nameInput = within(dialog).getByPlaceholderText('Exercise name')
       const categorySelect = within(dialog).getByRole('combobox', { name: 'Category' })
       const equipmentSelect = within(dialog).getByRole('combobox', { name: 'Equipment' })
@@ -553,7 +575,7 @@ describe('Exercises Component', () => {
         expect(screen.getByPlaceholderText('Exercise name')).toBeInTheDocument()
       })
 
-      const dialog = screen.getByRole('dialog')
+      const dialog = screen.getByRole('dialog', { name: 'Add Exercise' })
       const submitButton = within(dialog).getByRole('button', { name: 'Add Exercise' })
       await userEvent.click(submitButton)
 
@@ -586,7 +608,7 @@ describe('Exercises Component', () => {
         expect(screen.getByPlaceholderText('Exercise name')).toBeInTheDocument()
       })
 
-      const dialog = screen.getByRole('dialog')
+      const dialog = screen.getByRole('dialog', { name: 'Add Exercise' })
       const nameInput = within(dialog).getByPlaceholderText('Exercise name')
       await userEvent.type(nameInput, '   ')
 
@@ -622,7 +644,7 @@ describe('Exercises Component', () => {
         expect(screen.getByPlaceholderText('Exercise name')).toBeInTheDocument()
       })
 
-      const dialog = screen.getByRole('dialog')
+      const dialog = screen.getByRole('dialog', { name: 'Add Exercise' })
       const nameInput = within(dialog).getByPlaceholderText('Exercise name')
       await userEvent.type(nameInput, 'My Exercise')
 
@@ -661,7 +683,7 @@ describe('Exercises Component', () => {
         expect(screen.getByPlaceholderText('Exercise name')).toBeInTheDocument()
       })
 
-      const dialog = screen.getByRole('dialog')
+      const dialog = screen.getByRole('dialog', { name: 'Add Exercise' })
       const nameInput = within(dialog).getByPlaceholderText('Exercise name')
       const submitButton = within(dialog).getByRole('button', { name: 'Add Exercise' })
 
@@ -691,7 +713,7 @@ describe('Exercises Component', () => {
         expect(screen.getByPlaceholderText('Exercise name')).toBeInTheDocument()
       })
 
-      const dialog = screen.getByRole('dialog')
+      const dialog = screen.getByRole('dialog', { name: 'Add Exercise' })
       const nameInput = within(dialog).getByPlaceholderText('Exercise name')
       await userEvent.type(nameInput, 'Partially Filled')
 
@@ -699,7 +721,7 @@ describe('Exercises Component', () => {
       await userEvent.click(closeButton)
 
       await waitFor(() => {
-        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+        expect(screen.queryByRole('dialog', { name: 'Add Exercise' })).not.toBeInTheDocument()
       })
 
       // Reopen the modal and check the field is cleared
@@ -728,7 +750,7 @@ describe('Exercises Component', () => {
       await userEvent.click(addButton)
 
       await waitFor(() => {
-        expect(screen.getByRole('dialog')).toBeInTheDocument()
+        expect(screen.getByRole('dialog', { name: 'Add Exercise' })).toBeInTheDocument()
       })
 
       const createdByInput = screen.getByPlaceholderText('Coach or athlete')
@@ -817,8 +839,9 @@ describe('Exercises Component', () => {
 
       render(<Exercises />)
 
-      expect(screen.getByLabelText('Exercise Library')).toBeInTheDocument()
-      expect(screen.getByLabelText('Exercise Details')).toBeInTheDocument()
+      expect(screen.getByRole('main', { name: 'Exercise Library' })).toBeInTheDocument()
+      expect(screen.getByRole('dialog', { name: 'Exercise Library' })).toBeInTheDocument()
+      expect(screen.getAllByText('Search and review your exercise list.').length).toBeGreaterThan(0)
     })
 
     it('should handle keyboard navigation in exercise list', async () => {

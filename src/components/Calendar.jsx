@@ -1,10 +1,28 @@
+import axios from "axios"
 import { useEffect, useMemo, useRef, useState } from "react"
 import "../CSS/calendar.css"
 
 const STORAGE_KEY = "wodtrackrCalendarEntries"
 const SCHEDULED_PROGRAMS_KEY = "wodtrackrScheduledPrograms"
+const WORKOUTS_STORAGE_KEY = "wodtrackrWorkouts"
+const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 
 const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const WORKOUT_TYPE_OPTIONS = [
+  { value: "for_time", label: "For Time" },
+  { value: "amrap", label: "AMRAP" },
+  { value: "emom", label: "EMOM" },
+  { value: "chipper", label: "Chipper" },
+  { value: "interval", label: "Intervals" },
+  { value: "strength", label: "Strength" },
+  { value: "skill", label: "Skill" },
+]
+const SCORE_TYPE_OPTIONS = [
+  { value: "time", label: "Time" },
+  { value: "reps", label: "Reps" },
+  { value: "rounds_reps", label: "Rounds + Reps" },
+  { value: "load", label: "Load" },
+]
 
 const toDateKey = (dateValue) => {
   const year = dateValue.getFullYear()
@@ -21,6 +39,107 @@ const fromDateKey = (dateKey) => {
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
 const EMPTY_ENTRY_FORM = { title: "", time: "", notes: "" }
+const EMPTY_WORKOUT_FORM = {
+  title: "",
+  time: "",
+  workout_type: "for_time",
+  score_type: "time",
+  time_cap_minutes: "",
+  format_details: "",
+  warm_up: "",
+  strength_piece: "",
+  wod: "",
+  buy_in: "",
+  cash_out: "",
+  cooldown: "",
+  notes: "",
+  rx_track: "rx",
+  is_partner_workout: false,
+  exercise_ids: [],
+}
+
+const getAuthToken = () => {
+  const directToken = localStorage.getItem("wodtrackrAuthToken")
+  if (directToken) {
+    return directToken
+  }
+
+  try {
+    const rawValue = localStorage.getItem("wodtrackrUser")
+    const userData = rawValue ? JSON.parse(rawValue) : null
+    return userData?.authToken || ""
+  } catch {
+    return ""
+  }
+}
+
+const buildRequestConfig = (overrides = {}) => {
+  const authToken = getAuthToken()
+  return {
+    ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}),
+    ...overrides,
+  }
+}
+
+const normalizeExercisesPayload = (data) => {
+  if (Array.isArray(data?.data)) return data.data
+  if (Array.isArray(data?.results)) return data.results
+  if (Array.isArray(data)) return data
+  return []
+}
+
+const getExerciseRecordId = (exercise) =>
+  exercise?.id ?? exercise?.exercise_id ?? exercise?.pk ?? null
+
+const normalizeWorkoutExerciseId = (value) => {
+  if (value === null || value === undefined) return null
+  const trimmed = String(value).trim()
+  if (!trimmed) return null
+  if (/^[+-]?\d+$/.test(trimmed)) return Number(trimmed)
+  return trimmed
+}
+
+const readWorkoutsFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(WORKOUTS_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((entry) => entry && typeof entry === "object")
+  } catch {
+    return []
+  }
+}
+
+const persistWorkoutsToStorage = (workouts) => {
+  try {
+    localStorage.setItem(WORKOUTS_STORAGE_KEY, JSON.stringify(workouts))
+  } catch {
+    // Storage write failure is non-critical.
+  }
+}
+
+const buildWorkoutCalendarNotes = (workout) => {
+  const sections = [
+    workout?.warm_up ? `Warm-up: ${workout.warm_up}` : "",
+    workout?.strength_piece ? `Strength: ${workout.strength_piece}` : "",
+    workout?.buy_in ? `Buy-in: ${workout.buy_in}` : "",
+    workout?.wod ? `WOD: ${workout.wod}` : "",
+    workout?.cash_out ? `Cash-out: ${workout.cash_out}` : "",
+    workout?.cooldown ? `Cool-down: ${workout.cooldown}` : "",
+    workout?.format_details ? `Format: ${workout.format_details}` : "",
+    workout?.notes ? `Coach Notes: ${workout.notes}` : "",
+  ].filter(Boolean)
+
+  const metadata = [
+    `Type: ${workout?.workout_type || "for_time"}`,
+    workout?.score_type ? `Score: ${workout.score_type}` : "",
+    workout?.time_cap_minutes ? `Time Cap: ${workout.time_cap_minutes} min` : "",
+    workout?.rx_track ? `Track: ${String(workout.rx_track).toUpperCase()}` : "",
+    workout?.is_partner_workout ? "Partner Workout" : "",
+  ].filter(Boolean)
+
+  return [...metadata, ...sections].join("\n")
+}
 
 const normalizeEntriesByDate = (value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {}
@@ -97,9 +216,13 @@ function Calendar() {
 
   // Add / Edit form state
   const [panelMode, setPanelMode] = useState("detail") // "detail" | "add" | "edit"
-  const [addFormValues, setAddFormValues] = useState(EMPTY_ENTRY_FORM)
+  const [addFormValues, setAddFormValues] = useState(EMPTY_WORKOUT_FORM)
   const [editFormValues, setEditFormValues] = useState(EMPTY_ENTRY_FORM)
   const [formError, setFormError] = useState("")
+  const [exerciseLibrary, setExerciseLibrary] = useState([])
+  const [isExerciseLibraryLoading, setIsExerciseLibraryLoading] = useState(false)
+  const [exerciseLibraryError, setExerciseLibraryError] = useState("")
+  const [, setWorkouts] = useState(() => readWorkoutsFromStorage())
 
   // Program event detail modal
   const [programModalEntry, setProgramModalEntry] = useState(null)
@@ -158,6 +281,40 @@ function Calendar() {
       if (syncNoticeTimerRef.current) {
         window.clearTimeout(syncNoticeTimerRef.current)
       }
+    }
+  }, [])
+
+  useEffect(() => {
+    const loadExerciseLibrary = async () => {
+      setIsExerciseLibraryLoading(true)
+      setExerciseLibraryError("")
+
+      try {
+        const response = await axios.get(EXERCISES_API_URL, buildRequestConfig())
+        setExerciseLibrary(normalizeExercisesPayload(response?.data))
+      } catch {
+        setExerciseLibrary([])
+        setExerciseLibraryError("Unable to load exercises for workout planning.")
+      } finally {
+        setIsExerciseLibraryLoading(false)
+      }
+    }
+
+    loadExerciseLibrary()
+  }, [])
+
+  useEffect(() => {
+    const syncWorkoutsFromStorage = () => {
+      setWorkouts(readWorkoutsFromStorage())
+    }
+
+    syncWorkoutsFromStorage()
+    window.addEventListener("storage", syncWorkoutsFromStorage)
+    document.addEventListener("visibilitychange", syncWorkoutsFromStorage)
+
+    return () => {
+      window.removeEventListener("storage", syncWorkoutsFromStorage)
+      document.removeEventListener("visibilitychange", syncWorkoutsFromStorage)
     }
   }, [])
 
@@ -232,6 +389,19 @@ function Calendar() {
     })
   }, [weekStart])
 
+  const workoutExerciseOptions = useMemo(
+    () => {
+      return [...exerciseLibrary]
+        .map((exercise) => ({
+          id: getExerciseRecordId(exercise),
+          label: String(exercise?.name || exercise?.title || "").trim(),
+        }))
+        .filter((entry) => entry.id !== null && entry.id !== undefined && String(entry.id).trim() !== "")
+        .sort((left, right) => left.label.localeCompare(right.label))
+    },
+    [exerciseLibrary],
+  )
+
   const goToPreviousMonth = () => {
     setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
   }
@@ -283,7 +453,7 @@ function Calendar() {
 
   // ── Add entry ──────────────────────────────────────────────
   const handleOpenAddForm = () => {
-    setAddFormValues(EMPTY_ENTRY_FORM)
+    setAddFormValues(EMPTY_WORKOUT_FORM)
     setFormError("")
     setPanelMode("add")
   }
@@ -294,21 +464,88 @@ function Calendar() {
   }
 
   const handleAddFormChange = (e) => {
-    const { name, value } = e.target
-    setAddFormValues((prev) => ({ ...prev, [name]: value }))
+    const { name, value, type, checked } = e.target
+    setAddFormValues((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }))
+  }
+
+  const handleAddWorkoutExerciseToggle = (exerciseId) => {
+    const normalizedExerciseId = normalizeWorkoutExerciseId(exerciseId)
+    if (normalizedExerciseId === null) return
+
+    setAddFormValues((prev) => {
+      const selectedIds = Array.isArray(prev.exercise_ids)
+        ? prev.exercise_ids.map((value) => normalizeWorkoutExerciseId(value)).filter((value) => value !== null)
+        : []
+      const alreadySelected = selectedIds.some((value) => String(value) === String(normalizedExerciseId))
+
+      return {
+        ...prev,
+        exercise_ids: alreadySelected
+          ? selectedIds.filter((value) => String(value) !== String(normalizedExerciseId))
+          : [...selectedIds, normalizedExerciseId],
+      }
+    })
   }
 
   const handleSubmitAdd = (e) => {
     e.preventDefault()
-    if (!addFormValues.title.trim()) {
-      setFormError("Title is required.")
+    const title = String(addFormValues.title || "").trim()
+    const exerciseIds = Array.isArray(addFormValues.exercise_ids)
+      ? addFormValues.exercise_ids
+          .map((value) => normalizeWorkoutExerciseId(value))
+          .filter((value) => value !== null)
+      : []
+    const wod = String(addFormValues.wod || "").trim()
+
+    if (!title) {
+      setFormError("Workout name is required.")
       return
     }
+    if (exerciseIds.length === 0) {
+      setFormError("Select at least 1 exercise for this workout.")
+      return
+    }
+    if (!wod) {
+      setFormError("WOD details are required for a full workout.")
+      return
+    }
+
+    const nextWorkout = {
+      id: `workout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title,
+      workout_type: String(addFormValues.workout_type || "for_time"),
+      score_type: String(addFormValues.score_type || "time"),
+      time_cap_minutes: String(addFormValues.time_cap_minutes || "").trim(),
+      format_details: String(addFormValues.format_details || "").trim(),
+      warm_up: String(addFormValues.warm_up || "").trim(),
+      strength_piece: String(addFormValues.strength_piece || "").trim(),
+      wod,
+      buy_in: String(addFormValues.buy_in || "").trim(),
+      cash_out: String(addFormValues.cash_out || "").trim(),
+      cooldown: String(addFormValues.cooldown || "").trim(),
+      notes: String(addFormValues.notes || "").trim(),
+      rx_track: String(addFormValues.rx_track || "rx"),
+      is_partner_workout: Boolean(addFormValues.is_partner_workout),
+      exercise_ids: [...new Set(exerciseIds)],
+      created_at: new Date().toISOString(),
+    }
+
+    setWorkouts((prev) => {
+      const next = [nextWorkout, ...prev]
+      persistWorkoutsToStorage(next)
+      return next
+    })
+
     const newEntry = {
       id: generateId(),
-      title: addFormValues.title.trim(),
-      time: addFormValues.time.trim(),
-      notes: addFormValues.notes.trim(),
+      title,
+      time: String(addFormValues.time || "").trim(),
+      notes: buildWorkoutCalendarNotes(nextWorkout) || "Workout execution",
+      workoutId: nextWorkout.id,
+      workoutName: title,
+      exerciseIds: nextWorkout.exercise_ids,
+      source: "calendar-workout",
+      status: "scheduled",
     }
     const nextEntries = {
       ...entriesByDate,
@@ -559,6 +796,12 @@ function Calendar() {
                     <p className="calendar-entry-title">{selectedEntry.title}</p>
                     <p className="calendar-entry-meta">{selectedEntry.time || "No time set"}</p>
                     <p className="calendar-entry-notes">{selectedEntry.notes || "No notes for this event."}</p>
+                    {selectedEntry.workoutId ? (
+                      <p className="calendar-entry-program-info">
+                        <span className="calendar-entry-program-badge">Workout</span>
+                        {selectedEntry.workoutName || "Saved workout"}
+                      </p>
+                    ) : null}
                     {selectedEntry.programId ? (
                       <p className="calendar-entry-program-info">
                         <span className="calendar-entry-program-badge">Program</span>
@@ -626,6 +869,9 @@ function Calendar() {
                               {entry.programName ? `Program: ${entry.programName}` : "Program"}
                             </span>
                           ) : null}
+                          {!entry.programId && entry.workoutId ? (
+                            <span className="calendar-entry-program-badge">Workout</span>
+                          ) : null}
                           {!entry.programId && entry.notes ? (
                             <p className="calendar-entry-notes">{entry.notes}</p>
                           ) : null}
@@ -640,18 +886,18 @@ function Calendar() {
 
           {/* Add form */}
           {panelMode === "add" ? (
-            <form className="calendar-form" onSubmit={handleSubmitAdd} aria-label="Add new entry">
-              <h3>New Entry</h3>
+            <form className="calendar-form" onSubmit={handleSubmitAdd} aria-label="Add new workout">
+              <h3>New Workout</h3>
               {formError ? <p className="calendar-form-error">{formError}</p> : null}
 
-              <label htmlFor="add-title">Title</label>
+              <label htmlFor="add-title">Workout Name</label>
               <input
                 id="add-title"
                 type="text"
                 name="title"
                 value={addFormValues.title}
                 onChange={handleAddFormChange}
-                placeholder="Workout title"
+                placeholder="Monday Strength Session"
                 autoFocus
                 required
               />
@@ -665,18 +911,174 @@ function Calendar() {
                 onChange={handleAddFormChange}
               />
 
-              <label htmlFor="add-notes">Notes (optional)</label>
+              <label htmlFor="add-workout-type">Workout Type</label>
+              <select
+                id="add-workout-type"
+                name="workout_type"
+                value={addFormValues.workout_type}
+                onChange={handleAddFormChange}
+              >
+                {WORKOUT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+
+              <label htmlFor="add-score-type">Score Type</label>
+              <select
+                id="add-score-type"
+                name="score_type"
+                value={addFormValues.score_type}
+                onChange={handleAddFormChange}
+              >
+                {SCORE_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+
+              <label htmlFor="add-time-cap">Time Cap (minutes)</label>
+              <input
+                id="add-time-cap"
+                type="number"
+                name="time_cap_minutes"
+                value={addFormValues.time_cap_minutes}
+                min="0"
+                step="1"
+                onChange={handleAddFormChange}
+                placeholder="18"
+              />
+
+              <label htmlFor="add-rx-track">Track</label>
+              <select id="add-rx-track" name="rx_track" value={addFormValues.rx_track} onChange={handleAddFormChange}>
+                <option value="scaled">Scaled</option>
+                <option value="rx">RX</option>
+                <option value="rx_plus">RX+</option>
+              </select>
+
+              <label className="calendar-checkbox" htmlFor="add-partner-workout">
+                <input
+                  id="add-partner-workout"
+                  type="checkbox"
+                  name="is_partner_workout"
+                  checked={Boolean(addFormValues.is_partner_workout)}
+                  onChange={handleAddFormChange}
+                />
+                Partner workout
+              </label>
+
+              <label htmlFor="add-format-details">Format Details</label>
+              <input
+                id="add-format-details"
+                type="text"
+                name="format_details"
+                value={addFormValues.format_details}
+                onChange={handleAddFormChange}
+                placeholder="5 rounds: 400m run + 12 power cleans (95/65)"
+              />
+
+              <label htmlFor="add-warm-up">Warm-up</label>
+              <textarea
+                id="add-warm-up"
+                name="warm_up"
+                value={addFormValues.warm_up}
+                onChange={handleAddFormChange}
+                placeholder="2 rounds: 8 PVC pass-throughs, 10 air squats"
+                rows={2}
+              />
+
+              <label htmlFor="add-strength-piece">Strength / Skill</label>
+              <textarea
+                id="add-strength-piece"
+                name="strength_piece"
+                value={addFormValues.strength_piece}
+                onChange={handleAddFormChange}
+                placeholder="Back Squat 5x3 @ 80-85%"
+                rows={2}
+              />
+
+              <label htmlFor="add-buy-in">Buy-in</label>
+              <input
+                id="add-buy-in"
+                type="text"
+                name="buy_in"
+                value={addFormValues.buy_in}
+                onChange={handleAddFormChange}
+                placeholder="800m run"
+              />
+
+              <label htmlFor="add-wod">WOD</label>
+              <textarea
+                id="add-wod"
+                name="wod"
+                value={addFormValues.wod}
+                onChange={handleAddFormChange}
+                placeholder="For time: 21-15-9 Thrusters (95/65) and Pull-ups"
+                rows={3}
+                required
+              />
+
+              <label htmlFor="add-cash-out">Cash-out</label>
+              <input
+                id="add-cash-out"
+                type="text"
+                name="cash_out"
+                value={addFormValues.cash_out}
+                onChange={handleAddFormChange}
+                placeholder="3 x 1 min plank"
+              />
+
+              <label htmlFor="add-cooldown">Cool-down</label>
+              <textarea
+                id="add-cooldown"
+                name="cooldown"
+                value={addFormValues.cooldown}
+                onChange={handleAddFormChange}
+                placeholder="5 min bike + hip/lat stretch"
+                rows={2}
+              />
+
+              <label htmlFor="add-notes">Workout Notes</label>
               <textarea
                 id="add-notes"
                 name="notes"
                 value={addFormValues.notes}
                 onChange={handleAddFormChange}
-                placeholder="Any notes for this workout..."
+                placeholder="Target effort, pacing, or cues"
                 rows={3}
               />
 
+              <label htmlFor="add-exercises">Exercises</label>
+              <div id="add-exercises" className="calendar-exercise-picker" role="group" aria-label="Workout Exercises">
+                {workoutExerciseOptions.map(({ id, label }) => {
+                  const optionId = String(id)
+                  const isSelected = (Array.isArray(addFormValues.exercise_ids) ? addFormValues.exercise_ids : [])
+                    .some((value) => String(value) === optionId)
+
+                  return (
+                    <label key={optionId} className="calendar-exercise-option">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleAddWorkoutExerciseToggle(id)}
+                        disabled={workoutExerciseOptions.length === 0}
+                      />
+                      <span>{label || `Exercise #${id}`}</span>
+                    </label>
+                  )
+                })}
+              </div>
+
+              {isExerciseLibraryLoading ? (
+                <p className="calendar-entry-meta">Loading exercise library...</p>
+              ) : null}
+              {!isExerciseLibraryLoading && exerciseLibraryError ? (
+                <p className="calendar-form-error">{exerciseLibraryError}</p>
+              ) : null}
+              {!isExerciseLibraryLoading && !exerciseLibraryError && workoutExerciseOptions.length === 0 ? (
+                <p className="calendar-entry-meta">Add exercises in the Exercise Library before creating workouts.</p>
+              ) : null}
+
               <div className="calendar-form-actions">
-                <button type="submit">Save Entry</button>
+                <button type="submit" disabled={workoutExerciseOptions.length === 0}>Save Workout</button>
                 <button type="button" className="calendar-btn-secondary" onClick={handleCancelAdd}>
                   Cancel
                 </button>

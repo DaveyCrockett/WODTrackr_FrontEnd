@@ -2,6 +2,68 @@
   height: calc(100vh - 4rem);
 }
 
+.exercise-top-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.exercise-workout-panel {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 1.1rem;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+}
+
+.exercise-workout-list {
+  margin-top: 0.85rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.exercise-workout-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.85rem;
+  background: #f8fafc;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.exercise-workout-card h3 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.exercise-workout-picker {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 0.55rem;
+  max-height: 240px;
+  overflow-y: auto;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.exercise-workout-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.45rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.exercise-workout-option:hover {
+  background: #f8fafc;
+}
+
+.exercise-workout-option input {
+  margin: 0;
+}
+
 .exercise-shell {
   display: grid;
   grid-template-columns: minmax(0, 0.75fr) minmax(320px, 1fr);
@@ -81,11 +143,29 @@
   color: #0f172a;
 }
 
+.exercise-field textarea {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: #ffffff;
+  color: #0f172a;
+  min-height: 88px;
+  resize: vertical;
+  font: inherit;
+}
+
 .exercise-field input:focus,
-.exercise-field select:focus {
+.exercise-field select:focus,
+.exercise-field textarea:focus {
   outline: none;
   border-color: #1d4ed8;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+.exercise-workout-metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
 }
 
 .exercise-field-wide {
@@ -343,6 +423,10 @@
   padding: 1.1rem;
 }
 
+.exercise-library-modal {
+  width: min(980px, 100%);
+}
+
 .exercise-modal-header {
   display: flex;
   align-items: flex-start;
@@ -386,6 +470,10 @@
   }
 
   .exercise-search-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .exercise-workout-metadata-grid {
     grid-template-columns: 1fr;
   }
 

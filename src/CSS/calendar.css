@@ -234,6 +234,38 @@
     resize: vertical;
 }
 
+.calendar-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.calendar-checkbox input {
+    margin: 0;
+}
+
+.calendar-exercise-picker {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0.5rem;
+    max-height: 180px;
+    overflow-y: auto;
+    display: grid;
+    gap: 0.35rem;
+}
+
+.calendar-exercise-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #334155;
+    font-size: 0.9rem;
+}
+
+.calendar-exercise-option input {
+    margin: 0;
+}
+
 .calendar-form-actions {
     display: flex;
     gap: 0.5rem;

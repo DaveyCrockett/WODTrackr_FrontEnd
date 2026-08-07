@@ -12,6 +12,7 @@ const API_URL = "/api/wodtrackr/exercise-programs/"
 
 const mockProgram = {
   id: 1,
+  title: "Strength Cycle",
   name: "Strength Cycle",
   description: "Base strength training",
   difficulty: "Beginner",
@@ -91,18 +92,18 @@ describe("Programs Component", () => {
 
     const dialog = await screen.findByRole("dialog")
     await userEvent.click(screen.getByRole("button", { name: "Edit Program" }))
-    const nameInput = await screen.findByRole("textbox", { name: "Name" })
+    const titleInput = await screen.findByRole("textbox", { name: "Title" })
     expect(dialog).toBeInTheDocument()
-    expect(nameInput).toHaveValue("Strength Cycle")
+    expect(titleInput).toHaveValue("Strength Cycle")
 
-    await userEvent.clear(nameInput)
-    await userEvent.type(nameInput, "Updated Strength Cycle")
+    await userEvent.clear(titleInput)
+    await userEvent.type(titleInput, "Updated Strength Cycle")
     await userEvent.click(screen.getByRole("button", { name: "Save Changes" }))
 
     await waitFor(() => {
       expect(axios.put).toHaveBeenCalledWith(
         `${API_URL}1/`,
-        expect.objectContaining({ name: "Updated Strength Cycle", equipment: ["barbell"] }),
+        expect.objectContaining({ title: "Updated Strength Cycle", equipment: ["barbell"] }),
         expect.anything(),
       )
     })
@@ -156,7 +157,7 @@ describe("Programs Component", () => {
     await userEvent.click(screen.getByRole("button", { name: "View Details" }))
     await screen.findByRole("dialog")
     await userEvent.click(screen.getByRole("button", { name: "Edit Program" }))
-    await screen.findByRole("textbox", { name: "Name" })
+    await screen.findByRole("textbox", { name: "Title" })
 
     // Submit the update (no workout_plan changes, just verifying state is preserved)
     await userEvent.click(screen.getByRole("button", { name: "Save Changes" }))
@@ -204,7 +205,7 @@ describe("Programs Component", () => {
     })
   })
 
-  it("creates a program with selected workout exercises", async () => {
+  it("creates a program with a full workout added to each week", async () => {
     axios.get.mockImplementation((url) => {
       if (url === API_URL) return Promise.resolve({ data: { data: [mockProgram] } })
       if (url === `${API_URL}choices/`) return Promise.resolve(mockChoicesResponse)
@@ -221,20 +222,24 @@ describe("Programs Component", () => {
     await userEvent.click(screen.getByRole("button", { name: "New Program" }))
     const createDialog = await screen.findByRole("dialog", { name: "Create New Program" })
 
-    await userEvent.type(within(createDialog).getByRole("textbox", { name: "Name" }), "Plan Builder")
+    await userEvent.type(within(createDialog).getByRole("textbox", { name: "Title" }), "Plan Builder")
     await userEvent.type(within(createDialog).getByRole("textbox", { name: "Description" }), "Includes structured sessions")
     await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Difficulty" }), "Beginner")
     await userEvent.type(within(createDialog).getByRole("spinbutton", { name: "Duration \(weeks\)" }), "2")
     await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Category" }), "Strength")
     await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Goal" }), "Build Strength")
-    await userEvent.click(within(createDialog).getByRole("button", { name: "Equipment" }))
-    await userEvent.click(within(createDialog).getByRole("checkbox", { name: "Barbell" }))
+    const equipmentToggle = createDialog.querySelector(".multiselect-toggle")
+    expect(equipmentToggle).not.toBeNull()
+    await userEvent.click(equipmentToggle)
+    const barbellCheckbox = createDialog.querySelector('input[name="equipment"][value="barbell"]')
+    expect(barbellCheckbox).not.toBeNull()
+    await userEvent.click(barbellCheckbox)
 
-    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Exercise" }), "101")
-    await userEvent.click(within(createDialog).getByRole("button", { name: "Add Exercise" }))
+    await userEvent.selectOptions(within(createDialog).getByRole("listbox", { name: "Workout Exercises" }), "101")
+    await userEvent.click(within(createDialog).getByRole("button", { name: "Add Workout" }))
     await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Week" }), "2")
-    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Exercise" }), "101")
-    await userEvent.click(within(createDialog).getByRole("button", { name: "Add Exercise" }))
+    await userEvent.selectOptions(within(createDialog).getByRole("listbox", { name: "Workout Exercises" }), "101")
+    await userEvent.click(within(createDialog).getByRole("button", { name: "Add Workout" }))
 
     await userEvent.click(within(createDialog).getByRole("button", { name: "Create Program" }))
 
@@ -242,7 +247,7 @@ describe("Programs Component", () => {
       expect(axios.post).toHaveBeenCalledWith(
         API_URL,
         expect.objectContaining({
-          name: "Plan Builder",
+          title: "Plan Builder",
           equipment: ["barbell"],
           exercises: [101],
         }),
@@ -267,7 +272,7 @@ describe("Programs Component", () => {
     await userEvent.click(screen.getByRole("button", { name: "New Program" }))
     const createDialog = await screen.findByRole("dialog", { name: "Create New Program" })
 
-    await userEvent.type(within(createDialog).getByRole("textbox", { name: "Name" }), "Plan Builder")
+    await userEvent.type(within(createDialog).getByRole("textbox", { name: "Title" }), "Plan Builder")
     await userEvent.type(within(createDialog).getByRole("textbox", { name: "Description" }), "Includes structured sessions")
     await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Difficulty" }), "Beginner")
     await userEvent.type(within(createDialog).getByRole("spinbutton", { name: "Duration (weeks)" }), "2")
@@ -296,18 +301,18 @@ describe("Programs Component", () => {
     await userEvent.click(screen.getByRole("button", { name: "New Program" }))
     const createDialog = await screen.findByRole("dialog", { name: "Create New Program" })
 
-    await userEvent.type(within(createDialog).getByRole("textbox", { name: "Name" }), "Plan Builder")
+    await userEvent.type(within(createDialog).getByRole("textbox", { name: "Title" }), "Plan Builder")
     await userEvent.type(within(createDialog).getByRole("textbox", { name: "Description" }), "Includes structured sessions")
     await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Difficulty" }), "Beginner")
     await userEvent.type(within(createDialog).getByRole("spinbutton", { name: "Duration (weeks)" }), "2")
     await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Category" }), "Strength")
     await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Goal" }), "Build Strength")
-    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Exercise" }), "101")
-    await userEvent.click(within(createDialog).getByRole("button", { name: "Add Exercise" }))
+    await userEvent.selectOptions(within(createDialog).getByRole("listbox", { name: "Workout Exercises" }), "101")
+    await userEvent.click(within(createDialog).getByRole("button", { name: "Add Workout" }))
     await userEvent.click(within(createDialog).getByRole("button", { name: "Create Program" }))
 
     expect(axios.post).not.toHaveBeenCalled()
-    expect(await screen.findByText("Each week in the workout plan must include at least 1 exercise.")).toBeInTheDocument()
+    expect(await screen.findByText("Each week in the workout plan must include at least 1 workout.")).toBeInTheDocument()
   })
 
   it("starts checkout from details modal using program name as title fallback", async () => {
@@ -343,7 +348,7 @@ describe("Programs Component", () => {
 
     await waitFor(() => {
       expect(axios.post).toHaveBeenCalledWith(
-        "/api/wodtrackr/billing/stripe/checkout-session/",
+        "/api/users/billing/stripe/checkout-session/",
         expect.objectContaining({
           program_id: 1,
           program_title: "Strength Cycle",

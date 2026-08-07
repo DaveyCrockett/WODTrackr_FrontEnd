@@ -2,9 +2,11 @@ import { describe, it, expect, beforeEach, vi } from "vitest"
 import React from "react"
 import { render, screen, within, waitFor, fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import axios from "axios"
 import Calendar from "../components/Calendar"
 
 vi.mock("../CSS/calendar.css")
+vi.mock("axios")
 
 const STORAGE_KEY = "wodtrackrCalendarEntries"
 const LEGACY_SCHEDULED_PROGRAMS_KEY = "wodtrackrScheduledPrograms"
@@ -15,6 +17,7 @@ describe("Calendar Component", () => {
     localStorage.clear()
     vi.mocked(localStorage.getItem).mockReturnValue(null)
     vi.mocked(localStorage.setItem).mockImplementation(() => {})
+    vi.mocked(axios.get).mockResolvedValue({ data: { data: [{ id: 101, name: "Back Squat" }] } })
   })
 
   it("renders month view with today highlighted", () => {
@@ -46,17 +49,19 @@ describe("Calendar Component", () => {
   it("opens add form when Add button is clicked", async () => {
     render(<Calendar />)
     await userEvent.click(screen.getByRole("button", { name: "+ Add" }))
-    expect(screen.getByRole("form", { name: "Add new entry" })).toBeInTheDocument()
-    expect(screen.getByLabelText("Title")).toBeInTheDocument()
+    expect(screen.getByRole("form", { name: "Add new workout" })).toBeInTheDocument()
+    expect(screen.getByLabelText("Workout Name")).toBeInTheDocument()
   })
 
-  it("adds a new entry to the selected date", async () => {
+  it("adds a new workout entry to the selected date", async () => {
     render(<Calendar />)
     await userEvent.click(screen.getByRole("button", { name: "+ Add" }))
 
-    const titleInput = screen.getByLabelText("Title")
+    const titleInput = screen.getByLabelText("Workout Name")
     await userEvent.type(titleInput, "Morning Run")
-    await userEvent.click(screen.getByRole("button", { name: "Save Entry" }))
+    await userEvent.type(screen.getByLabelText("WOD"), "3 rounds for time")
+    await userEvent.click(screen.getByRole("checkbox", { name: "Back Squat" }))
+    await userEvent.click(screen.getByRole("button", { name: "Save Workout" }))
 
     // Entry title appears in both the detail panel and the list - check at least one
     const allTitles = await screen.findAllByText("Morning Run")
@@ -67,23 +72,23 @@ describe("Calendar Component", () => {
     )
   })
 
-  it("shows form error when title is empty on add", async () => {
+  it("shows form error when workout name is empty on add", async () => {
     render(<Calendar />)
     await userEvent.click(screen.getByRole("button", { name: "+ Add" }))
     // submit the form directly to ensure the onSubmit handler fires
-    const form = screen.getByRole("form", { name: "Add new entry" })
+    const form = screen.getByRole("form", { name: "Add new workout" })
     fireEvent.submit(form)
 
-    expect(await screen.findByText("Title is required.")).toBeInTheDocument()
+    expect(await screen.findByText("Workout name is required.")).toBeInTheDocument()
   })
 
   it("cancels add form and returns to detail panel", async () => {
     render(<Calendar />)
     await userEvent.click(screen.getByRole("button", { name: "+ Add" }))
-    expect(screen.getByRole("form", { name: "Add new entry" })).toBeInTheDocument()
+    expect(screen.getByRole("form", { name: "Add new workout" })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }))
-    expect(screen.queryByRole("form", { name: "Add new entry" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("form", { name: "Add new workout" })).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "+ Add" })).toBeInTheDocument()
   })
 

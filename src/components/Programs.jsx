@@ -10,6 +10,7 @@ const EQUIPMENT_API_URL = "/api/wodtrackr/equipment/"
 const STRIPE_CHECKOUT_API_URL = String(
   import.meta.env.VITE_CHECKOUT_SESSION_API_URL || "/api/users/billing/stripe/checkout-session/",
 ).trim()
+const WORKOUTS_STORAGE_KEY = "wodtrackrWorkouts"
 const PURCHASED_PROGRAMS_STORAGE_KEY = "wodtrackrPurchasedProgramIds"
 const PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY = "wodtrackrPendingCheckoutProgramId"
 const PROGRAMS_PER_PAGE = 10
@@ -221,7 +222,7 @@ const getWorkoutPlanValidationMessage = (durationValue, workoutPlan) => {
   }
 
   if (weeksWithExercises.length !== normalizedWorkoutPlan.length) {
-    return "Each week in the workout plan must include at least 1 exercise."
+    return "Each week in the workout plan must include at least 1 workout."
   }
 
   return ""
@@ -595,6 +596,27 @@ const formatTimestamp = (value) => {
 
 const getDefaultProgramImageUrl = () => "../src/assets/DefaultBanner.jpg"
 
+const getStoredWorkouts = () => {
+  try {
+    const rawValue = localStorage.getItem(WORKOUTS_STORAGE_KEY)
+    const parsed = rawValue ? JSON.parse(rawValue) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((entry) => entry && typeof entry === "object")
+      .map((entry) => ({
+        ...entry,
+        id: String(entry.id || ""),
+        title: String(entry.title || ""),
+        exercise_ids: Array.isArray(entry.exercise_ids)
+          ? entry.exercise_ids.map((exerciseId) => Number(exerciseId)).filter((exerciseId) => Number.isFinite(exerciseId))
+          : [],
+      }))
+      .filter((entry) => entry.id && entry.title && entry.exercise_ids.length > 0)
+  } catch {
+    return []
+  }
+}
+
 const getPurchasedProgramIds = () => {
   try {
     const rawValue = localStorage.getItem(PURCHASED_PROGRAMS_STORAGE_KEY)
@@ -883,8 +905,10 @@ function Programs() {
   const [exerciseLibrary, setExerciseLibrary] = useState([])
   const [isExerciseLibraryLoading, setIsExerciseLibraryLoading] = useState(false)
   const [exerciseLibraryError, setExerciseLibraryError] = useState("")
+  const [workouts, setWorkouts] = useState(() => getStoredWorkouts())
   const [createPlanWeek, setCreatePlanWeek] = useState(1)
-  const [createPlanExerciseId, setCreatePlanExerciseId] = useState("")
+  const [createPlanExercise, setCreatePlanExercise] = useState([])
+  const [createPlanWorkoutId, setCreatePlanWorkoutId] = useState("")
   const [searchName, setSearchName] = useState("")
   const [sortOrder, setSortOrder] = useState("asc")
   const [filters, setFilters] = useState({ difficulty: [], category: [], goal: [], equipment: [] })
@@ -910,6 +934,7 @@ function Programs() {
   const [detailWorkoutPlan, setDetailWorkoutPlan] = useState([])
   const [detailPlanWeek, setDetailPlanWeek] = useState(1)
   const [detailPlanExerciseId, setDetailPlanExerciseId] = useState("")
+  const [detailPlanWorkoutId, setDetailPlanWorkoutId] = useState("")
   const [categoryChoices, setCategoryChoices] = useState([])
   const [goalChoices, setGoalChoices] = useState([])
   const [difficultyChoices, setDifficultyChoices] = useState([])
@@ -1005,6 +1030,21 @@ function Programs() {
     }
 
     loadExerciseLibrary()
+  }, [])
+
+  useEffect(() => {
+    const syncWorkoutsFromStorage = () => {
+      setWorkouts(getStoredWorkouts())
+    }
+
+    syncWorkoutsFromStorage()
+    window.addEventListener("storage", syncWorkoutsFromStorage)
+    document.addEventListener("visibilitychange", syncWorkoutsFromStorage)
+
+    return () => {
+      window.removeEventListener("storage", syncWorkoutsFromStorage)
+      document.removeEventListener("visibilitychange", syncWorkoutsFromStorage)
+    }
   }, [])
 
   useEffect(() => {
@@ -1183,15 +1223,19 @@ function Programs() {
   const exerciseOptions = useMemo(() => {
     return [...exerciseLibrary]
       .filter((exercise) => Number.isFinite(Number(exercise?.id)))
-      .sort((a, b) => String(a?.title ?? "").localeCompare(String(b?.title ?? "")))
+      .sort((a, b) => String(a?.title ?? a?.name ?? "").localeCompare(String(b?.title ?? b?.name ?? "")))
   }, [exerciseLibrary])
   const exerciseNameById = useMemo(
     () =>
       exerciseOptions.reduce((accumulator, exercise) => {
-        accumulator[Number(exercise.id)] = String(exercise.title || `Exercise #${exercise.id}`)
+        accumulator[Number(exercise.id)] = String(exercise.title || exercise.name || `Exercise #${exercise.id}`)
         return accumulator
       }, {}),
     [exerciseOptions],
+  )
+  const workoutById = useMemo(
+    () => new Map(workouts.map((workout) => [String(workout.id), workout])),
+    [workouts],
   )
   const detailsWorkoutPlan = Array.isArray(detailWorkoutPlan) ? detailWorkoutPlan : []
   const createEquipmentSelection = Array.isArray(createFormValues.equipment) ? createFormValues.equipment : []
@@ -1301,7 +1345,8 @@ function Programs() {
     setCreateFieldErrors({})
     setCreateErrorMessage("")
     setCreatePlanWeek(1)
-    setCreatePlanExerciseId("")
+    setCreatePlanExercise([])
+    setCreatePlanWorkoutId("")
     setEditImageFile(null)
     setEditImagePreview("")
     if (editImageInputRef.current) {
@@ -1335,25 +1380,51 @@ function Programs() {
     setCreateFieldErrors((prev) => clearFormFieldError(prev, name, name === "duration_weeks"))
   }
 
-  const handleAddExerciseToWorkoutWeek = () => {
+  const handleAddWorkoutToPlanWeek = () => {
     const weekNumber = Number(createPlanWeek)
-    const exerciseId = Number(createPlanExerciseId)
-    if (!Number.isFinite(weekNumber) || !Number.isFinite(exerciseId)) return
+    console.log("Adding workout to plan week:", weekNumber, "with selected exercises:", createPlanExercise)
+    const selectedExerciseIds = [...new Set(
+      (Array.isArray(createPlanExercise) ? createPlanExercise : [])
+        .map((exercise) => (console.log("Parsing exercise ID:", exercise.id), Number(exercise.id)))
+    )]
+    if (!Number.isFinite(weekNumber) || selectedExerciseIds.length === 0) return
 
     setCreateFormValues((prev) => {
       const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
         if (weekEntry.week_number !== weekNumber) return weekEntry
-        if (weekEntry.exercise_ids.includes(exerciseId)) return weekEntry
-        console.log(`Adding exercise ID ${exerciseId} to week ${weekNumber} of workout plan.`)
+        const nextExerciseIds = [...new Set([...weekEntry.exercise_ids, ...selectedExerciseIds])]
+        if (nextExerciseIds.length === weekEntry.exercise_ids.length) return weekEntry
         return {
           ...weekEntry,
-          exercise_ids: [...weekEntry.exercise_ids, exerciseId],
+          exercise_ids: nextExerciseIds,
         }
       })
       return { ...prev, workout_plan: nextPlan }
     })
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
-    setCreatePlanExerciseId("")
+    setCreatePlanExercise([])
+  }
+
+  const handleAddSavedWorkoutToCreateWeek = () => {
+    const weekNumber = Number(createPlanWeek)
+    const selectedWorkout = workoutById.get(String(createPlanWorkoutId))
+    const workoutExerciseIds = Array.isArray(selectedWorkout?.exercise_ids)
+      ? selectedWorkout.exercise_ids.map((exerciseId) => Number(exerciseId)).filter((exerciseId) => Number.isFinite(exerciseId))
+      : []
+    if (!Number.isFinite(weekNumber) || workoutExerciseIds.length === 0) return
+
+    setCreateFormValues((prev) => {
+      const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
+        if (weekEntry.week_number !== weekNumber) return weekEntry
+        return {
+          ...weekEntry,
+          exercise_ids: [...new Set([...weekEntry.exercise_ids, ...workoutExerciseIds])],
+        }
+      })
+      return { ...prev, workout_plan: nextPlan }
+    })
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+    setCreatePlanWorkoutId("")
   }
 
   const handleRemoveExerciseFromWorkoutWeek = (weekNumber, exerciseId) => {
@@ -1472,7 +1543,8 @@ function Programs() {
       setCreateFormValues(EMPTY_PROGRAM_FORM_VALUES)
       setCreateFieldErrors({})
       setCreatePlanWeek(1)
-      setCreatePlanExerciseId("")
+      setCreatePlanExercise([])
+      setCreatePlanWorkoutId("")
     } catch (error) {
       const fieldErrors = {}
       const responseData = error?.response?.data
@@ -1515,6 +1587,7 @@ function Programs() {
     setDetailWorkoutPlan([])
     setDetailPlanWeek(1)
     setDetailPlanExerciseId("")
+    setDetailPlanWorkoutId("")
     setEditImageFile(null)
     setEditImagePreview("")
     if (editImageInputRef.current) {
@@ -1601,6 +1674,7 @@ function Programs() {
       const nextWorkoutPlan = buildWorkoutPlanFromProgram(sourceProgram)
       setDetailWorkoutPlan(nextWorkoutPlan)
       setDetailPlanWeek(nextWorkoutPlan[0]?.week_number || 1)
+      setDetailPlanWorkoutId("")
       setEditImageFile(null)
       setEditImagePreview(getProgramImageUrl(sourceProgram))
       if (editImageInputRef.current) {
@@ -1619,6 +1693,7 @@ function Programs() {
     setDetailWorkoutPlan([])
     setDetailPlanWeek(1)
     setDetailPlanExerciseId("")
+    setDetailPlanWorkoutId("")
     setEditFieldErrors({})
     setEditErrorMessage("")
     setCheckoutErrorMessage("")
@@ -2003,6 +2078,31 @@ function Programs() {
     setDetailPlanExerciseId("")
   }
 
+  const handleAddSavedWorkoutToDetailWeek = () => {
+    if (!isDetailsEditMode || !canEditSelectedProgram) return
+
+    const weekNumber = Number(detailPlanWeek)
+    const selectedWorkout = workoutById.get(String(detailPlanWorkoutId))
+    const workoutExerciseIds = Array.isArray(selectedWorkout?.exercise_ids)
+      ? selectedWorkout.exercise_ids.map((exerciseId) => Number(exerciseId)).filter((exerciseId) => Number.isFinite(exerciseId))
+      : []
+    if (!Number.isFinite(weekNumber) || workoutExerciseIds.length === 0) return
+
+    const totalWeeks = normalizeDurationWeeks(editFormValues.duration_weeks)
+    setDetailWorkoutPlan((prev) => {
+      const basePlan = totalWeeks > 0 ? buildWorkoutPlanForDuration(totalWeeks, prev) : [...prev]
+      return basePlan.map((weekEntry) => {
+        if (weekEntry.week_number !== weekNumber) return weekEntry
+        return {
+          ...weekEntry,
+          exercise_ids: [...new Set([...weekEntry.exercise_ids, ...workoutExerciseIds])],
+        }
+      })
+    })
+    setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+    setDetailPlanWorkoutId("")
+  }
+
   const handleRemoveExerciseFromDetailWeek = (weekNumber, exerciseId) => {
     if (!isDetailsEditMode || !canEditSelectedProgram) return
 
@@ -2149,6 +2249,7 @@ function Programs() {
     setDetailWorkoutPlan(nextWorkoutPlan)
     setDetailPlanWeek(nextWorkoutPlan[0]?.week_number || 1)
     setDetailPlanExerciseId("")
+    setDetailPlanWorkoutId("")
   }, [selectedProgramId, programDetailsById, selectedProgram, isDetailsEditMode])
 
   return (
@@ -2344,7 +2445,7 @@ function Programs() {
             className="programs-modal custom-scroll"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="programs-modal-title"
+            aria-labelledby="create-new-program-header"
             onClick={(event) => event.stopPropagation()}
           >
             <header className="programs-modal-header">
@@ -2499,7 +2600,7 @@ function Programs() {
               <section className="programs-plan-builder" aria-label="Workout plan builder">
                 <h3>Workout Plan By Week</h3>
                 <p className="programs-plan-helper">
-                  Pick a week and add exercises from your library. The number of weeks matches Duration.
+                  Pick a week, choose all exercises for that workout, then add the full workout. The number of weeks matches Duration.
                 </p>
                 {createFieldErrors.workout_plan ? <small className="programs-modal-error">{createFieldErrors.workout_plan}</small> : null}
 
@@ -2525,17 +2626,17 @@ function Programs() {
                   </label>
 
                   <label className="programs-modal-field">
-                    <span>Exercise</span>
+                    <span>Saved Workout</span>
                     <select
-                      name="plan_exercise"
-                      value={createPlanExerciseId}
-                      onChange={(event) => setCreatePlanExerciseId(event.target.value)}
-                      disabled={exerciseOptions.length === 0 || workoutPlan.length === 0}
+                      name="plan_saved_workout"
+                      value={createPlanWorkoutId}
+                      onChange={(event) => setCreatePlanWorkoutId(event.target.value)}
+                      disabled={workouts.length === 0 || workoutPlan.length === 0}
                     >
-                      <option value="">Select exercise</option>
-                      {exerciseOptions.map((exercise) => (
-                        <option key={exercise.id} value={String(exercise.id)}>
-                          {exercise.title}
+                      <option value="">Select workout</option>
+                      {workouts.map((workout) => (
+                        <option key={workout.id} value={String(workout.id)}>
+                          {workout.title}
                         </option>
                       ))}
                     </select>
@@ -2544,10 +2645,43 @@ function Programs() {
                   <button
                     type="button"
                     className="programs-modal-secondary-btn programs-plan-add-btn"
-                    onClick={handleAddExerciseToWorkoutWeek}
-                    disabled={!createPlanExerciseId || workoutPlan.length === 0}
+                    onClick={handleAddSavedWorkoutToCreateWeek}
+                    disabled={!createPlanWorkoutId || workoutPlan.length === 0}
                   >
-                    Add Exercise
+                    Add Saved Workout
+                  </button>
+
+                  <label className="programs-modal-field">
+                    <span>Workout Exercises</span>
+                    {exerciseOptions.map((exercise) => (
+                      <label key={exercise.id} className="exercise-label">
+                        <input
+                          key={exercise.id}
+                          type="checkbox"
+                          name={"plan_exercises"}
+                          value={exercise.title}
+                          checked={createPlanExercise.includes(exercise.title)}
+                          onChange={(event) => {
+                            const selectedIds = event.target.checked
+                              ? [...createPlanExercise, String(exercise.title)]
+                              : createPlanExercise.filter((id) => id !== String(exercise.title))
+                            setCreatePlanExercise(selectedIds)
+                          }}
+                          disabled={exerciseOptions.length === 0 || workoutPlan.length === 0}
+                        />
+                        <div className="multiselect-option">{exercise.title}</div>
+                      </label>
+                    ))}
+                  </label>
+
+                  <button
+                    type="button"
+                    className="programs-modal-secondary-btn programs-plan-add-btn"
+                    onClick={handleAddWorkoutToPlanWeek}
+                    disabled={createPlanExercise.length === 0 || workoutPlan.length === 0}
+                  >
+                    {console.log("Rendering Add Workout button", { createPlanExercise, workoutPlan })}
+                    Add Workout
                   </button>
                 </div>
 
@@ -2559,7 +2693,7 @@ function Programs() {
                       <article key={weekEntry.week_number} className="programs-plan-week-card">
                         <h4>Week {weekEntry.week_number}</h4>
                         {weekEntry.exercise_ids.length === 0 ? (
-                          <p className="programs-plan-helper">No exercises added yet.</p>
+                          <p className="programs-plan-helper">No workout added yet.</p>
                         ) : (
                           <ul className="programs-plan-exercise-list">
                             {weekEntry.exercise_ids.map((exerciseId) => (
@@ -2829,6 +2963,32 @@ function Programs() {
                           ))}
                         </select>
                       </label>
+
+                      <label className="programs-modal-field">
+                        <span>Saved Workout</span>
+                        <select
+                          name="details_plan_saved_workout"
+                          value={detailPlanWorkoutId}
+                          onChange={(event) => setDetailPlanWorkoutId(event.target.value)}
+                          disabled={workouts.length === 0 || detailsWorkoutPlan.length === 0}
+                        >
+                          <option value="">Select workout</option>
+                          {workouts.map((workout) => (
+                            <option key={workout.id} value={String(workout.id)}>
+                              {workout.title}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <button
+                        type="button"
+                        className="programs-modal-secondary-btn programs-plan-add-btn"
+                        onClick={handleAddSavedWorkoutToDetailWeek}
+                        disabled={!detailPlanWorkoutId || detailsWorkoutPlan.length === 0}
+                      >
+                        Add Saved Workout
+                      </button>
 
                       <label className="programs-modal-field">
                         <span>Exercise</span>
