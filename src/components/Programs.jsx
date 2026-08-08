@@ -1381,6 +1381,9 @@ function Programs() {
   }
 
   const handleAddWorkoutToPlanWeek = () => {
+    // TODO: Refactor exercise-list in excise component -- create a 
+    // reusable function maybe in its own function  also for programs 
+    // exercise list. see Line 964 in Exercises component.
 
     loadExerciseLibrary()
 

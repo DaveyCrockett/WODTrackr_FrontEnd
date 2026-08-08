@@ -20,6 +20,9 @@ const EMPTY_EXERCISE_FORM_VALUES = {
   created_by: "",
   is_public: false,
 }
+const [exerciseLibrary, setExerciseLibrary] = useState([])
+const [isExerciseLibraryLoading, setIsExerciseLibraryLoading] = useState(false)
+const [exerciseLibraryError, setExerciseLibraryError] = useState("")
 const getDefaultExerciseFormValues = (username = "") => ({
   ...EMPTY_EXERCISE_FORM_VALUES,
   created_by: username || "",
@@ -801,6 +804,25 @@ function Exercises() {
     [equipmentChoices]
   )
 
+  useEffect(() => {
+    const loadExerciseLibrary = async () => {
+      setIsExerciseLibraryLoading(true)
+      setExerciseLibraryError("")
+
+      try {
+        const response = await axios.get(EXERCISES_API_URL, buildRequestConfig())
+        setExerciseLibrary(normalizeExercisesPayload(response?.data))
+      } catch {
+        setExerciseLibrary([])
+        setExerciseLibraryError("Unable to load exercise library for workout planning.")
+      } finally {
+        setIsExerciseLibraryLoading(false)
+      }
+    }
+
+    loadExerciseLibrary()
+  }, [])
+
   return (
     <main className="exercise-page" aria-label="Exercise Library">
       <section className="exercise-top-actions">
@@ -957,6 +979,10 @@ function Exercises() {
                 role={!isLoading && filteredExercises.length > 0 ? "listbox" : undefined}
                 aria-label={!isLoading && filteredExercises.length > 0 ? "Exercises" : undefined}
                 aria-busy={isLoading}
+
+                // TODO: Refactor exercise-list in excise component -- create a 
+                // reusable function maybe in its own function  also for programs 
+                // exercise list. see Line 1386 in Programs component.
                 onKeyDown={(event) => {
                   if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
                   if (filteredExercises.length === 0) return
