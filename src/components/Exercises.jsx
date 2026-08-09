@@ -519,6 +519,25 @@ function Exercises() {
     loadChoices()
   }, [])
 
+  useEffect(() => {
+    const loadExerciseLibrary = async () => {
+      setIsExerciseLibraryLoading(true)
+      setExerciseLibraryError("")
+
+      try {
+        const response = await axios.get(EXERCISES_API_URL, buildRequestConfig())
+        setExerciseLibrary(normalizeExercisesPayload(response?.data))
+      } catch {
+        setExerciseLibrary([])
+        setExerciseLibraryError("Unable to load exercise library for workout planning.")
+      } finally {
+        setIsExerciseLibraryLoading(false)
+      }
+    }
+
+    loadExerciseLibrary()
+  }, [])
+
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target
     setFormValues((prev) => ({
@@ -804,24 +823,25 @@ function Exercises() {
     [equipmentChoices]
   )
 
-  useEffect(() => {
-    const loadExerciseLibrary = async () => {
-      setIsExerciseLibraryLoading(true)
-      setExerciseLibraryError("")
-
-      try {
-        const response = await axios.get(EXERCISES_API_URL, buildRequestConfig())
-        setExerciseLibrary(normalizeExercisesPayload(response?.data))
-      } catch {
-        setExerciseLibrary([])
-        setExerciseLibraryError("Unable to load exercise library for workout planning.")
-      } finally {
-        setIsExerciseLibraryLoading(false)
-      }
-    }
-
-    loadExerciseLibrary()
-  }, [])
+  const handleExerciseKeyStroke = (event) => {
+                  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
+                  if (filteredExercises.length === 0) return
+                  event.preventDefault()
+                  const currentIndex = displayedExercises.findIndex((ex) => (ex.id ?? null) === selectedExerciseId)
+                  let nextIndex = currentIndex
+                  if (event.key === "ArrowDown") nextIndex = Math.min(currentIndex + 1, displayedExercises.length - 1)
+                  else if (event.key === "ArrowUp") nextIndex = Math.max(currentIndex - 1, 0)
+                  else if (event.key === "Home") nextIndex = 0
+                  else if (event.key === "End") nextIndex = displayedExercises.length - 1
+                  if (nextIndex !== currentIndex) {
+                    const nextExercise = displayedExercises[nextIndex]
+                    setSelectedExerciseId(nextExercise.id ?? null)
+                    const optionEl = nextExercise.id
+                      ? event.currentTarget.querySelector(`#exercise-option-${nextExercise.id}`)
+                      : null
+                    optionEl?.focus()
+                  }
+                }
 
   return (
     <main className="exercise-page" aria-label="Exercise Library">
@@ -983,25 +1003,7 @@ function Exercises() {
                 // TODO: Refactor exercise-list in excise component -- create a 
                 // reusable function maybe in its own function  also for programs 
                 // exercise list. see Line 1386 in Programs component.
-                onKeyDown={(event) => {
-                  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
-                  if (filteredExercises.length === 0) return
-                  event.preventDefault()
-                  const currentIndex = displayedExercises.findIndex((ex) => (ex.id ?? null) === selectedExerciseId)
-                  let nextIndex = currentIndex
-                  if (event.key === "ArrowDown") nextIndex = Math.min(currentIndex + 1, displayedExercises.length - 1)
-                  else if (event.key === "ArrowUp") nextIndex = Math.max(currentIndex - 1, 0)
-                  else if (event.key === "Home") nextIndex = 0
-                  else if (event.key === "End") nextIndex = displayedExercises.length - 1
-                  if (nextIndex !== currentIndex) {
-                    const nextExercise = displayedExercises[nextIndex]
-                    setSelectedExerciseId(nextExercise.id ?? null)
-                    const optionEl = nextExercise.id
-                      ? event.currentTarget.querySelector(`#exercise-option-${nextExercise.id}`)
-                      : null
-                    optionEl?.focus()
-                  }
-                }}
+                onKeyDown={handleExerciseKeyStroke}
               >
                 {isLoading ? (
                   Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (

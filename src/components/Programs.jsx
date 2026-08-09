@@ -1014,25 +1014,6 @@ function Programs() {
   }, [selectedProgramId])
 
   useEffect(() => {
-    const loadExerciseLibrary = async () => {
-      setIsExerciseLibraryLoading(true)
-      setExerciseLibraryError("")
-
-      try {
-        const response = await axios.get(EXERCISES_API_URL, buildRequestConfig())
-        setExerciseLibrary(normalizeExercisesPayload(response?.data))
-      } catch {
-        setExerciseLibrary([])
-        setExerciseLibraryError("Unable to load exercise library for workout planning.")
-      } finally {
-        setIsExerciseLibraryLoading(false)
-      }
-    }
-
-    loadExerciseLibrary()
-  }, [])
-
-  useEffect(() => {
     const syncWorkoutsFromStorage = () => {
       setWorkouts(getStoredWorkouts())
     }
@@ -1149,6 +1130,24 @@ function Programs() {
     }
 
     loadChoices()
+  }, [])
+
+  useEffect(() => {
+     const loadExerciseLibrary = async () => {
+      setIsExerciseLibraryLoading(true)
+      setExerciseLibraryError("")
+
+      try {
+        const response = await axios.get(EXERCISES_API_URL, buildRequestConfig())
+        setExerciseLibrary(normalizeExercisesPayload(response?.data))
+      } catch {
+        setExerciseLibrary([])
+        setExerciseLibraryError("Unable to load exercise library for workout planning.")
+      } finally {
+        setIsExerciseLibraryLoading(false)
+      }
+    }
+  loadExerciseLibrary()
   }, [])
 
   const selectedProgram = useMemo(
@@ -1380,22 +1379,10 @@ function Programs() {
     setCreateFieldErrors((prev) => clearFormFieldError(prev, name, name === "duration_weeks"))
   }
 
-  const handleAddWorkoutToPlanWeek = () => {
+  const handleAddWorkoutToPlanWeek = (weekNumber, selectedExerciseIds) => {
     // TODO: Refactor exercise-list in excise component -- create a 
     // reusable function maybe in its own function  also for programs 
     // exercise list. see Line 964 in Exercises component.
-
-    loadExerciseLibrary()
-
-    // const weekNumber = Number(createPlanWeek)
-    // console.log("Adding workout to plan week:", weekNumber, "with selected exercises:", createPlanExercise)
-    
-    // const selectedExerciseIds = [...new Set(
-    //   (Array.isArray(createPlanExercise) ? createPlanExercise : [])
-    //     .map((exercise) => (console.log("Parsing exercise ID:", exercise.id), Number(exercise.id)))
-    // )]
-    // if (!Number.isFinite(weekNumber) || selectedExerciseIds.length === 0) return
-
     setCreateFormValues((prev) => {
       const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
         if (weekEntry.week_number !== weekNumber) return weekEntry
@@ -2685,7 +2672,7 @@ function Programs() {
                   <button
                     type="button"
                     className="programs-modal-secondary-btn programs-plan-add-btn"
-                    onClick={handleAddWorkoutToPlanWeek}
+                    onClick={() => handleAddWorkoutToPlanWeek(weekEntry.week_number, weekEntry.exercise_ids)}
                     disabled={createPlanExercise.length === 0 || workoutPlan.length === 0}
                   >
                     {console.log("Rendering Add Workout button", { createPlanExercise, workoutPlan })}
