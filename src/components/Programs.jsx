@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import MultiSelect from "./MultiSelect"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
-const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 const EQUIPMENT_API_URL = "/api/wodtrackr/equipment/"
 const STRIPE_CHECKOUT_API_URL = String(
   import.meta.env.VITE_CHECKOUT_SESSION_API_URL || "/api/users/billing/stripe/checkout-session/",
@@ -431,13 +430,6 @@ const normalizeProgramDetailPayload = (data) => {
   }
 
   return null
-}
-
-const normalizeExercisesPayload = (data) => {
-  if (Array.isArray(data?.data)) return data.data
-  if (Array.isArray(data?.results)) return data.results
-  if (Array.isArray(data)) return data
-  return []
 }
 
 const normalizeEquipmentPayload = (data) => {
@@ -893,7 +885,7 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
   return [...new Set(mappedValues)]
 }
 
-function Programs() {
+function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
   const [programs, setPrograms] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
@@ -902,9 +894,6 @@ function Programs() {
   const [createFieldErrors, setCreateFieldErrors] = useState({})
   const [createErrorMessage, setCreateErrorMessage] = useState("")
   const [isCreateSubmitting, setIsCreateSubmitting] = useState(false)
-  const [exerciseLibrary, setExerciseLibrary] = useState([])
-  const [isExerciseLibraryLoading, setIsExerciseLibraryLoading] = useState(false)
-  const [exerciseLibraryError, setExerciseLibraryError] = useState("")
   const [workouts, setWorkouts] = useState(() => getStoredWorkouts())
   const [createPlanWeek, setCreatePlanWeek] = useState(1)
   const [createPlanExercise, setCreatePlanExercise] = useState([])
@@ -947,6 +936,8 @@ function Programs() {
   const [scheduleStartDate, setScheduleStartDate] = useState("")
   const [scheduleError, setScheduleError] = useState("")
   const [scheduleSuccess, setScheduleSuccess] = useState("")
+
+  const { exerciseLibrary, isExerciseLibraryLoading, exerciseLibraryError } = exerciseLibraryState
 
   useEffect(() => {
     const loadPrograms = async () => {
@@ -1130,24 +1121,6 @@ function Programs() {
     }
 
     loadChoices()
-  }, [])
-
-  useEffect(() => {
-     const loadExerciseLibrary = async () => {
-      setIsExerciseLibraryLoading(true)
-      setExerciseLibraryError("")
-
-      try {
-        const response = await axios.get(EXERCISES_API_URL, buildRequestConfig())
-        setExerciseLibrary(normalizeExercisesPayload(response?.data))
-      } catch {
-        setExerciseLibrary([])
-        setExerciseLibraryError("Unable to load exercise library for workout planning.")
-      } finally {
-        setIsExerciseLibraryLoading(false)
-      }
-    }
-  loadExerciseLibrary()
   }, [])
 
   const selectedProgram = useMemo(

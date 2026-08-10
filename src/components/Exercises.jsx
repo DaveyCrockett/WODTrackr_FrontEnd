@@ -20,9 +20,7 @@ const EMPTY_EXERCISE_FORM_VALUES = {
   created_by: "",
   is_public: false,
 }
-const [exerciseLibrary, setExerciseLibrary] = useState([])
-const [isExerciseLibraryLoading, setIsExerciseLibraryLoading] = useState(false)
-const [exerciseLibraryError, setExerciseLibraryError] = useState("")
+
 const getDefaultExerciseFormValues = (username = "") => ({
   ...EMPTY_EXERCISE_FORM_VALUES,
   created_by: username || "",
@@ -253,8 +251,7 @@ const getExerciseFormValues = (exercise) => ({
 })
 
 
-function Exercises() {
-  const [exercises, setExercises] = useState([])
+function Exercises({exerciseLibraryState, setExerciseLibraryState}) {
   const [searchName, setSearchName] = useState("")
   const [ordering, setOrdering] = useState("name")
   const [filters, setFilters] = useState({
@@ -292,6 +289,11 @@ function Exercises() {
   const editModalTriggerRef = useRef(null)
   const addModalPreviouslyOpen = useRef(false)
   const editModalPreviouslyOpen = useRef(false)
+
+  const { exerciseLibrary, 
+          isExerciseLibraryLoading, 
+          exerciseLibraryError 
+        } = exerciseLibraryState
 
   useEffect(() => {
     if (!successMessage) {
@@ -390,48 +392,6 @@ function Exercises() {
     }
   }, [])
 
-  useEffect(() => {
-    const loadExercises = async () => {
-      setIsLoading(true)
-      setErrorMessage("")
-      setSuccessMessage("")
-      setVisibleCount(PAGE_SIZE)
-
-      try {
-        const response = await axios.get(API_URL, {
-          ...buildRequestConfig(),
-          params: {
-            ...(searchName ? { search: searchName } : {}),
-            ordering,
-            ...(filters.category ? { category: filters.category } : {}),
-            ...(filters.equipment ? { equipment: filters.equipment } : {}),
-            ...(filters.muscle ? { muscle: filters.muscle } : {}),
-          },
-        })
-        const payload = Array.isArray(response?.data?.data)
-          ? response.data.data
-          : []
-        setExercises(payload)
-      } catch (error) {
-        if (error?.response?.status === 401 || error?.response?.status === 403) {
-          setErrorMessage("Please log in to load exercises and categories.")
-          return
-        }
-        const message =
-          error?.response?.data?.detail ||
-          "Unable to load exercises. Please try again."
-        setErrorMessage(message)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    const timer = setTimeout(() => {
-      loadExercises()
-    }, 300)
-
-    return () => clearTimeout(timer)
-  }, [filters, ordering, searchName])
 
   useEffect(() => {
     const loadChoices = async () => {
@@ -518,40 +478,6 @@ function Exercises() {
 
     loadChoices()
   }, [])
-
-  useEffect(() => {
-    const loadExerciseLibrary = async () => {
-      setIsExerciseLibraryLoading(true)
-      setExerciseLibraryError("")
-
-      try {
-        const response = await axios.get(EXERCISES_API_URL, buildRequestConfig())
-        setExerciseLibrary(normalizeExercisesPayload(response?.data))
-      } catch {
-        setExerciseLibrary([])
-        setExerciseLibraryError("Unable to load exercise library for workout planning.")
-      } finally {
-        setIsExerciseLibraryLoading(false)
-      }
-    }
-
-    loadExerciseLibrary()
-  }, [])
-
-  const handleChange = (event) => {
-    const { name, value, type, checked } = event.target
-    setFormValues((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }))
-    if (fieldErrors[name]) {
-      setFieldErrors((prev) => {
-        const next = { ...prev }
-        delete next[name]
-        return next
-      })
-    }
-  }
 
   const handleEditChange = (event) => {
     const { name, value, type, checked } = event.target
@@ -779,7 +705,12 @@ function Exercises() {
     setIsDetailsModalOpen(true)
   }
 
-  const filteredExercises = exercises
+  const filteredExercises = exerciseLibrary.filter((exercise) => {
+    const matchesSearch = searchName
+      ? exercise.name.toLowerCase().includes(searchName.toLowerCase())
+      : true
+    return matchesSearch
+  }, [searchName, exerciseLibrary])
   const displayedExercises = filteredExercises.slice(0, visibleCount)
   const hasMoreExercises = filteredExercises.length > displayedExercises.length
   const selectedExercise = filteredExercises.find((exercise) => (exercise.id ?? null) === selectedExerciseId) || null
@@ -824,24 +755,25 @@ function Exercises() {
   )
 
   const handleExerciseKeyStroke = (event) => {
-                  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
-                  if (filteredExercises.length === 0) return
-                  event.preventDefault()
-                  const currentIndex = displayedExercises.findIndex((ex) => (ex.id ?? null) === selectedExerciseId)
-                  let nextIndex = currentIndex
-                  if (event.key === "ArrowDown") nextIndex = Math.min(currentIndex + 1, displayedExercises.length - 1)
-                  else if (event.key === "ArrowUp") nextIndex = Math.max(currentIndex - 1, 0)
-                  else if (event.key === "Home") nextIndex = 0
-                  else if (event.key === "End") nextIndex = displayedExercises.length - 1
-                  if (nextIndex !== currentIndex) {
-                    const nextExercise = displayedExercises[nextIndex]
-                    setSelectedExerciseId(nextExercise.id ?? null)
-                    const optionEl = nextExercise.id
-                      ? event.currentTarget.querySelector(`#exercise-option-${nextExercise.id}`)
-                      : null
-                    optionEl?.focus()
-                  }
-                }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
+    if (filteredExercises.length === 0) return
+    event.preventDefault()
+    const currentIndex = displayedExercises.findIndex((ex) => (ex.id ?? null) === selectedExerciseId)
+    let nextIndex = currentIndex
+    if (event.key === "ArrowDown") nextIndex = Math.min(currentIndex + 1, displayedExercises.length - 1)
+    else if (event.key === "ArrowUp") nextIndex = Math.max(currentIndex - 1, 0)
+    else if (event.key === "Home") nextIndex = 0
+    else if (event.key === "End") nextIndex = displayedExercises.length - 1
+    if (nextIndex !== currentIndex) {
+      const nextExercise = displayedExercises[nextIndex]
+      setSelectedExerciseId(nextExercise.id ?? null)
+      const optionEl = nextExercise.id
+        ? event.currentTarget.querySelector(`#exercise-option-${nextExercise.id}`)
+        : null
+      optionEl?.focus()
+    }
+  }
+
 
   return (
     <main className="exercise-page" aria-label="Exercise Library">
@@ -891,7 +823,7 @@ function Exercises() {
                   </div>
                 </div>
                 <div className="exercise-counts" aria-live="polite" aria-atomic="true">
-                  <span>{exercises.length} total</span>
+                  <span>{exerciseLibrary.length} total</span>
                   <span>{displayedExercises.length} shown</span>
                 </div>
               </header>
@@ -999,10 +931,6 @@ function Exercises() {
                 role={!isLoading && filteredExercises.length > 0 ? "listbox" : undefined}
                 aria-label={!isLoading && filteredExercises.length > 0 ? "Exercises" : undefined}
                 aria-busy={isLoading}
-
-                // TODO: Refactor exercise-list in excise component -- create a 
-                // reusable function maybe in its own function  also for programs 
-                // exercise list. see Line 1386 in Programs component.
                 onKeyDown={handleExerciseKeyStroke}
               >
                 {isLoading ? (

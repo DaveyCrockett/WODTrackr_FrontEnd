@@ -14,30 +14,13 @@ function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isGuestSubmitting, setIsGuestSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
+  const saveUserSession = saveUserSession => {
+    const userData = saveUserSession?.user ?? saveUserSession ?? {}
+    const authToken = saveUserSession?.access ?? saveUserSession?.token ?? saveUserSession?.key ?? saveUserSession?.auth_token ?? userData?.access ?? userData?.token ?? userData?.key ?? userData?.auth_token ?? ""
 
-  const saveUserSession = (data, fallbackUsername) => {
-    const userData = data?.user ?? data ?? {}
-    const authToken =
-      data?.access ??
-      data?.token ??
-      data?.key ??
-      data?.auth_token ??
-      userData?.access ??
-      userData?.token ??
-      userData?.key ??
-      userData?.auth_token ??
-      ""
-
-    const refreshToken = data?.refresh ?? userData?.refresh ?? ""
-    const avatarUrl =
-      userData?.avatar_url ??
-      userData?.avatarUrl ??
-      userData?.profile_image ??
-      userData?.profileImage ??
-      null
-
-    const username =
-      userData?.username ?? userData?.name ?? fallbackUsername ?? "Guest user"
+    const refreshToken = saveUserSession?.refresh ?? userData?.refresh ?? ""
+    const avatarUrl = userData?.avatar_url ?? userData?.avatarUrl ?? userData?.profile_image ?? userData?.profileImage ?? null
+    const username = userData?.username ?? userData?.name ?? "Guest user"
 
     localStorage.setItem(
       "wodtrackrUser",
@@ -62,6 +45,7 @@ function Login() {
     }
   }
 
+  
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target
     setFormValues((prev) => ({
