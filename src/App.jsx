@@ -130,7 +130,7 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/" element={<Layout />}>
           <Route path="profile" element={<Profile />} />
-          <Route path="exercises" element={<Exercises exerciseLibraryState={exerciseLibraryState}/>} />
+          <Route path="exercises" element={<Exercises exerciseLibraryState={exerciseLibraryState} loadExerciseLibrary={loadExerciseLibrary} />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="programs" element={<Programs exerciseLibraryState={exerciseLibraryState} />} />
           <Route path="billing/success" element={<BillingReturnRedirect status="success" />} />

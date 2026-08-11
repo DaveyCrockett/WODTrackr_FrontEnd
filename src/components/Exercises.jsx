@@ -251,7 +251,7 @@ const getExerciseFormValues = (exercise) => ({
 })
 
 
-function Exercises({exerciseLibraryState, setExerciseLibraryState}) {
+function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseLibrary}) {
   const [searchName, setSearchName] = useState("")
   const [ordering, setOrdering] = useState("name")
   const [filters, setFilters] = useState({
@@ -259,6 +259,8 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState}) {
     equipment: "",
     muscle: "",
   })
+  const [filteredExercises, setFilteredExercises] = useState([])
+  const [allExercises, setAllExercises] = useState([])
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -289,6 +291,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState}) {
   const editModalTriggerRef = useRef(null)
   const addModalPreviouslyOpen = useRef(false)
   const editModalPreviouslyOpen = useRef(false)
+  const savedExerciseLibraryRef = useRef(loadExerciseLibrary)
 
   const { exerciseLibrary, 
           isExerciseLibraryLoading, 
@@ -477,6 +480,14 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState}) {
     }
 
     loadChoices()
+  }, [])
+
+  useEffect(() => {
+    savedExerciseLibraryRef.current = loadExerciseLibrary
+  }, [loadExerciseLibrary])
+
+  useEffect(() => {
+    savedExerciseLibraryRef.current()
   }, [])
 
   const handleEditChange = (event) => {
@@ -945,7 +956,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState}) {
                 ) : filteredExercises.length === 0 ? (
                   <p className="exercise-empty" role="status">No exercises found.</p>
                 ) : (
-                  displayedExercises.map((exercise, index) => (
+                  loadedExercises.map((exercise, index) => (
                     <article
                       className={`exercise-item ${(exercise.id ?? null) === selectedExerciseId ? "exercise-item-selected" : ""}`}
                       key={exercise.id ?? index}
