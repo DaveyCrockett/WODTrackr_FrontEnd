@@ -721,7 +721,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
       ? exercise.name.toLowerCase().includes(searchName.toLowerCase())
       : true
     return matchesSearch
-  }, [searchName, exerciseLibrary])
+  })
   const displayedExercises = filteredExercises.slice(0, visibleCount)
   const hasMoreExercises = filteredExercises.length > displayedExercises.length
   const selectedExercise = filteredExercises.find((exercise) => (exercise.id ?? null) === selectedExerciseId) || null
