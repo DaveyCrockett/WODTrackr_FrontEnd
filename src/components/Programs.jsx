@@ -930,7 +930,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
   const [equipmentChoices, setEquipmentChoices] = useState([])
   const [durationRange, setDurationRange] = useState({ min: DEFAULT_DURATION_MIN, max: DEFAULT_DURATION_MAX })
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
-
   // Schedule-to-calendar state
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false)
   const [scheduleStartDate, setScheduleStartDate] = useState("")

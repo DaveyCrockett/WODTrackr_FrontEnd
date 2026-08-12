@@ -259,8 +259,6 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
     equipment: "",
     muscle: "",
   })
-  const [filteredExercises, setFilteredExercises] = useState([])
-  const [allExercises, setAllExercises] = useState([])
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -696,9 +694,9 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
     setIsDetailsModalOpen(true)
   }
 
-  const displayedExercises = filteredExercises.slice(0, visibleCount)
-  const hasMoreExercises = filteredExercises.length > displayedExercises.length
-  const selectedExercise = filteredExercises.find((exercise) => (exercise.id ?? null) === selectedExerciseId) || null
+  const displayedExercises = exerciseLibrary.slice(0, visibleCount)
+  const hasMoreExercises = exerciseLibrary.length > displayedExercises.length
+  const selectedExercise = exerciseLibrary.find((exercise) => (exercise.id ?? null) === selectedExerciseId) || null
   const currentUsername = getStoredUsername()
   const selectedExerciseOwner =
     selectedExercise?.created_by_username ||
@@ -718,17 +716,17 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
   }, [searchName, ordering, filters])
 
   useEffect(() => {
-    if (filteredExercises.length === 0) {
+    if (exerciseLibrary.length === 0) {
       setSelectedExerciseId(null)
       return
     }
 
-    const hasSelectedExercise = filteredExercises.some((exercise) => (exercise.id ?? null) === selectedExerciseId)
+    const hasSelectedExercise = exerciseLibrary.some((exercise) => (exercise.id ?? null) === selectedExerciseId)
     if (!hasSelectedExercise) {
-      const fallbackId = filteredExercises[0]?.id ?? null
+      const fallbackId = exerciseLibrary[0]?.id ?? null
       setSelectedExerciseId(fallbackId)
     }
-  }, [filteredExercises, selectedExerciseId])
+  }, [exerciseLibrary, selectedExerciseId])
 
   const categoryLookup = useMemo(
     () => Object.fromEntries(categoryChoices.map((choice) => [choice.value, choice.label])),
@@ -741,7 +739,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
 
   const handleExerciseKeyStroke = (event) => {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
-    if (filteredExercises.length === 0) return
+    if (exerciseLibrary.length === 0) return
     event.preventDefault()
     const currentIndex = displayedExercises.findIndex((ex) => (ex.id ?? null) === selectedExerciseId)
     let nextIndex = currentIndex
