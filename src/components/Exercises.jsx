@@ -267,8 +267,6 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isLibraryModalOpen, setIsLibraryModalOpen] = useState(true)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isSlowLoading, setIsSlowLoading] = useState(false)
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
@@ -291,7 +289,6 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
   const editModalTriggerRef = useRef(null)
   const addModalPreviouslyOpen = useRef(false)
   const editModalPreviouslyOpen = useRef(false)
-  const savedExerciseLibraryRef = useRef(loadExerciseLibrary)
 
   const { exerciseLibrary, 
           isExerciseLibraryLoading, 
@@ -309,19 +306,6 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
 
     return () => clearTimeout(timer)
   }, [successMessage])
-
-  useEffect(() => {
-    if (!isLoading) {
-      setIsSlowLoading(false)
-      return undefined
-    }
-
-    const timer = setTimeout(() => {
-      setIsSlowLoading(true)
-    }, 1200)
-
-    return () => clearTimeout(timer)
-  }, [isLoading])
 
   // Move focus into the add-exercise modal when it opens, and return it when it closes
   useEffect(() => {
@@ -395,6 +379,9 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
     }
   }, [])
 
+  useEffect(() => {
+    loadExerciseLibrary(getAuthToken())
+  }, [])
 
   useEffect(() => {
     const loadChoices = async () => {
@@ -482,13 +469,6 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
     loadChoices()
   }, [])
 
-  useEffect(() => {
-    savedExerciseLibraryRef.current = loadExerciseLibrary
-  }, [loadExerciseLibrary])
-
-  useEffect(() => {
-    savedExerciseLibraryRef.current()
-  }, [])
 
   const handleEditChange = (event) => {
     const { name, value, type, checked } = event.target
@@ -716,12 +696,6 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
     setIsDetailsModalOpen(true)
   }
 
-  const filteredExercises = exerciseLibrary.filter((exercise) => {
-    const matchesSearch = searchName
-      ? exercise.name.toLowerCase().includes(searchName.toLowerCase())
-      : true
-    return matchesSearch
-  })
   const displayedExercises = filteredExercises.slice(0, visibleCount)
   const hasMoreExercises = filteredExercises.length > displayedExercises.length
   const selectedExercise = filteredExercises.find((exercise) => (exercise.id ?? null) === selectedExerciseId) || null
@@ -931,7 +905,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
                 </button>
               </div>
 
-              {isLoading && isSlowLoading ? (
+              {isExerciseLibraryLoading ? (
                 <p className="exercise-loading-note" role="status">Still loading exercises. Thanks for hanging tight.</p>
               ) : null}
               {errorMessage ? <p className="exercise-error" role="alert">{errorMessage}</p> : null}
@@ -939,12 +913,12 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
 
               <div
                 className="exercise-list"
-                role={!isLoading && filteredExercises.length > 0 ? "listbox" : undefined}
-                aria-label={!isLoading && filteredExercises.length > 0 ? "Exercises" : undefined}
-                aria-busy={isLoading}
-                onKeyDown={handleExerciseKeyStroke}
+                role={!isExerciseLibraryLoading && exerciseLibrary.length > 0 ? "listbox" : undefined}
+                aria-label={!isExerciseLibraryLoading && exerciseLibrary.length > 0 ? "Exercises" : undefined}
+                aria-busy={isExerciseLibraryLoading}
               >
-                {isLoading ? (
+                {console.log("isExerciseLibraryLoading:", isExerciseLibraryLoading, "exerciseLibrary.length:", exerciseLibrary.length)}
+                {isExerciseLibraryLoading ? (
                   Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (
                     <div className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`} aria-hidden="true">
                       <div className="exercise-skeleton exercise-skeleton-title" />
@@ -953,10 +927,10 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
                       <div className="exercise-skeleton exercise-skeleton-line" />
                     </div>
                   ))
-                ) : filteredExercises.length === 0 ? (
+                ) : exerciseLibrary.length === 0 ? (
                   <p className="exercise-empty" role="status">No exercises found.</p>
                 ) : (
-                  loadedExercises.map((exercise, index) => (
+                  exerciseLibrary.map((exercise, index) => (
                     <article
                       className={`exercise-item ${(exercise.id ?? null) === selectedExerciseId ? "exercise-item-selected" : ""}`}
                       key={exercise.id ?? index}
@@ -990,7 +964,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
                 )}
               </div>
 
-              {!isLoading && hasMoreExercises ? (
+              {!isExerciseLibraryLoading && hasMoreExercises ? (
                 <div className="exercise-list-actions">
                   <button type="button" className="exercise-secondary-btn" onClick={handleLoadMore}>
                     Load More

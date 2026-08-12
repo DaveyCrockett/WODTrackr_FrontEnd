@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
 import './CSS/app.css'
 import Calendar from './components/Calendar'
@@ -15,21 +15,6 @@ import Settings from './components/Settings'
 
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 
-
-
-function BillingReturnRedirect({ status }) {
-  const location = useLocation()
-  const query = new URLSearchParams(location.search)
-
-  if (!query.get('checkout')) {
-    query.set('checkout', status)
-  }
-
-  const nextQuery = query.toString()
-  return <Navigate to={`/programs${nextQuery ? `?${nextQuery}` : ''}`} replace />
-}
-
-function App() {
 
   const saveUserSession = (data, fallbackUsername) => {
     const userData = data?.user ?? data ?? {}
@@ -78,13 +63,27 @@ function App() {
     }
   }
 
+function BillingReturnRedirect({ status }) {
+  const location = useLocation()
+  const query = new URLSearchParams(location.search)
+
+  if (!query.get('checkout')) {
+    query.set('checkout', status)
+  }
+
+  const nextQuery = query.toString()
+  return <Navigate to={`/programs${nextQuery ? `?${nextQuery}` : ''}`} replace />
+}
+
+function App() {
   const [exerciseLibraryState, setExerciseLibraryState] = useState({
       exerciseLibrary: [],
       isExerciseLibraryLoading: false,
       exerciseLibraryError: '',
+      hasMoreExercises: false,
     })
 
-  const loadExerciseLibrary = async () => {
+  const loadExerciseLibrary = async (authToken) => {
     setExerciseLibraryState((prevState) => ({
       ...prevState,
       isExerciseLibraryLoading: true,
@@ -92,14 +91,17 @@ function App() {
     }))
     console.log('Loading exercise library...')
     try {
-      console.log("authToken:", savedUserSession?.authToken)
-      const response = await axios.get(EXERCISES_API_URL, savedUserSession?.authToken ? { headers: { Authorization: `Bearer ${savedUserSession.authToken}` } } : {})
+      console.log("authToken:", authToken)
+      const config = authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}
+      const response = await axios.get(EXERCISES_API_URL, config)
       console.log('Exercise library loaded:', response?.data)
+      const nextNode = response?.data?.next
       setExerciseLibraryState((prevState) => ({
         ...prevState,
         isExerciseLibraryLoading: false,
         exerciseLibraryError: '',
         exerciseLibrary: normalizeExercisesPayload(response?.data),
+        hasMoreExercises: nextNode !== null,
       }))
     } catch (error) {
       console.error('API or Normalization Error:', error?.response || error?.message || error)
@@ -110,10 +112,7 @@ function App() {
         exerciseLibraryError: 'Unable to load exercise library for workout planning.',
       }))
     }
-    const savedUserSession = JSON.parse(localStorage.getItem("wodtrackrUser") || "{}")
-    loadExerciseLibrary(savedUserSession)
   }
-  
 
   console.log('App component rendered. Current exerciseLibraryState:', exerciseLibraryState)    
   const normalizeExercisesPayload = (data) => {
@@ -132,7 +131,7 @@ function App() {
           <Route path="profile" element={<Profile />} />
           <Route path="exercises" element={<Exercises exerciseLibraryState={exerciseLibraryState} loadExerciseLibrary={loadExerciseLibrary} />} />
           <Route path="calendar" element={<Calendar />} />
-          <Route path="programs" element={<Programs exerciseLibraryState={exerciseLibraryState} />} />
+          <Route path="programs" element={<Programs exerciseLibraryState={exerciseLibraryState} loadExerciseLibrary={loadExerciseLibrary} />} />
           <Route path="billing/success" element={<BillingReturnRedirect status="success" />} />
           <Route path="billing/cancel" element={<BillingReturnRedirect status="cancel" />} />
           <Route path="settings" element={<Settings />} />
