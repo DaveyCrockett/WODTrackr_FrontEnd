@@ -83,6 +83,13 @@ function App() {
       hasMoreExercises: false,
     })
 
+  const normalizeExercisesPayload = (data) => {
+    if (Array.isArray(data?.data)) return data.data
+    if (Array.isArray(data?.results)) return data.results
+    if (Array.isArray(data)) return data
+    return []
+  }
+
   const loadExerciseLibrary = async (authToken) => {
     setExerciseLibraryState((prevState) => ({
       ...prevState,
@@ -94,13 +101,13 @@ function App() {
       console.log("authToken:", authToken)
       const config = authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}
       const response = await axios.get(EXERCISES_API_URL, config)
-      console.log('Exercise library loaded:', response?.data)
+      console.log('Exercise library loaded:', response?.data.all_exercises || response?.data || [])
       const nextNode = response?.data?.next
       setExerciseLibraryState((prevState) => ({
         ...prevState,
         isExerciseLibraryLoading: false,
         exerciseLibraryError: '',
-        exerciseLibrary: normalizeExercisesPayload(response?.data),
+        exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || [] ),
         hasMoreExercises: nextNode !== null,
       }))
     } catch (error) {
@@ -114,13 +121,7 @@ function App() {
     }
   }
 
-  console.log('App component rendered. Current exerciseLibraryState:', exerciseLibraryState)    
-  const normalizeExercisesPayload = (data) => {
-    if (Array.isArray(data?.data)) return data.data
-    if (Array.isArray(data?.results)) return data.results
-    if (Array.isArray(data)) return data
-    return []
-  }
+
 
   return (
     <BrowserRouter>

@@ -762,29 +762,13 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
 
   return (
     <main className="exercise-page" aria-label="Exercise Library">
-      <section className="exercise-top-actions">
-        {!isLibraryModalOpen ? (
-          <button type="button" className="exercise-primary-btn" onClick={handleOpenLibraryModal}>
-            Open Exercise Library
-          </button>
-        ) : null}
-      </section>
-
-      {isLibraryModalOpen ? (
-        <div className="exercise-modal-backdrop" role="presentation" onClick={handleCloseLibraryModal}>
-          <aside
-            className="exercise-modal exercise-library-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="exercise-library-modal-title"
-            onClick={(event) => event.stopPropagation()}
-          >
+        <div className="exercise-modal-backdrop" role="presentation">
             <header className="exercise-modal-header">
               <div>
                 <h2 id="exercise-library-modal-title">Exercise Library</h2>
                 <p>Search and review your exercise list.</p>
               </div>
-              <button type="button" className="exercise-secondary-btn" onClick={handleCloseLibraryModal}>
+              <button type="button" className="exercise-secondary-btn" >
                 Close
               </button>
             </header>
@@ -972,9 +956,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
                 </div>
               ) : null}
             </section>
-          </aside>
         </div>
-      ) : null}
 
       {isDetailsModalOpen && selectedExercise ? (
         <div className="exercise-modal-backdrop" role="presentation" onClick={handleCloseExerciseDetailsModal}>
