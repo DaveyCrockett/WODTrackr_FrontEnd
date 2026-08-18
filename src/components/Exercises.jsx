@@ -5,6 +5,7 @@ import { validateExerciseForm } from "../utils/exerciseUtils"
 
 const API_URL = "/api/wodtrackr/exercises/"
 const CUSTOM_EXERCISES_API_URL = "/api/wodtrackr/custom-exercises/"
+const CHOICES_API_URL = "/api/wodtrackr/exercises/choices/"
 const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 const PAGE_SIZE = 12
@@ -61,49 +62,10 @@ const buildRequestConfig = (overrides = {}) => {
 
 const normalizeChoices = (choices) => {
   if (choices && typeof choices === "object" && !Array.isArray(choices)) {
-    return Object.entries(choices)
-      .map(([value, label]) => ({
-        value,
-        label: String(label),
-      }))
-      .filter((choice) => choice.value !== "" && choice.value !== null && choice.value !== undefined)
+    choices[Object.keys(choices)[0]].map((choice) => {
+        return choice
+      })
   }
-
-  if (!Array.isArray(choices)) {
-    return []
-  }
-
-  return choices
-    .map((choice) => {
-      if (Array.isArray(choice)) {
-        const [value, label] = choice
-        return {
-          value: value ?? "",
-          label: label ?? String(value ?? ""),
-        }
-      }
-
-      if (choice && typeof choice === "object") {
-        const value = choice.value ?? choice.id ?? choice.key ?? ""
-        const label =
-          choice.label ??
-          choice.display_name ??
-          choice.displayName ??
-          choice.name ??
-          String(value)
-
-        return {
-          value,
-          label,
-        }
-      }
-
-      return {
-        value: choice,
-        label: String(choice),
-      }
-    })
-    .filter((choice) => choice.value !== "" && choice.value !== null && choice.value !== undefined)
 }
 
 const normalizeSchemaChoices = (fieldConfig) => {
@@ -216,13 +178,6 @@ const formatTimestamp = (value) => {
   return parsed.toLocaleString()
 }
 
-const normalizeEquipmentPayload = (data) => {
-  if (Array.isArray(data?.data)) return data.data
-  if (Array.isArray(data?.results)) return data.results
-  if (Array.isArray(data)) return data
-  return []
-}
-
 const getFieldErrorsFromResponse = (data) => {
   if (!data || typeof data !== "object") {
     return {}
@@ -273,9 +228,11 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
   const [editFieldErrors, setEditFieldErrors] = useState({})
   const [isEditSubmitting, setIsEditSubmitting] = useState(false)
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false)
-  const [exerciseChoices, setExerciseChoices] = useState([])
   const [formValues, setFormValues] = useState(() => getDefaultExerciseFormValues(getStoredUsername()))
   const [editFormValues, setEditFormValues] = useState(EMPTY_EXERCISE_FORM_VALUES)
+  const [categoryChoices, setCategoryChoices] = useState([])
+  const [equipmentChoices, setEquipmentChoices] = useState([])
+  const [muscleChoices, setMuscleChoices] = useState([])
 
   // Refs for modal focus management
   const addModalRef = useRef(null)
@@ -306,79 +263,62 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
     loadExerciseLibrary(getAuthToken())
   }, [])
 
-  useEffect(() => {
-    const loadChoices = async () => {
-      setIsChoicesLoading(true)
-      setErrorMessage("")
-
-      try {
-        const cachedRawValue = localStorage.getItem(CHOICES_CACHE_KEY)
-        if (cachedRawValue) {
-          const parsedCache = JSON.parse(cachedRawValue)
-          const isCacheFresh = Date.now() - (parsedCache?.cachedAt || 0) < CHOICES_CACHE_TTL_MS
-
-          if (isCacheFresh && parsedCache?.categoryChoices?.length > 0 && parsedCache?.equipmentChoices?.length > 0 && parsedCache?.muscleChoices?.length > 0) {
-            setCategoryChoices(parsedCache?.categoryChoices || [])
-            setEquipmentChoices(parsedCache?.equipmentChoices || [])
-            setMuscleChoices(parsedCache?.muscleChoices || [])
-            setIsChoicesLoading(false)
-            return
-          }
-        }
-      } catch {
-        localStorage.removeItem(CHOICES_CACHE_KEY)
-      }
-
-      try {
-        const requestConfig = buildRequestConfig()
-        let customExerciseResponseFromEndpoint = []
-
-        try {
-          const customExerciseResponse = await axios.get(CUSTOM_EXERCISES_API_URL, requestConfig)
-          customExerciseResponseFromEndpoint = normalizeChoices(normalizeEquipmentPayload(customExerciseResponse?.data))
-        } catch {
-          // Fall back to metadata choices when equipment endpoint is unavailable.
-        }
-
-        const metadataResponse = await axios.get(`${API_URL}metadata/`, requestConfig)
-
-        const category = customExerciseResponseFromEndpoint.length > 0
-            ? customExerciseResponseFromEndpoint
-            : getChoicesFromMetadata(metadataResponse?.data, ["category"])
-        const equipment =
-          customExerciseResponseFromEndpoint.length > 0
-            ? customExerciseResponseFromEndpoint
-            : getChoicesFromMetadata(metadataResponse?.data, ["equipment"])
-        const muscle = customExerciseResponseFromEndpoint.length > 0
-            ? customExerciseResponseFromEndpoint
-            : getChoicesFromMetadata(metadataResponse?.data, ["primary_muscle_group", "muscle"])
-
-        setExerciseChoices(customExerciseResponseFromEndpoint)
-        localStorage.setItem(
-          CHOICES_CACHE_KEY,
-          JSON.stringify({
-            categoryChoices: category,
-            equipmentChoices: equipment,
-            muscleChoices: muscle,
-            cachedAt: Date.now(),
-          }),
-        )
-      } catch (error) {
-        if (error?.response?.status === 401 || error?.response?.status === 403) {
-          setErrorMessage("Please log in to load exercises and categories.")
+ useEffect(() => {
+  const loadChoices = async () => {
+    setIsChoicesLoading(true)
+    setErrorMessage("")
+    
+    try {
+      const cachedRawValue = localStorage.getItem(CHOICES_CACHE_KEY)
+      if (cachedRawValue) {
+        const parsedCache = JSON.parse(cachedRawValue)
+        const isCacheFresh = Date.now() - (parsedCache?.cachedAt || 0) < CHOICES_CACHE_TTL_MS
+        
+        if (isCacheFresh && parsedCache?.categoryChoices?.length > 0 && parsedCache?.equipmentChoices?.length > 0 && parsedCache?.muscleChoices?.length > 0) {
+          setCategoryChoices(parsedCache.categoryChoices)
+          setEquipmentChoices(parsedCache.equipmentChoices)
+          setMuscleChoices(parsedCache.muscleChoices)
+          setIsChoicesLoading(false)
           return
         }
-        const message =
-          error?.response?.data?.detail ||
-          "Unable to load choices. Please refresh and try again."
-        setErrorMessage(message)
-      } finally {
-        setIsChoicesLoading(false)
       }
-    }
+    } catch {
+      localStorage.removeItem(CHOICES_CACHE_KEY)
+    } 
 
-    loadChoices()
-  }, [])
+    try {
+      const requestConfig = buildRequestConfig()
+      const response = await axios.get(CHOICES_API_URL, requestConfig)
+      const data = response?.data
+
+      setCategoryChoices(data?.category)
+      setEquipmentChoices(data?.equipment)
+      setMuscleChoices(data?.primary_muscle_group)
+
+      localStorage.setItem(
+        CHOICES_CACHE_KEY,
+        JSON.stringify({
+          categoryChoices: data?.category,
+          equipmentChoices: data?.equipment,
+          muscleChoices: data?.primary_muscle_group,
+          cachedAt: Date.now(),
+        }),
+      )
+    } catch (error) {
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        setErrorMessage("Please log in to load exercises and categories.")
+        return
+      }
+      const message = error?.response?.data?.detail || "Unable to load choices. Please refresh and try again."
+      setErrorMessage(message)
+    } finally {
+      setIsChoicesLoading(false)
+    }
+  }
+
+  loadChoices()
+}, [])
+
 
   const handleAddChange = (event) => {
     const { name, value, type, checked } = event.target
@@ -647,11 +587,6 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
     }
   }, [exerciseLibrary, selectedExerciseId])
 
-  const exerciseLookup = useMemo(
-    () => Object.fromEntries(exerciseChoices.map((choice) => [choice.value, choice.label])),
-    [exerciseChoices]
-  )
-
   const handleExerciseKeyStroke = (event) => {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
     if (exerciseLibrary.length === 0) return
@@ -712,7 +647,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
                     disabled={isChoicesLoading}
                   >
                     <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
-                    {exerciseChoices.map((choice) => (
+                    {categoryChoices.map((choice) => (
                       <option key={choice.value} value={choice.value}>
                         {choice.label}
                       </option>
@@ -731,7 +666,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
                     disabled={isChoicesLoading}
                   >
                     <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
-                    {exerciseChoices.map((choice) => (
+                    {equipmentChoices.map((choice) => (
                       <option key={choice.value} value={choice.value}>
                         {choice.label}
                       </option>
@@ -750,7 +685,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
                     disabled={isChoicesLoading}
                   >
                     <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
-                    {exerciseChoices.map((choice) => (
+                    {muscleChoices.map((choice) => (
                       <option key={choice.value} value={choice.value}>
                         {choice.label}
                       </option>
@@ -828,10 +763,10 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
                   >
                     <div className="exercise-header">
                       <h3>{exercise.name}</h3>
-                      <span>{exerciseLookup[exercise.category] || exercise.category}</span>
+                      <span>{exercise.category}</span>
                     </div>
                     <p className="exercise-meta">
-                      {exerciseLookup[exercise.equipment] || exercise.equipment} · {exercise.primary_muscle_group}
+                      {exercise.equipment} · {exercise.primary_muscle_group}
                     </p>
                     <p className="exercise-meta">
                       Created by {exercise.created_by_username || exercise.username || exercise.created_by || "Unknown"} · {exercise.is_public ? "Public" : "Private"}
@@ -900,7 +835,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
                   required
                 >
                   <option value="">{isChoicesLoading ? "Loading categories..." : "Select category"}</option>
-                  {exerciseChoices.map((choice) => (
+                  {categoryChoices.map((choice) => (
                     <option key={choice.value} value={choice.value}>
                       {choice.label}
                     </option>
@@ -919,7 +854,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
                   required
                 >
                   <option value="">{isChoicesLoading ? "Loading equipment..." : "Select equipment"}</option>
-                  {exerciseChoices.map((choice) => (
+                  {equipmentChoices.map((choice) => (
                     <option key={choice.value} value={choice.value}>
                       {choice.label}
                     </option>
@@ -951,7 +886,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
                   required
                 >
                   <option value="">{isChoicesLoading ? "Loading muscle groups..." : "Select muscle group"}</option>
-                  {exerciseChoices.map((choice) => (
+                  {muscleChoices.map((choice) => (
                     <option key={choice.value} value={choice.value}>
                       {choice.label}
                     </option>
