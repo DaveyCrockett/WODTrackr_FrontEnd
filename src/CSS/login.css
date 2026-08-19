@@ -202,41 +202,6 @@
   justify-content: center;
 }
 
-.exercise-list {
-  display: grid;
-  gap: 1rem;
-}
-
-.exercise-item {
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 1rem 1.2rem;
-  background: #ffffff;
-}
-
-.exercise-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.exercise-header h3 {
-  margin: 0;
-  font-size: 1.1rem;
-}
-
-.exercise-header span {
-  font-size: 0.85rem;
-  color: #5b6777;
-}
-
-.exercise-meta {
-  margin: 0.35rem 0 0;
-  color: #6b7280;
-  font-size: 0.9rem;
-}
-
 .link-btn {
   border: none;
   background: transparent;

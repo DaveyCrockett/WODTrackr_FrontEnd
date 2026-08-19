@@ -8,7 +8,7 @@ const CUSTOM_EXERCISES_API_URL = "/api/wodtrackr/custom-exercises/"
 const CHOICES_API_URL = "/api/wodtrackr/exercises/choices/"
 const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
-const PAGE_SIZE = 12
+const PAGE_SIZE = 4
 const SKELETON_CARD_COUNT = 6
 const buildApiUrl = (path = "") => `${API_URL}${String(path).replace(/^\/+/, "")}`
 const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
@@ -563,7 +563,6 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
   }
 
   const displayedExercises = exerciseLibrary.slice(0, visibleCount)
-  const hasMoreExercises = exerciseLibrary.length > displayedExercises.length
   const selectedExercise = exerciseLibrary.find((exercise) => (exercise.id ?? null) === selectedExerciseId) || null
   const currentUsername = getStoredUsername()
   const selectedExerciseOwner =
@@ -619,19 +618,15 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
 
   return (
     <main className="exercise-page" aria-label="Exercise Library">
-      <div className="exercise-backdrop" role="presentation">
-        <section className="exercise-library-panel">
+      <section className="exercise-library-panel">
           <header className="exercise-panel-header">
             <div className="exercise-panel-header-top">
-              {/* TODO: Fix double header  */}
-              <div>
                 <h1>Exercise Library</h1>
-                <button className="exercise-primary-btn" type="submit" disabled={isAddModalOpen} onClick={handleOpenAddModal}>
+                <button className="exercise-primary-btn" type="submit" disabled={isAddModalOpen} onClick={handleAddExercise}>
                   Add Exercise
                 </button>
-                <p>Browse and manage exercises in the library. Use the search and filter options to find specific exercises.</p>
-              </div>
             </div>
+                <p>Browse and manage exercises in the library. Use the search and filter options to find specific exercises.</p>
           </header>
           <div className="exercise-counts" aria-live="polite" aria-atomic="true">
             <span>{exerciseLibrary.length} total</span>
@@ -695,14 +690,6 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
               ))
             )}
           </div>
-
-          {!isExerciseLibraryLoading && hasMoreExercises ? (
-            <div className="exercise-list-actions">
-              <button type="button" className="exercise-secondary-btn" onClick={handleLoadMore}>
-                Load More
-              </button>
-            </div>
-          ) : null}
         </section>
         <section className="exercise-form-panel">
           <div className="exercise-search-header">
@@ -802,64 +789,66 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
           </div>
         </section>
         {isAddModalOpen ? (
-          <aside className="exercise-modal" role="dialog" aria-modal="true" aria-labelledby="exercise-modal-title" aria-describedby="exercise-modal-desc" ref={addModalRef}>
-            {/* TODO: Change Add Exercise to be modal. */}
-            <header className="exercise-modal-header">
-              <div>
-                <h2 id="exercise-modal-title">Add Exercise</h2>
-                <p id="exercise-modal-desc">Create a new exercise in your library.</p>
-              </div>
-            </header>
+          <div className="exercise-modal-backdrop" onClick={handleOpenAddModal}>
+            <aside className="exercise-modal" role="dialog" aria-modal="true" aria-labelledby="exercise-modal-title" aria-describedby="exercise-modal-desc" ref={addModalRef}>
+              {/* TODO: Change Add Exercise to be modal. */}
+              <header className="exercise-modal-header">
+                <div>
+                  <h2 id="exercise-modal-title">Add Exercise</h2>
+                  <p id="exercise-modal-desc">Create a new exercise in your library.</p>
+                </div>
+              </header>
 
-            <form className="exercise-form" onSubmit={handleSubmit} noValidate>
-              {errorMessage ? <p className="exercise-error" role="alert">{errorMessage}</p> : null}
+              <form className="exercise-form" onSubmit={handleSubmit} noValidate>
+                {errorMessage ? <p className="exercise-error" role="alert">{errorMessage}</p> : null}
 
-              <label className="exercise-field">
-                <span>Name</span>
-                <input
-                  type="text"
-                  name="name"
-                  value={formValues.name}
-                  onChange={handleAddChange}
-                  placeholder="Exercise name"
-                  maxLength={200}
-                  required
-                />
-                {fieldErrors.name ? <small className="exercise-field-error">{fieldErrors.name}</small> : null}
-              </label>
+                <label className="exercise-field">
+                  <span>Name</span>
+                  <input
+                    type="text"
+                    name="name"
+                    value={formValues.name}
+                    onChange={handleAddChange}
+                    placeholder="Exercise name"
+                    maxLength={200}
+                    required
+                  />
+                  {fieldErrors.name ? <small className="exercise-field-error">{fieldErrors.name}</small> : null}
+                </label>
 
-              <label className="exercise-field">
-                <span>Description</span>
-                <input
-                  type="text"
-                  name="description"
-                  value={formValues.description}
-                  onChange={handleAddChange}
-                  placeholder="Optional details"
-                />
-                {fieldErrors.description ? <small className="exercise-field-error">{fieldErrors.description}</small> : null}
-              </label>
+                <label className="exercise-field">
+                  <span>Description</span>
+                  <input
+                    type="text"
+                    name="description"
+                    value={formValues.description}
+                    onChange={handleAddChange}
+                    placeholder="Optional details"
+                  />
+                  {fieldErrors.description ? <small className="exercise-field-error">{fieldErrors.description}</small> : null}
+                </label>
 
-              <label className="exercise-field">
-                <span>Category</span>
-                <input
-                  type="text"
-                  name="category"
-                  value={formValues.category}
-                  onChange={handleAddChange}
-                  placeholder="Exercise category"
-                  maxLength={100}
-                  required
-                />
-                {fieldErrors.category ? <small className="exercise-field-error">{fieldErrors.category}</small> : null}
-              </label>
+                <label className="exercise-field">
+                  <span>Category</span>
+                  <input
+                    type="text"
+                    name="category"
+                    value={formValues.category}
+                    onChange={handleAddChange}
+                    placeholder="Exercise category"
+                    maxLength={100}
+                    required
+                  />
+                  {fieldErrors.category ? <small className="exercise-field-error">{fieldErrors.category}</small> : null}
+                </label>
 
-              <div className="exercise-form-actions">
-                <button type="submit" className="exercise-primary-btn">Add Exercise</button>
-                <button type="button" className="exercise-secondary-btn" onClick={handleCloseAddModal}>Cancel</button>
-              </div>
-            </form>
-          </aside>
+                <div className="exercise-form-actions">
+                  <button type="submit" className="exercise-primary-btn">Add Exercise</button>
+                  <button type="button" className="exercise-secondary-btn" onClick={handleCloseAddModal}>Cancel</button>
+                </div>
+              </form>
+            </aside>
+          </div>
         ) : null}
 
         {isDetailsModalOpen && selectedExercise ? (
@@ -1079,7 +1068,6 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
             </aside>
           </div>
         ) : null}
-      </div>
     </main>
   )
 }
