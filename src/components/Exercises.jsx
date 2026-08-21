@@ -2,6 +2,7 @@ import "../CSS/exercises.css"
 import axios from "axios"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { validateExerciseForm } from "../utils/exerciseUtils"
+import FilterIcon from "../assets/filter.png"
 
 const API_URL = "/api/wodtrackr/exercises/"
 const CUSTOM_EXERCISES_API_URL = "/api/wodtrackr/custom-exercises/"
@@ -209,13 +210,8 @@ const getExerciseFormValues = (exercise) => ({
 function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExerciseLibrary }) {
   const [searchName, setSearchName] = useState("")
   const [ordering, setOrdering] = useState("name")
-  const [filters, setFilters] = useState({
-    category: "",
-    equipment: "",
-    muscle: "",
-  })
+  const [filters, setFilters] = useState({ difficulty: [], category: [], goal: [], equipment: [] })
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isLibraryModalOpen, setIsLibraryModalOpen] = useState(true)
@@ -414,7 +410,11 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
       equipment: "",
       muscle: "",
     })
-    setVisibleCount(PAGE_SIZE)
+  }
+
+  const handleFilterChange = (key, value) => {
+    setFilters((prev) => ({ ...prev, [key]: value }))
+    
   }
 
   const handleOpenAddModal = () => {
@@ -553,16 +553,11 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
     }
   }
 
-  const handleLoadMore = () => {
-    setVisibleCount((prev) => prev + PAGE_SIZE)
-  }
-
   const handleOpenExerciseDetailsModal = (exerciseId) => {
     setSelectedExerciseId(exerciseId)
     setIsDetailsModalOpen(true)
   }
 
-  const displayedExercises = exerciseLibrary.slice(0, visibleCount)
   const selectedExercise = exerciseLibrary.find((exercise) => (exercise.id ?? null) === selectedExerciseId) || null
   const currentUsername = getStoredUsername()
   const selectedExerciseOwner =
@@ -579,10 +574,6 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
   const canDeleteSelectedExercise = canEditSelectedExercise
 
   useEffect(() => {
-    setVisibleCount(PAGE_SIZE)
-  }, [searchName, ordering, filters])
-
-  useEffect(() => {
     if (exerciseLibrary.length === 0) {
       setSelectedExerciseId(null)
       return
@@ -594,27 +585,6 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
       setSelectedExerciseId(fallbackId)
     }
   }, [exerciseLibrary, selectedExerciseId])
-
-  const handleExerciseKeyStroke = (event) => {
-    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
-    if (exerciseLibrary.length === 0) return
-    event.preventDefault()
-    const currentIndex = displayedExercises.findIndex((ex) => (ex.id ?? null) === selectedExerciseId)
-    let nextIndex = currentIndex
-    if (event.key === "ArrowDown") nextIndex = Math.min(currentIndex + 1, displayedExercises.length - 1)
-    else if (event.key === "ArrowUp") nextIndex = Math.max(currentIndex - 1, 0)
-    else if (event.key === "Home") nextIndex = 0
-    else if (event.key === "End") nextIndex = displayedExercises.length - 1
-    if (nextIndex !== currentIndex) {
-      const nextExercise = displayedExercises[nextIndex]
-      setSelectedExerciseId(nextExercise.id ?? null)
-      const optionEl = nextExercise.id
-        ? event.currentTarget.querySelector(`#exercise-option-${nextExercise.id}`)
-        : null
-      optionEl?.focus()
-    }
-  }
-
 
   return (
     <main className="exercise-page" aria-label="Exercise Library">
@@ -630,7 +600,7 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
           </header>
           <div className="exercise-counts" aria-live="polite" aria-atomic="true">
             <span>{exerciseLibrary.length} total</span>
-            <span>{displayedExercises.length} shown</span>
+            <span>{exerciseLibrary.length} shown</span>
           </div>
           {isExerciseLibraryLoading ? (
             <p className="exercise-loading-note" role="status">Still loading exercises. Thanks for hanging tight.</p>
@@ -710,21 +680,12 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
 
             <label className="exercise-field">
               <span>Category</span>
-              <select
-                name="category"
-                value={filters.category}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, category: event.target.value }))
-                }
-                disabled={isChoicesLoading}
-              >
-                <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
-                {categoryChoices.map((choice) => (
-                  <option key={choice.value} value={choice.value}>
-                    {choice.label}
-                  </option>
-                ))}
-              </select>
+              <MultiSelect
+                            options={categoryChoices}
+                            value={filters.category || []}
+                            onChange={(selected) => handleFilterChange("category", selected)}
+                            name="filter-category"
+              />
             </label>
 
             <label className="exercise-field">
