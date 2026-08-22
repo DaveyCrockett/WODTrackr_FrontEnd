@@ -885,7 +885,7 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
   return [...new Set(mappedValues)]
 }
 
-function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
+function Programs({ exerciseLibraryState, setExerciseLibraryState, filteredAndSortedLibrary, filters, setFilters, currentPage, setCurrentPage, searchName, sortOrder }) {
   const [programs, setPrograms] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
@@ -898,10 +898,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
   const [createPlanWeek, setCreatePlanWeek] = useState(1)
   const [createPlanExercise, setCreatePlanExercise] = useState([])
   const [createPlanWorkoutId, setCreatePlanWorkoutId] = useState("")
-  const [searchName, setSearchName] = useState("")
-  const [sortOrder, setSortOrder] = useState("asc")
-  const [filters, setFilters] = useState({ difficulty: [], category: [], goal: [], equipment: [] })
-  const [currentPage, setCurrentPage] = useState(1)
   const [selectedProgramId, setSelectedProgramId] = useState(null)
   const [programDetailsById, setProgramDetailsById] = useState({})
   const [programItemRecordsById, setProgramItemRecordsById] = useState({})
@@ -936,7 +932,9 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
   const [scheduleError, setScheduleError] = useState("")
   const [scheduleSuccess, setScheduleSuccess] = useState("")
 
-  const { exerciseLibrary, isExerciseLibraryLoading, exerciseLibraryError } = exerciseLibraryState
+  const { exerciseLibrary, 
+    isExerciseLibraryLoading, 
+    exerciseLibraryError } = exerciseLibraryState
 
   useEffect(() => {
     const loadPrograms = async () => {
@@ -1122,6 +1120,8 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     loadChoices()
   }, [])
 
+  
+
   const selectedProgram = useMemo(
     () => {
       const found = programs.find((program) => program.id === selectedProgramId)
@@ -1217,45 +1217,9 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
   const filterGoalValues = Array.isArray(filters.goal) ? filters.goal : []
   const filterEquipmentValues = Array.isArray(filters.equipment) ? filters.equipment : []
 
-  const filteredAndSortedPrograms = useMemo(() => {
-    let result = [...programs]
-
-    if (searchName.trim()) {
-      const query = searchName.trim().toLowerCase()
-      result = result.filter(
-        (p) =>
-          String(p?.name || "").toLowerCase().includes(query) ||
-          String(p?.description || "").toLowerCase().includes(query),
-      )
-    }
-
-    if (filters.difficulty.length > 0) {
-      result = result.filter((p) => filters.difficulty.includes(p.difficulty))
-    }
-    if (Array.isArray(filters.category) && filters.category.length > 0) {
-      result = result.filter((p) => filters.category.includes(p.category))
-    }
-    if (Array.isArray(filters.goal) && filters.goal.length > 0) {
-      result = result.filter((p) => filters.goal.includes(p.goal))
-    }
-    if (Array.isArray(filters.equipment) && filters.equipment.length > 0) {
-      result = result.filter((p) => {
-        const programEquipment = getProgramEquipmentValues(p)
-        return filters.equipment.some((selectedValue) => programEquipment.includes(normalizeEquipmentEntry(selectedValue)))
-      })
-    }
-
-    result.sort((a, b) => {
-      const cmp = String(a?.name || "").localeCompare(String(b?.name || ""))
-      return sortOrder === "asc" ? cmp : -cmp
-    })
-
-    return result
-  }, [programs, searchName, sortOrder, filters])
-
-  const totalPages = Math.max(1, Math.ceil(filteredAndSortedPrograms.length / PROGRAMS_PER_PAGE))
+  const totalPages = Math.max(1, Math.ceil(filteredAndSortedLibrary.length / PROGRAMS_PER_PAGE))
   const safePage = Math.min(currentPage, totalPages)
-  const pagedPrograms = filteredAndSortedPrograms.slice(
+  const pagedPrograms = filteredAndSortedLibrary.slice(
     (safePage - 1) * PROGRAMS_PER_PAGE,
     safePage * PROGRAMS_PER_PAGE,
   )
@@ -1289,10 +1253,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
   const canEditSelectedProgram = Boolean(selectedProgramId && currentUsername && (ownerMissing || ownerMatchesByUsername || ownerMatchesById))
   const createProgramImageUrl = editImagePreview || getDefaultProgramImageUrl()
   const selectedProgramImageUrl = getProgramImageUrl(selectedProgramDetails) || getProgramImageUrl(selectedProgram) || editImagePreview || getDefaultProgramImageUrl()
-  const handleFilterChange = (key, value) => {
-    setFilters((prev) => ({ ...prev, [key]: value }))
-    setCurrentPage(1)
-  }
 
   const handleSearchChange = (event) => {
     setSearchName(event.target.value)
@@ -2118,6 +2078,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
       setScheduleError("Please select a start date.")
       return
     }
+  
 
     const program = programDetailsById[selectedProgramId] ?? selectedProgram
     if (!program) {
@@ -2278,7 +2239,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                       const next = e.target.checked
                         ? [...filters.difficulty, d.value]
                         : filters.difficulty.filter((v) => v !== d.value)
-                      handleFilterChange("difficulty", next)
+                      filteredAndSortedLibrary("difficulty", next)
                     }}
                   />
                   {d.label}
@@ -2292,7 +2253,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
             <MultiSelect
               options={categoryFilterOptions}
               value={filterCategoryValues}
-              onChange={(selected) => handleFilterChange("category", selected)}
+              onChange={(selected) => filteredAndSortedLibrary("category", selected)}
               name="filter-category"
             />
           </div>
@@ -2302,7 +2263,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
             <MultiSelect
               options={goalFilterOptions}
               value={filterGoalValues}
-              onChange={(selected) => handleFilterChange("goal", selected)}
+              onChange={(selected) => filteredAndSortedLibrary("goal", selected)}
               name="filter-goal"
             />
           </div>
@@ -2312,7 +2273,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
             <MultiSelect
               options={equipments}
               value={filterEquipmentValues}
-              onChange={(selected) => handleFilterChange("equipment", selected)}
+              onChange={(selected) => filteredAndSortedLibrary("equipment", selected)}
               name="filter-equipment"
               emitOptionObjects
             />
@@ -2321,7 +2282,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
 
 
           <p className="programs-results-count" aria-live="polite">
-            {filteredAndSortedPrograms.length} program{filteredAndSortedPrograms.length !== 1 ? "s" : ""} found
+            {filteredAndSortedLibrary.length} program{filteredAndSortedLibrary.length !== 1 ? "s" : ""} found
           </p>
         </aside>
 
@@ -2334,13 +2295,13 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
             <p className="programs-empty" role="alert">
               {errorMessage}
             </p>
-          ) : pagedPrograms.length === 0 ? (
+          ) : filteredAndSortedLibrary.length === 0 ? (
             <p className="programs-empty" role="status">
               No programs match your filters.
             </p>
           ) : (
             <div className="programs-grid">
-              {pagedPrograms.map((program) => (
+              {filteredAndSortedLibrary.map((program) => (
                 <article key={program.id} className="programs-card">
                   <div className="programs-card-header">
                     <h3 className="programs-card-title">{program.name}</h3>

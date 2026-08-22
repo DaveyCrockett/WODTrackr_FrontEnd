@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 import './CSS/app.css'
 import Calendar from './components/Calendar'
@@ -82,6 +82,72 @@ function App() {
       exerciseLibraryError: '',
       hasMoreExercises: false,
     })
+  const [filters, setFilters] = useState({ 
+    difficulty: [],
+    category: [], 
+    goal: [], 
+    equipment: [],
+    muscle: [],
+   })
+  const [searchName, setSearchName] = useState("")
+  const [sortOrder, setSortOrder] = useState("asc")
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const handleClearFilters = () => {
+    setSearchName("")
+    setSortOrder("asc")
+    setFilters({ 
+      difficulty: [],
+      category: [], 
+      goal: [], 
+      equipment: [],
+      muscle: [],
+    })
+    setCurrentPage(1)
+  }
+
+  const filteredAndSortedLibrary = useMemo(() => {
+    const library = exerciseLibraryState.exerciseLibrary || []
+    let result = [...library]
+
+    if (searchName.trim()) {
+      const query = searchName.trim().toLowerCase()
+      result = result.filter(
+        (p) =>
+          String(p?.name || "").toLowerCase().includes(query) ||
+          String(p?.description || "").toLowerCase().includes(query),
+      )
+    }
+
+    if (filters.difficulty.length > 0) {
+      result = result.filter((p) => filters.difficulty.includes(p.difficulty))
+    }
+    if (Array.isArray(filters.category) && filters.category.length > 0) {
+      result = result.filter((p) => filters.category.includes(p.category))
+    }
+    if (Array.isArray(filters.goal) && filters.goal.length > 0) {
+      result = result.filter((p) => filters.goal.includes(p.goal))
+    }
+    if (Array.isArray(filters.equipment) && filters.equipment.length > 0) {
+      result = result.filter((p) => {
+        const programEquipment = getProgramEquipmentValues(p)
+        return filters.equipment.some((selectedValue) => programEquipment.includes(normalizeEquipmentEntry(selectedValue)))
+      })
+    }
+    if (Array.isArray(filters.muscle) && filters.muscle.length > 0) {
+      result = result.filter((p) => {
+        const programMuscles = getProgramMuscleValues(p)
+        return filters.muscle.some((selectedValue) => programMuscles.includes(normalizeMuscleEntry(selectedValue)))
+      })
+    }
+
+    result.sort((a, b) => {
+      const cmp = String(a?.name || "").localeCompare(String(b?.name || ""))
+      return sortOrder === "asc" ? cmp : -cmp
+    })
+
+    return result
+  }, [searchName, sortOrder, filters])
 
   const normalizeExercisesPayload = (data) => {
     if (Array.isArray(data?.data)) return data.data
@@ -130,9 +196,26 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/" element={<Layout />}>
           <Route path="profile" element={<Profile />} />
-          <Route path="exercises" element={<Exercises exerciseLibraryState={exerciseLibraryState} loadExerciseLibrary={loadExerciseLibrary} />} />
+          <Route path="exercises" element={<Exercises 
+            exerciseLibraryState={exerciseLibraryState}
+            loadExerciseLibrary={loadExerciseLibrary} 
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+            searchName={searchName}
+            sortOrder={sortOrder}
+            filteredAndSortedLibrary={filteredAndSortedLibrary}
+          />} />
           <Route path="calendar" element={<Calendar />} />
-          <Route path="programs" element={<Programs exerciseLibraryState={exerciseLibraryState} loadExerciseLibrary={loadExerciseLibrary} />} />
+          <Route path="programs" element={<Programs 
+            exerciseLibraryState={exerciseLibraryState}
+            loadExerciseLibrary={loadExerciseLibrary} 
+            filteredAndSortedLibrary={filteredAndSortedLibrary}
+            sortOrder={sortOrder}
+            searchName={searchName}
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+            setFilters={setFilters}
+          />} />
           <Route path="billing/success" element={<BillingReturnRedirect status="success" />} />
           <Route path="billing/cancel" element={<BillingReturnRedirect status="cancel" />} />
           <Route path="settings" element={<Settings />} />

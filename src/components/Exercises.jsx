@@ -208,10 +208,7 @@ const getExerciseFormValues = (exercise) => ({
 })
 
 
-function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExerciseLibrary }) {
-  const [searchName, setSearchName] = useState("")
-  const [ordering, setOrdering] = useState("name")
-  const [filters, setFilters] = useState({ difficulty: [], category: [], goal: [], equipment: [] })
+function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExerciseLibrary, filters, handleFilterChange, handleSearchChange, handleSortChange, handleClearFilters, searchName, setSearchName, sortOrder, setSortOrder }) {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -244,6 +241,14 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
     isExerciseLibraryLoading,
     exerciseLibraryError
   } = exerciseLibraryState
+
+  const {
+    muscle: filterMuscle,
+    difficulty: filterDifficulty,
+    category: filterCategory,
+    goal: filterGoal,
+    equipment: filterEquipment,
+  } = filters || {}
 
   useEffect(() => {
     if (!successMessage) {
@@ -401,21 +406,6 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
     } finally {
       setIsSubmitting(false)
     }
-  }
-
-  const handleClearFilters = () => {
-    setSearchName("")
-    setOrdering("name")
-    setFilters({
-      category: "",
-      equipment: "",
-      muscle: "",
-    })
-  }
-
-  const handleFilterChange = (key, value) => {
-    setFilters((prev) => ({ ...prev, [key]: value }))
-    
   }
 
   const handleOpenAddModal = () => {
@@ -691,48 +681,30 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
 
             <label className="exercise-field">
               <span>Equipment</span>
-              <select
-                name="equipment"
-                value={filters.equipment}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, equipment: event.target.value }))
-                }
-                disabled={isChoicesLoading}
-              >
-                <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
-                {equipmentChoices.map((choice) => (
-                  <option key={choice.value} value={choice.value}>
-                    {choice.label}
-                  </option>
-                ))}
-              </select>
+              <MultiSelect
+                            options={equipmentChoices}
+                            value={filters.equipment || []}
+                            onChange={(selected) => handleFilterChange("equipment", selected)}
+                            name="filter-equipment"
+              />
             </label>
 
             <label className="exercise-field">
               <span>Muscle</span>
-              <select
-                name="muscle"
-                value={filters.muscle}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, muscle: event.target.value }))
-                }
-                disabled={isChoicesLoading}
-              >
-                <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
-                {muscleChoices.map((choice) => (
-                  <option key={choice.value} value={choice.value}>
-                    {choice.label}
-                  </option>
-                ))}
-              </select>
+              <MultiSelect
+                            options={muscleChoices}
+                            value={filters.muscle || []}
+                            onChange={(selected) => handleFilterChange("muscle", selected)}
+                            name="filter-muscle"
+              />
             </label>
 
             <label className="exercise-field exercise-field-wide">
               <span>Sort by</span>
               <select
                 name="ordering"
-                value={ordering}
-                onChange={(event) => setOrdering(event.target.value)}
+                value={sortOrder}
+                onChange={(event) => setSortOrder(event.target.value)}
               >
                 <option value="name">Name (A-Z)</option>
                 <option value="-name">Name (Z-A)</option>
