@@ -208,7 +208,8 @@ const getExerciseFormValues = (exercise) => ({
 })
 
 
-function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExerciseLibrary, filters, handleFilterChange, handleSearchChange, handleSortChange, handleClearFilters, searchName, setSearchName, sortOrder, setSortOrder }) {
+function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExerciseLibrary, filters, handleFilterChange, handleSearchChange, handleSortChange, handleClearFilters, searchName, setSearchName, sortOrder, setSortOrder })
+{
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -237,18 +238,12 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
   const addModalPreviouslyOpen = useRef(false)
   const editModalPreviouslyOpen = useRef(false)
 
+  const {muscle, difficulty, category, goal, equipment} = filters || {}
+
   const { exerciseLibrary,
     isExerciseLibraryLoading,
     exerciseLibraryError
   } = exerciseLibraryState
-
-  const {
-    muscle: filterMuscle,
-    difficulty: filterDifficulty,
-    category: filterCategory,
-    goal: filterGoal,
-    equipment: filterEquipment,
-  } = filters || {}
 
   useEffect(() => {
     if (!successMessage) {
@@ -264,7 +259,8 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
 
   useEffect(() => {
     loadExerciseLibrary(getAuthToken())
-  }, [])
+    filteredAndSortedLibrary()
+  }, [searchName, sortOrder, filters, exerciseLibraryState])
 
   useEffect(() => {
     const loadChoices = async () => {
@@ -681,6 +677,7 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
 
             <label className="exercise-field">
               <span>Equipment</span>
+              {console.log(filters.equipment)}
               <MultiSelect
                             options={equipmentChoices}
                             value={filters.equipment || []}

@@ -75,6 +75,37 @@ function BillingReturnRedirect({ status }) {
   return <Navigate to={`/programs${nextQuery ? `?${nextQuery}` : ''}`} replace />
 }
 
+const loadExerciseLibrary = async (authToken) => {
+    setExerciseLibraryState((prevState) => ({
+      ...prevState,
+      isExerciseLibraryLoading: true,
+      exerciseLibraryError: '',
+    }))
+    console.log('Loading exercise library...')
+    try {
+      console.log("authToken:", authToken)
+      const config = authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}
+      const response = await axios.get(EXERCISES_API_URL, config)
+      console.log('Exercise library loaded:', response?.data.all_exercises || response?.data || [])
+      const nextNode = response?.data?.next
+      setExerciseLibraryState((prevState) => ({
+        ...prevState,
+        isExerciseLibraryLoading: false,
+        exerciseLibraryError: '',
+        exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || [] ),
+        hasMoreExercises: nextNode !== null,
+      }))
+    } catch (error) {
+      console.error('API or Normalization Error:', error?.response || error?.message || error)
+      setExerciseLibraryState((prevState) => ({
+        ...prevState,
+        isExerciseLibraryLoading: false,
+        exerciseLibrary: [],
+        exerciseLibraryError: 'Unable to load exercise library for workout planning.',
+      }))
+    }
+  }
+
 function App() {
   const [exerciseLibraryState, setExerciseLibraryState] = useState({
       exerciseLibrary: [],
@@ -106,48 +137,93 @@ function App() {
     setCurrentPage(1)
   }
 
-  const filteredAndSortedLibrary = useMemo(() => {
+  const filteredAndSortedLibrary = () => {
     const library = exerciseLibraryState.exerciseLibrary || []
     let result = [...library]
+    try {
+      if (searchName.trim()) {
+        const query = searchName.trim().toLowerCase()
+        result = result.filter(
+          (p) =>
+            String(p?.name || "").toLowerCase().includes(query) ||
+            String(p?.description || "").toLowerCase().includes(query),
+        )
+      }
 
-    if (searchName.trim()) {
-      const query = searchName.trim().toLowerCase()
-      result = result.filter(
-        (p) =>
-          String(p?.name || "").toLowerCase().includes(query) ||
-          String(p?.description || "").toLowerCase().includes(query),
-      )
-    }
+      if (filters.difficulty.length > 0) {
+        result = result.filter((p) => filters.difficulty.includes(p.difficulty))
+        setExerciseLibraryState(prevState => ({
+          ...prevState,
+          exerciseLibrary: {
+            ...prevState.exerciseLibrary,
+            difficulty: result,
+          },
+        }))
+        result = JSON.stringify(result)
+      }
+    
+      if (Array.isArray(filters.category) && filters.category.length > 0) {
+        result = result.filter((p) => filters.category.includes(p.category))
+        setExerciseLibraryState(prevState => ({
+          ...prevState,
+          exerciseLibrary: {
+            ...prevState.exerciseLibrary,
+            category: result,
+          },
+        }))
+        result = JSON.stringify(result)
+      }
+      if (Array.isArray(filters.goal) && filters.goal.length > 0) {
+        result = result.filter((p) => filters.goal.includes(p.goal))
+        setExerciseLibraryState(prevState => ({
+          ...prevState,
+          exerciseLibrary: {
+            ...prevState.exerciseLibrary,
+            goal: result,
+          },
+        }))
+        result = JSON.stringify(result)
+      }
+      if (Array.isArray(filters.equipment) && filters.equipment.length > 0) {
+        result = result.filter((p) => {
+          const programEquipment = getProgramEquipmentValues(p)
+          return filters.equipment.some((selectedValue) => programEquipment.includes(normalizeEquipmentEntry(selectedValue)))
+        })
+        setExerciseLibraryState(prevState => ({
+          ...prevState,
+          exerciseLibrary: {
+            ...prevState.exerciseLibrary,
+            equipment: result,
+          },
+        }))
+        result = JSON.stringify(result)
+      }
+      if (Array.isArray(filters.muscle) && filters.muscle.length > 0) {
+        result = result.filter((p) => {
+          const programMuscles = getProgramMuscleValues(p)
+          return filters.muscle.some((selectedValue) => programMuscles.includes(normalizeMuscleEntry(selectedValue)))
+        })
+        setExerciseLibraryState(prevState => ({
+          ...prevState,
+          exerciseLibrary: {
+            ...prevState.exerciseLibrary,
+            muscle: result,
+          },
+        }))
+        result = JSON.stringify(result)
+      }
 
-    if (filters.difficulty.length > 0) {
-      result = result.filter((p) => filters.difficulty.includes(p.difficulty))
-    }
-    if (Array.isArray(filters.category) && filters.category.length > 0) {
-      result = result.filter((p) => filters.category.includes(p.category))
-    }
-    if (Array.isArray(filters.goal) && filters.goal.length > 0) {
-      result = result.filter((p) => filters.goal.includes(p.goal))
-    }
-    if (Array.isArray(filters.equipment) && filters.equipment.length > 0) {
-      result = result.filter((p) => {
-        const programEquipment = getProgramEquipmentValues(p)
-        return filters.equipment.some((selectedValue) => programEquipment.includes(normalizeEquipmentEntry(selectedValue)))
+      result.sort((a, b) => {
+        const cmp = String(a?.name || "").localeCompare(String(b?.name || ""))
+        return sortOrder === "asc" ? cmp : -cmp
       })
-    }
-    if (Array.isArray(filters.muscle) && filters.muscle.length > 0) {
-      result = result.filter((p) => {
-        const programMuscles = getProgramMuscleValues(p)
-        return filters.muscle.some((selectedValue) => programMuscles.includes(normalizeMuscleEntry(selectedValue)))
-      })
-    }
 
-    result.sort((a, b) => {
-      const cmp = String(a?.name || "").localeCompare(String(b?.name || ""))
-      return sortOrder === "asc" ? cmp : -cmp
-    })
-
-    return result
-  }, [searchName, sortOrder, filters])
+      return result
+    } catch (error) {
+      console.error('Error filtering and sorting library:', error)
+      return []
+    }
+  }
 
   const normalizeExercisesPayload = (data) => {
     if (Array.isArray(data?.data)) return data.data
@@ -156,39 +232,7 @@ function App() {
     return []
   }
 
-  const loadExerciseLibrary = async (authToken) => {
-    setExerciseLibraryState((prevState) => ({
-      ...prevState,
-      isExerciseLibraryLoading: true,
-      exerciseLibraryError: '',
-    }))
-    console.log('Loading exercise library...')
-    try {
-      console.log("authToken:", authToken)
-      const config = authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}
-      const response = await axios.get(EXERCISES_API_URL, config)
-      console.log('Exercise library loaded:', response?.data.all_exercises || response?.data || [])
-      const nextNode = response?.data?.next
-      setExerciseLibraryState((prevState) => ({
-        ...prevState,
-        isExerciseLibraryLoading: false,
-        exerciseLibraryError: '',
-        exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || [] ),
-        hasMoreExercises: nextNode !== null,
-      }))
-    } catch (error) {
-      console.error('API or Normalization Error:', error?.response || error?.message || error)
-      setExerciseLibraryState((prevState) => ({
-        ...prevState,
-        isExerciseLibraryLoading: false,
-        exerciseLibrary: [],
-        exerciseLibraryError: 'Unable to load exercise library for workout planning.',
-      }))
-    }
-  }
-
-
-
+  
   return (
     <BrowserRouter>
       <Routes>
