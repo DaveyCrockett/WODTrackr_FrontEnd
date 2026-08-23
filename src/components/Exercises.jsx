@@ -6,6 +6,7 @@ import FilterIcon from "../assets/filter.png"
 import MultiSelect from "./MultiSelect"
 
 const API_URL = "/api/wodtrackr/exercises/"
+const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 const CUSTOM_EXERCISES_API_URL = "/api/wodtrackr/custom-exercises/"
 const CHOICES_API_URL = "/api/wodtrackr/exercises/choices/"
 const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
@@ -24,31 +25,28 @@ const EMPTY_EXERCISE_FORM_VALUES = {
   is_public: false,
 }
 
+
 const getDefaultExerciseFormValues = (username = "") => ({
   ...EMPTY_EXERCISE_FORM_VALUES,
   created_by: username || "",
 })
 
-const getAuthToken = () => {
-  const directToken = localStorage.getItem("wodtrackrAuthToken")
-  if (directToken) {
-    return directToken
-  }
 
-  try {
-    const rawValue = localStorage.getItem("wodtrackrUser")
-    const userData = rawValue ? JSON.parse(rawValue) : null
-    return userData?.authToken || ""
-  } catch {
-    return ""
-  }
-}
 
 const getStoredUsername = () => {
   try {
     const rawValue = localStorage.getItem("wodtrackrUser")
     const userData = rawValue ? JSON.parse(rawValue) : null
     return userData?.username || ""
+  } catch {
+    return ""
+  }
+}
+const getAuthToken = () => {
+  try {
+    const rawValue = localStorage.getItem("wodtrackrUser")
+    const userData = rawValue ? JSON.parse(rawValue) : null
+    return userData?.authToken || ""
   } catch {
     return ""
   }
@@ -208,7 +206,7 @@ const getExerciseFormValues = (exercise) => ({
 })
 
 
-function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExerciseLibrary, filters, handleFilterChange, handleSearchChange, handleSortChange, handleClearFilters, searchName, setSearchName, sortOrder, setSortOrder })
+function Exercises({ filters, exerciseLibraryState, setExerciseLibraryState, handleFilterChange, handleSearchChange, handleSortChange, handleClearFilters, searchName, setSearchName, sortOrder, setSortOrder })
 {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -238,12 +236,9 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
   const addModalPreviouslyOpen = useRef(false)
   const editModalPreviouslyOpen = useRef(false)
 
-  const {muscle, difficulty, category, goal, equipment} = filters || {}
-
-  const { exerciseLibrary,
-    isExerciseLibraryLoading,
-    exerciseLibraryError
-  } = exerciseLibraryState
+  const { exerciseLibrary, 
+    isExerciseLibraryLoading, 
+    exerciseLibraryError } = exerciseLibraryState
 
   useEffect(() => {
     if (!successMessage) {
@@ -258,9 +253,39 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
   }, [successMessage])
 
   useEffect(() => {
-    loadExerciseLibrary(getAuthToken())
-    filteredAndSortedLibrary()
-  }, [searchName, sortOrder, filters, exerciseLibraryState])
+    const loadExerciseLibrary = async () => {
+      const config = buildRequestConfig()
+      setExerciseLibraryState((prevState) => ({
+        ...prevState,
+        isExerciseLibraryLoading: true,
+        exerciseLibraryError: '',
+      }))
+      console.log('Loading exercise library...')
+      try {
+        console.log("config:", config)
+        const response = await axios.get(EXERCISES_API_URL, config)
+        console.log('Exercise library loaded:', response?.data.all_exercises || response?.data || [])
+        const nextNode = response?.data?.next
+        setExerciseLibraryState((prevState) => ({
+          ...prevState,
+          isExerciseLibraryLoading: false,
+          exerciseLibraryError: '',
+          exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || [] ),
+          hasMoreExercises: nextNode !== null,
+        }))
+      } catch (error) {
+        console.error('API or Normalization Error:', error?.response || error?.message || error)
+        setExerciseLibraryState((prevState) => ({
+          ...prevState,
+          isExerciseLibraryLoading: false,
+          exerciseLibrary: [],
+          exerciseLibraryError: 'Unable to load exercise library for workout planning.',
+        }))
+      }
+    }
+    loadExerciseLibrary()
+  }, [searchName, sortOrder, filters])
+
 
   useEffect(() => {
     const loadChoices = async () => {
@@ -317,6 +342,13 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
 
     loadChoices()
   }, [])
+
+  const normalizeExercisesPayload = (data) => {
+    if (Array.isArray(data?.data)) return data.data
+    if (Array.isArray(data?.results)) return data.results
+    if (Array.isArray(data)) return data
+    return []
+  }
 
 
   const handleAddChange = (event) => {
@@ -667,6 +699,7 @@ function Exercises({ exerciseLibraryState, setExerciseLibraryState, loadExercise
 
             <label className="exercise-field">
               <span>Category</span>
+              {console.log(filters.category)}
               <MultiSelect
                             options={categoryChoices}
                             value={filters.category || []}

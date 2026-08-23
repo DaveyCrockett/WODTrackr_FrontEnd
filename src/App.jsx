@@ -13,55 +13,53 @@ import Register from './components/Register'
 import Settings from './components/Settings'
 
 
-const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
+const saveUserSession = (data, fallbackUsername) => {
+  const userData = data?.user ?? data ?? {}
+  const authToken =
+    data?.access ??
+    data?.token ??
+    data?.key ??
+    data?.auth_token ??
+    userData?.access ??
+    userData?.token ??
+    userData?.key ??
+    userData?.auth_token ??
+    ""
 
+  const refreshToken = data?.refresh ?? userData?.refresh ?? ""
+  const avatarUrl =
+    userData?.avatar_url ??
+    userData?.avatarUrl ??
+    userData?.profile_image ??
+    userData?.profileImage ??
+    null
 
-  const saveUserSession = (data, fallbackUsername) => {
-    const userData = data?.user ?? data ?? {}
-    const authToken =
-      data?.access ??
-      data?.token ??
-      data?.key ??
-      data?.auth_token ??
-      userData?.access ??
-      userData?.token ??
-      userData?.key ??
-      userData?.auth_token ??
-      ""
+  const username =
+    userData?.username ?? userData?.name ?? fallbackUsername ?? "Guest user"
 
-    const refreshToken = data?.refresh ?? userData?.refresh ?? ""
-    const avatarUrl =
-      userData?.avatar_url ??
-      userData?.avatarUrl ??
-      userData?.profile_image ??
-      userData?.profileImage ??
-      null
+  localStorage.setItem(
+    "wodtrackrUser",
+    JSON.stringify({
+      username,
+      avatarUrl,
+      authToken,
+      refreshToken,
+    })
+  )
 
-    const username =
-      userData?.username ?? userData?.name ?? fallbackUsername ?? "Guest user"
-
-    localStorage.setItem(
-      "wodtrackrUser",
-      JSON.stringify({
-        username,
-        avatarUrl,
-        authToken,
-        refreshToken,
-      })
-    )
-
-    if (authToken) {
-      localStorage.setItem("wodtrackrAuthToken", authToken)
-    } else {
-      localStorage.removeItem("wodtrackrAuthToken")
-    }
-
-    if (refreshToken) {
-      localStorage.setItem("wodtrackrRefreshToken", refreshToken)
-    } else {
-      localStorage.removeItem("wodtrackrRefreshToken")
-    }
+  if (authToken) {
+    localStorage.setItem("wodtrackrAuthToken", authToken)
+  } else {
+    localStorage.removeItem("wodtrackrAuthToken")
   }
+
+  if (refreshToken) {
+    localStorage.setItem("wodtrackrRefreshToken", refreshToken)
+  } else {
+    localStorage.removeItem("wodtrackrRefreshToken")
+  }
+}
+
 
 function BillingReturnRedirect({ status }) {
   const location = useLocation()
@@ -75,38 +73,9 @@ function BillingReturnRedirect({ status }) {
   return <Navigate to={`/programs${nextQuery ? `?${nextQuery}` : ''}`} replace />
 }
 
-const loadExerciseLibrary = async (authToken) => {
-    setExerciseLibraryState((prevState) => ({
-      ...prevState,
-      isExerciseLibraryLoading: true,
-      exerciseLibraryError: '',
-    }))
-    console.log('Loading exercise library...')
-    try {
-      console.log("authToken:", authToken)
-      const config = authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}
-      const response = await axios.get(EXERCISES_API_URL, config)
-      console.log('Exercise library loaded:', response?.data.all_exercises || response?.data || [])
-      const nextNode = response?.data?.next
-      setExerciseLibraryState((prevState) => ({
-        ...prevState,
-        isExerciseLibraryLoading: false,
-        exerciseLibraryError: '',
-        exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || [] ),
-        hasMoreExercises: nextNode !== null,
-      }))
-    } catch (error) {
-      console.error('API or Normalization Error:', error?.response || error?.message || error)
-      setExerciseLibraryState((prevState) => ({
-        ...prevState,
-        isExerciseLibraryLoading: false,
-        exerciseLibrary: [],
-        exerciseLibraryError: 'Unable to load exercise library for workout planning.',
-      }))
-    }
-  }
-
 function App() {
+
+  
   const [exerciseLibraryState, setExerciseLibraryState] = useState({
       exerciseLibrary: [],
       isExerciseLibraryLoading: false,
@@ -137,7 +106,8 @@ function App() {
     setCurrentPage(1)
   }
 
-  const filteredAndSortedLibrary = () => {
+  
+  const filteredAndSortedLibrary = useMemo(() => {
     const library = exerciseLibraryState.exerciseLibrary || []
     let result = [...library]
     try {
@@ -154,10 +124,7 @@ function App() {
         result = result.filter((p) => filters.difficulty.includes(p.difficulty))
         setExerciseLibraryState(prevState => ({
           ...prevState,
-          exerciseLibrary: {
-            ...prevState.exerciseLibrary,
-            difficulty: result,
-          },
+          exerciseLibrary: result,
         }))
         result = JSON.stringify(result)
       }
@@ -166,10 +133,7 @@ function App() {
         result = result.filter((p) => filters.category.includes(p.category))
         setExerciseLibraryState(prevState => ({
           ...prevState,
-          exerciseLibrary: {
-            ...prevState.exerciseLibrary,
-            category: result,
-          },
+          exerciseLibrary: result,
         }))
         result = JSON.stringify(result)
       }
@@ -177,10 +141,7 @@ function App() {
         result = result.filter((p) => filters.goal.includes(p.goal))
         setExerciseLibraryState(prevState => ({
           ...prevState,
-          exerciseLibrary: {
-            ...prevState.exerciseLibrary,
-            goal: result,
-          },
+          exerciseLibrary: result,
         }))
         result = JSON.stringify(result)
       }
@@ -191,10 +152,7 @@ function App() {
         })
         setExerciseLibraryState(prevState => ({
           ...prevState,
-          exerciseLibrary: {
-            ...prevState.exerciseLibrary,
-            equipment: result,
-          },
+          exerciseLibrary: result,
         }))
         result = JSON.stringify(result)
       }
@@ -205,10 +163,7 @@ function App() {
         })
         setExerciseLibraryState(prevState => ({
           ...prevState,
-          exerciseLibrary: {
-            ...prevState.exerciseLibrary,
-            muscle: result,
-          },
+          exerciseLibrary: result,
         }))
         result = JSON.stringify(result)
       }
@@ -223,14 +178,7 @@ function App() {
       console.error('Error filtering and sorting library:', error)
       return []
     }
-  }
-
-  const normalizeExercisesPayload = (data) => {
-    if (Array.isArray(data?.data)) return data.data
-    if (Array.isArray(data?.results)) return data.results
-    if (Array.isArray(data)) return data
-    return []
-  }
+  }, [exerciseLibraryState, searchName, sortOrder])
 
   
   return (
@@ -241,24 +189,24 @@ function App() {
         <Route path="/" element={<Layout />}>
           <Route path="profile" element={<Profile />} />
           <Route path="exercises" element={<Exercises 
-            exerciseLibraryState={exerciseLibraryState}
-            loadExerciseLibrary={loadExerciseLibrary} 
+            exerciseLibraryState={exerciseLibraryState} 
+            setExerciseLibraryState={setExerciseLibraryState}
             currentPage={currentPage}
             setCurrentPage={setCurrentPage}
             searchName={searchName}
             sortOrder={sortOrder}
-            filteredAndSortedLibrary={filteredAndSortedLibrary}
+            filters={filters}
           />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="programs" element={<Programs 
-            exerciseLibraryState={exerciseLibraryState}
-            loadExerciseLibrary={loadExerciseLibrary} 
+            exerciseLibraryState={exerciseLibraryState} 
+            setExerciseLibraryState={setExerciseLibraryState}
             filteredAndSortedLibrary={filteredAndSortedLibrary}
             sortOrder={sortOrder}
             searchName={searchName}
             currentPage={currentPage}
             setCurrentPage={setCurrentPage}
-            setFilters={setFilters}
+            filters={filters}
           />} />
           <Route path="billing/success" element={<BillingReturnRedirect status="success" />} />
           <Route path="billing/cancel" element={<BillingReturnRedirect status="cancel" />} />

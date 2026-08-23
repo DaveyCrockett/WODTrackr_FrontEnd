@@ -6,6 +6,7 @@ import MultiSelect from "./MultiSelect"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
 const EQUIPMENT_API_URL = "/api/wodtrackr/equipment/"
+const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 const STRIPE_CHECKOUT_API_URL = String(
   import.meta.env.VITE_CHECKOUT_SESSION_API_URL || "/api/users/billing/stripe/checkout-session/",
 ).trim()
@@ -932,9 +933,59 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState, filteredAndSo
   const [scheduleError, setScheduleError] = useState("")
   const [scheduleSuccess, setScheduleSuccess] = useState("")
 
-  const { exerciseLibrary, 
-    isExerciseLibraryLoading, 
-    exerciseLibraryError } = exerciseLibraryState
+
+  const getAuthToken = () => {
+  try {
+    const rawValue = localStorage.getItem("wodtrackrUser")
+    const userData = rawValue ? JSON.parse(rawValue) : null
+    return userData?.authToken || ""
+  } catch {
+    return ""
+  }
+}
+
+const buildRequestConfig = (overrides = {}) => {
+  const authToken = getAuthToken()
+  return {
+    ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}),
+    ...overrides,
+  }
+}
+
+  useEffect(() => {
+    const loadExerciseLibrary = async () => {
+      const config = buildRequestConfig()
+      setExerciseLibraryState((prevState) => ({
+        ...prevState,
+        isExerciseLibraryLoading: true,
+        exerciseLibraryError: '',
+      }))
+      console.log('Loading exercise library...')
+      try {
+        console.log("config:", config)
+        const response = await axios.get(EXERCISES_API_URL, config)
+        console.log('Exercise library loaded:', response?.data.all_exercises || response?.data || [])
+        const nextNode = response?.data?.next
+        setExerciseLibraryState((prevState) => ({
+          ...prevState,
+          isExerciseLibraryLoading: false,
+          exerciseLibraryError: '',
+          exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || [] ),
+          hasMoreExercises: nextNode !== null,
+        }))
+      } catch (error) {
+        console.error('API or Normalization Error:', error?.response || error?.message || error)
+        setExerciseLibraryState((prevState) => ({
+          ...prevState,
+          isExerciseLibraryLoading: false,
+          exerciseLibrary: [],
+          exerciseLibraryError: 'Unable to load exercise library for workout planning.',
+        }))
+      }
+    }
+    loadExerciseLibrary()
+  }, [searchName, sortOrder, filters])
+
 
   useEffect(() => {
     const loadPrograms = async () => {
