@@ -886,7 +886,7 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
   return [...new Set(mappedValues)]
 }
 
-function Programs({ isChoicesLoading, exerciseLibraryState, setExerciseLibraryState, filteredAndSortedLibrary, filters, setFilters, currentPage, setCurrentPage, searchName, sortOrder, goalChoices, difficultyChoices, categoryChoices, equipmentChoices, muscleChoices, errorMessage }) {
+function Programs({ isChoicesLoading, exerciseLibraryState, setExerciseLibraryState, filteredAndSortedLibrary, filters, setFilters, currentPage, setCurrentPage, searchName, sortOrder, goalChoices, difficultyChoices, categoryChoices, equipmentChoices, muscleChoices, errorMessage, setIsChoicesLoading }) {
   const [programs, setPrograms] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)

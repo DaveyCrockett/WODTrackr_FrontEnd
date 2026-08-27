@@ -270,13 +270,13 @@ function App() {
             sortOrder={sortOrder}
             filters={filters}
             isChoicesLoading={isChoicesLoading}
+            setIsChoicesLoading={setIsChoicesLoading}
             goalChoices={goalChoices}
             difficultyChoices={difficultyChoices}
             categoryChoices={categoryChoices}
             equipmentChoices={equipmentChoices}
             muscleChoices={muscleChoices}
             choicesErrorMessage={choicesErrorMessage}
-            isChoicesLoading={isChoicesLoading}
           />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="programs" element={<Programs 

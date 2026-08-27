@@ -203,7 +203,7 @@ const getExerciseFormValues = (exercise) => ({
 })
 
 
-function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscleChoices, exerciseLibraryState, setExerciseLibraryState, handleFilterChange, handleSearchChange, handleSortChange, handleClearFilters, searchName, setSearchName, sortOrder, setSortOrder, filters })
+function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscleChoices, exerciseLibraryState, setExerciseLibraryState, handleFilterChange, handleSearchChange, handleSortChange, handleClearFilters, searchName, setSearchName, sortOrder, setSortOrder, filters, setIsChoicesLoading })
 {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
