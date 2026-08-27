@@ -86,7 +86,7 @@ export default function MultiSelect({ options, value, onChange, disabled, name, 
       </button>
       {open && (
         <div className="multiselect-list" role="listbox">
-          {options.map((option) => (
+          {Array.isArray(options) && options.map((option) => (
             <label key={option.value} className="multiselect-label">
               <input
                 type="checkbox"

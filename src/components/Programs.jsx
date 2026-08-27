@@ -2190,7 +2190,7 @@ const buildRequestConfig = (overrides = {}) => {
           <div className="programs-filter-group">
             <span className="programs-filter-label">Category</span>
             <MultiSelect
-              options={categoryFilterOptions}
+              options={filterCategoryOptions}
               value={filterCategoryValues}
               onChange={(selected) => filteredAndSortedLibrary("category", selected)}
               name="filter-category"
@@ -2200,7 +2200,7 @@ const buildRequestConfig = (overrides = {}) => {
           <div className="programs-filter-group">
             <span className="programs-filter-label">Goal</span>
             <MultiSelect
-              options={goalFilterOptions}
+              options={filterGoalOptions}
               value={filterGoalValues}
               onChange={(selected) => filteredAndSortedLibrary("goal", selected)}
               name="filter-goal"
@@ -2210,7 +2210,7 @@ const buildRequestConfig = (overrides = {}) => {
           <div className="programs-filter-group">
             <span className="programs-filter-label">Equipment</span>
             <MultiSelect
-              options={equipments}
+              options={filterEquipmentOptions}
               value={filterEquipmentValues}
               onChange={(selected) => filteredAndSortedLibrary("equipment", selected)}
               name="filter-equipment"

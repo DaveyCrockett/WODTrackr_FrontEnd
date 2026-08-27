@@ -203,7 +203,7 @@ const getExerciseFormValues = (exercise) => ({
 })
 
 
-function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscleChoices, exerciseLibraryState, setExerciseLibraryState, handleFilterChange, handleSearchChange, handleSortChange, handleClearFilters, searchName, setSearchName, sortOrder, setSortOrder, filters, setIsChoicesLoading })
+function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscleChoices, exerciseLibraryState, setExerciseLibraryState, handleSearchChange, handleSortChange, handleClearFilters, searchName, setSearchName, sortOrder, setSortOrder, filters, setFilters, setIsChoicesLoading })
 {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -244,6 +244,79 @@ function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscle
 
     return () => clearTimeout(timer)
   }, [successMessage])
+
+  const filteredAndSortedLibrary = useMemo(() => {
+    const library = exerciseLibraryState.exerciseLibrary || []
+    let result = [...library]
+    try {
+      if (searchName.trim()) {
+        const query = searchName.trim().toLowerCase()
+        result = result.filter(
+          (p) =>
+            String(p?.name || "").toLowerCase().includes(query) ||
+            String(p?.description || "").toLowerCase().includes(query),
+        )
+      }
+
+      if (difficulty.length > 0) {
+        result = result.filter((p) => difficulty.includes(p.difficulty))
+        setExerciseLibraryState(prevState => ({
+          ...prevState,
+          exerciseLibrary: result,
+        }))
+        result = JSON.stringify(result)
+      }
+    
+      if (Array.isArray(category) && category.length > 0) {
+        result = result.filter((p) => category.includes(p.category))
+        setExerciseLibraryState(prevState => ({
+          ...prevState,
+          exerciseLibrary: result,
+        }))
+        result = JSON.stringify(result)
+      }
+      if (Array.isArray(goal) && goal.length > 0) {
+        result = result.filter((p) => goal.includes(p.goal))
+        setExerciseLibraryState(prevState => ({
+          ...prevState,
+          exerciseLibrary: result,
+        }))
+        result = JSON.stringify(result)
+      }
+      if (Array.isArray(equipment) && equipment.length > 0) {
+        result = result.filter((p) => {
+          const programEquipment = getProgramEquipmentValues(p)
+          return equipment.some((selectedValue) => programEquipment.includes(normalizeEquipmentEntry(selectedValue)))
+        })
+        setExerciseLibraryState(prevState => ({
+          ...prevState,
+          exerciseLibrary: result,
+        }))
+        result = JSON.stringify(result)
+      }
+      if (Array.isArray(muscle) && muscle.length > 0) {
+        result = result.filter((p) => {
+          const programMuscles = getProgramMuscleValues(p)
+          return muscle.some((selectedValue) => programMuscles.includes(normalizeMuscleEntry(selectedValue)))
+        })
+        setExerciseLibraryState(prevState => ({
+          ...prevState,
+          exerciseLibrary: result,
+        }))
+        result = JSON.stringify(result)
+      }
+
+      result.sort((a, b) => {
+        const cmp = String(a?.name || "").localeCompare(String(b?.name || ""))
+        return sortOrder === "asc" ? cmp : -cmp
+      })
+
+      return result
+    } catch (error) {
+      console.error('Error filtering and sorting library:', error)
+      return []
+    }
+  }, [exerciseLibraryState, searchName, sortOrder, filters])
 
   const normalizeExercisesPayload = (data) => {
     if (Array.isArray(data?.data)) return data.data
@@ -639,7 +712,7 @@ function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscle
               <MultiSelect
                             options={categoryChoices}
                             value={filters.category || []}
-                            onChange={(selected) => handleFilterChange({ target: { name: "category", value: selected } })}
+                            onChange={(e) => setFilters({ ...filters, category: e.target.value })}
                             name="category"
               />
             </label>
@@ -650,7 +723,7 @@ function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscle
               <MultiSelect
                             options={equipmentChoices}
                             value={filters.equipment || []}
-                            onChange={(selected) => handleFilterChange({ target: { name: "equipment", value: selected } })}
+                            onChange={(e) => setFilters({ ...filters, equipment: e.target.value })}
                             name="equipment"
               />
             </label>
@@ -660,7 +733,7 @@ function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscle
               <MultiSelect
                             options={muscleChoices}
                             value={filters.muscle || []}
-                            onChange={(selected) => handleFilterChange({ target: { name: "muscle", value: selected } })}
+                            onChange={(e) => setFilters({ ...filters, muscle: e.target.value })}
                             name="muscle"
               />
             </label>

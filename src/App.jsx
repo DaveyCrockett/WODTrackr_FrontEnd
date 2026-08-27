@@ -143,8 +143,8 @@ function App() {
       }
 
       try {
-        const requestConfig = buildRequestConfig()
-        const response = await axios.get(CHOICES_API_URL, requestConfig)
+        // const requestConfig = buildRequestConfig()
+        const response = await axios.get(CHOICES_API_URL)
         const data = response?.data
 
         setCategoryChoices(data?.category)
@@ -179,81 +179,6 @@ function App() {
     loadChoices()
   }, [])
 
-  
-  const filteredAndSortedLibrary = useMemo(() => {
-    const library = exerciseLibraryState.exerciseLibrary || []
-    let result = [...library]
-    try {
-      if (searchName.trim()) {
-        const query = searchName.trim().toLowerCase()
-        result = result.filter(
-          (p) =>
-            String(p?.name || "").toLowerCase().includes(query) ||
-            String(p?.description || "").toLowerCase().includes(query),
-        )
-      }
-
-      if (filters.difficulty.length > 0) {
-        result = result.filter((p) => filters.difficulty.includes(p.difficulty))
-        setExerciseLibraryState(prevState => ({
-          ...prevState,
-          exerciseLibrary: result,
-        }))
-        result = JSON.stringify(result)
-      }
-    
-      if (Array.isArray(filters.category) && filters.category.length > 0) {
-        result = result.filter((p) => filters.category.includes(p.category))
-        setExerciseLibraryState(prevState => ({
-          ...prevState,
-          exerciseLibrary: result,
-        }))
-        result = JSON.stringify(result)
-      }
-      if (Array.isArray(filters.goal) && filters.goal.length > 0) {
-        result = result.filter((p) => filters.goal.includes(p.goal))
-        setExerciseLibraryState(prevState => ({
-          ...prevState,
-          exerciseLibrary: result,
-        }))
-        result = JSON.stringify(result)
-      }
-      if (Array.isArray(filters.equipment) && filters.equipment.length > 0) {
-        result = result.filter((p) => {
-          const programEquipment = getProgramEquipmentValues(p)
-          return filters.equipment.some((selectedValue) => programEquipment.includes(normalizeEquipmentEntry(selectedValue)))
-        })
-        setExerciseLibraryState(prevState => ({
-          ...prevState,
-          exerciseLibrary: result,
-        }))
-        result = JSON.stringify(result)
-      }
-      if (Array.isArray(filters.muscle) && filters.muscle.length > 0) {
-        result = result.filter((p) => {
-          const programMuscles = getProgramMuscleValues(p)
-          return filters.muscle.some((selectedValue) => programMuscles.includes(normalizeMuscleEntry(selectedValue)))
-        })
-        setExerciseLibraryState(prevState => ({
-          ...prevState,
-          exerciseLibrary: result,
-        }))
-        result = JSON.stringify(result)
-      }
-
-      result.sort((a, b) => {
-        const cmp = String(a?.name || "").localeCompare(String(b?.name || ""))
-        return sortOrder === "asc" ? cmp : -cmp
-      })
-
-      return result
-    } catch (error) {
-      console.error('Error filtering and sorting library:', error)
-      return []
-    }
-  }, [exerciseLibraryState, searchName, sortOrder])
-
-  
   return (
     <BrowserRouter>
       <Routes>
@@ -277,6 +202,7 @@ function App() {
             equipmentChoices={equipmentChoices}
             muscleChoices={muscleChoices}
             choicesErrorMessage={choicesErrorMessage}
+            setFilters={setFilters}
           />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="programs" element={<Programs 
@@ -288,13 +214,14 @@ function App() {
             setCurrentPage={setCurrentPage}
             filters={filters}
             isChoicesLoading={isChoicesLoading}
+            setIsChoicesLoading={setIsChoicesLoading}
             goalChoices={goalChoices}
             difficultyChoices={difficultyChoices}
             categoryChoices={categoryChoices}
             equipmentChoices={equipmentChoices}
             muscleChoices={muscleChoices}
             choicesErrorMessage={choicesErrorMessage}
-            isChoicesLoading={isChoicesLoading}
+            setFilters={setFilters}
           />} />
           <Route path="billing/success" element={<BillingReturnRedirect status="success" />} />
           <Route path="billing/cancel" element={<BillingReturnRedirect status="cancel" />} />
