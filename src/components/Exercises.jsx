@@ -8,9 +8,6 @@ import MultiSelect from "./MultiSelect"
 const API_URL = "/api/wodtrackr/exercises/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 const CUSTOM_EXERCISES_API_URL = "/api/wodtrackr/custom-exercises/"
-const CHOICES_API_URL = "/api/wodtrackr/exercises/choices/"
-const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
-const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 const PAGE_SIZE = 4
 const SKELETON_CARD_COUNT = 6
 const buildApiUrl = (path = "") => `${API_URL}${String(path).replace(/^\/+/, "")}`
@@ -206,15 +203,13 @@ const getExerciseFormValues = (exercise) => ({
 })
 
 
-function Exercises({ filters, exerciseLibraryState, setExerciseLibraryState, handleFilterChange, handleSearchChange, handleSortChange, handleClearFilters, searchName, setSearchName, sortOrder, setSortOrder })
+function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscleChoices, exerciseLibraryState, setExerciseLibraryState, handleFilterChange, handleSearchChange, handleSortChange, handleClearFilters, searchName, setSearchName, sortOrder, setSortOrder, filters })
 {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isLibraryModalOpen, setIsLibraryModalOpen] = useState(true)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
-  const [isChoicesLoading, setIsChoicesLoading] = useState(false)
-  const [errorMessage, setErrorMessage] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [fieldErrors, setFieldErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -224,9 +219,7 @@ function Exercises({ filters, exerciseLibraryState, setExerciseLibraryState, han
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false)
   const [formValues, setFormValues] = useState(() => getDefaultExerciseFormValues(getStoredUsername()))
   const [editFormValues, setEditFormValues] = useState(EMPTY_EXERCISE_FORM_VALUES)
-  const [categoryChoices, setCategoryChoices] = useState([])
-  const [equipmentChoices, setEquipmentChoices] = useState([])
-  const [muscleChoices, setMuscleChoices] = useState([])
+  const [exercisesErrorMessage, setExercisesErrorMessage] = useState("")
 
   // Refs for modal focus management
   const addModalRef = useRef(null)
@@ -251,97 +244,6 @@ function Exercises({ filters, exerciseLibraryState, setExerciseLibraryState, han
 
     return () => clearTimeout(timer)
   }, [successMessage])
-
-  useEffect(() => {
-    const loadExerciseLibrary = async () => {
-      const config = buildRequestConfig()
-      setExerciseLibraryState((prevState) => ({
-        ...prevState,
-        isExerciseLibraryLoading: true,
-        exerciseLibraryError: '',
-      }))
-      console.log('Loading exercise library...')
-      try {
-        console.log("config:", config)
-        const response = await axios.get(EXERCISES_API_URL, config)
-        console.log('Exercise library loaded:', response?.data.all_exercises || response?.data || [])
-        const nextNode = response?.data?.next
-        setExerciseLibraryState((prevState) => ({
-          ...prevState,
-          isExerciseLibraryLoading: false,
-          exerciseLibraryError: '',
-          exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || [] ),
-          hasMoreExercises: nextNode !== null,
-        }))
-      } catch (error) {
-        console.error('API or Normalization Error:', error?.response || error?.message || error)
-        setExerciseLibraryState((prevState) => ({
-          ...prevState,
-          isExerciseLibraryLoading: false,
-          exerciseLibrary: [],
-          exerciseLibraryError: 'Unable to load exercise library for workout planning.',
-        }))
-      }
-    }
-    loadExerciseLibrary()
-  }, [searchName, sortOrder, filters])
-
-
-  useEffect(() => {
-    const loadChoices = async () => {
-      setIsChoicesLoading(true)
-      setErrorMessage("")
-
-      try {
-        const cachedRawValue = localStorage.getItem(CHOICES_CACHE_KEY)
-        if (cachedRawValue) {
-          const parsedCache = JSON.parse(cachedRawValue)
-          const isCacheFresh = Date.now() - (parsedCache?.cachedAt || 0) < CHOICES_CACHE_TTL_MS
-
-          if (isCacheFresh && parsedCache?.categoryChoices?.length > 0 && parsedCache?.equipmentChoices?.length > 0 && parsedCache?.muscleChoices?.length > 0) {
-            setCategoryChoices(parsedCache.categoryChoices)
-            setEquipmentChoices(parsedCache.equipmentChoices)
-            setMuscleChoices(parsedCache.muscleChoices)
-            setIsChoicesLoading(false)
-            return
-          }
-        }
-      } catch {
-        localStorage.removeItem(CHOICES_CACHE_KEY)
-      }
-
-      try {
-        const requestConfig = buildRequestConfig()
-        const response = await axios.get(CHOICES_API_URL, requestConfig)
-        const data = response?.data
-
-        setCategoryChoices(data?.category)
-        setEquipmentChoices(data?.equipment)
-        setMuscleChoices(data?.primary_muscle_group)
-
-        localStorage.setItem(
-          CHOICES_CACHE_KEY,
-          JSON.stringify({
-            categoryChoices: data?.category,
-            equipmentChoices: data?.equipment,
-            muscleChoices: data?.primary_muscle_group,
-            cachedAt: Date.now(),
-          }),
-        )
-      } catch (error) {
-        if (error?.response?.status === 401 || error?.response?.status === 403) {
-          setErrorMessage("Please log in to load exercises and categories.")
-          return
-        }
-        const message = error?.response?.data?.detail || "Unable to load choices. Please refresh and try again."
-        setErrorMessage(message)
-      } finally {
-        setIsChoicesLoading(false)
-      }
-    }
-
-    loadChoices()
-  }, [])
 
   const normalizeExercisesPayload = (data) => {
     if (Array.isArray(data?.data)) return data.data
@@ -593,6 +495,40 @@ function Exercises({ filters, exerciseLibraryState, setExerciseLibraryState, han
   const canDeleteSelectedExercise = canEditSelectedExercise
 
   useEffect(() => {
+    const loadExerciseLibrary = async () => {
+      const config = buildRequestConfig()
+      setExerciseLibraryState((prevState) => ({
+        ...prevState,
+        isExerciseLibraryLoading: true,
+        exerciseLibraryError: '',
+      }))
+      console.log('Loading exercise library...')
+      try {
+        console.log("config:", config)
+        const response = await axios.get(EXERCISES_API_URL, config)
+        console.log('Exercise library loaded:', response?.data.all_exercises || response?.data || [])
+        const nextNode = response?.data?.next
+        setExerciseLibraryState((prevState) => ({
+          ...prevState,
+          isExerciseLibraryLoading: false,
+          exerciseLibraryError: '',
+          exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || [] ),
+          hasMoreExercises: nextNode !== null,
+        }))
+      } catch (error) {
+        console.error('API or Normalization Error:', error?.response || error?.message || error)
+        setExerciseLibraryState((prevState) => ({
+          ...prevState,
+          isExerciseLibraryLoading: false,
+          exerciseLibrary: [],
+          exerciseLibraryError: 'Unable to load exercise library for workout planning.',
+        }))
+      }
+    }
+    loadExerciseLibrary()
+  }, [searchName, sortOrder, filters])
+
+  useEffect(() => {
     if (exerciseLibrary.length === 0) {
       setSelectedExerciseId(null)
       return
@@ -624,7 +560,7 @@ function Exercises({ filters, exerciseLibraryState, setExerciseLibraryState, han
           {isExerciseLibraryLoading ? (
             <p className="exercise-loading-note" role="status">Still loading exercises. Thanks for hanging tight.</p>
           ) : null}
-          {errorMessage ? <p className="exercise-error" role="alert">{errorMessage}</p> : null}
+          {exercisesErrorMessage ? <p className="exercise-error" role="alert">{exercisesErrorMessage}</p> : null}
           {successMessage ? <p className="exercise-success" role="status">{successMessage}</p> : null}
 
           <div
@@ -703,8 +639,8 @@ function Exercises({ filters, exerciseLibraryState, setExerciseLibraryState, han
               <MultiSelect
                             options={categoryChoices}
                             value={filters.category || []}
-                            onChange={(selected) => handleFilterChange("category", selected)}
-                            name="filter-category"
+                            onChange={(selected) => handleFilterChange({ target: { name: "category", value: selected } })}
+                            name="category"
               />
             </label>
 
@@ -714,8 +650,8 @@ function Exercises({ filters, exerciseLibraryState, setExerciseLibraryState, han
               <MultiSelect
                             options={equipmentChoices}
                             value={filters.equipment || []}
-                            onChange={(selected) => handleFilterChange("equipment", selected)}
-                            name="filter-equipment"
+                            onChange={(selected) => handleFilterChange({ target: { name: "equipment", value: selected } })}
+                            name="equipment"
               />
             </label>
 
@@ -724,8 +660,8 @@ function Exercises({ filters, exerciseLibraryState, setExerciseLibraryState, han
               <MultiSelect
                             options={muscleChoices}
                             value={filters.muscle || []}
-                            onChange={(selected) => handleFilterChange("muscle", selected)}
-                            name="filter-muscle"
+                            onChange={(selected) => handleFilterChange({ target: { name: "muscle", value: selected } })}
+                            name="muscle"
               />
             </label>
 

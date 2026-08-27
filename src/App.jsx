@@ -12,6 +12,10 @@ import Programs from './components/Programs'
 import Register from './components/Register'
 import Settings from './components/Settings'
 
+const CHOICES_API_URL = "/api/wodtrackr/exercises/choices/"
+const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
+const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
+
 
 const saveUserSession = (data, fallbackUsername) => {
   const userData = data?.user ?? data ?? {}
@@ -90,8 +94,15 @@ function App() {
     muscle: [],
    })
   const [searchName, setSearchName] = useState("")
+  const [choicesErrorMessage, setChoicesErrorMessage] = useState("")
   const [sortOrder, setSortOrder] = useState("asc")
   const [currentPage, setCurrentPage] = useState(1)
+  const [categoryChoices, setCategoryChoices] = useState([])
+  const [goalChoices, setGoalChoices] = useState([])
+  const [difficultyChoices, setDifficultyChoices] = useState([])
+  const [equipmentChoices, setEquipmentChoices] = useState([])
+  const [muscleChoices, setMuscleChoices] = useState([])
+   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
 
   const handleClearFilters = () => {
     setSearchName("")
@@ -105,6 +116,68 @@ function App() {
     })
     setCurrentPage(1)
   }
+
+  useEffect(() => {
+    const loadChoices = async () => {
+      setIsChoicesLoading(true)
+      setChoicesErrorMessage("")
+
+      try {
+        const cachedRawValue = localStorage.getItem(CHOICES_CACHE_KEY)
+        if (cachedRawValue) {
+          const parsedCache = JSON.parse(cachedRawValue)
+          const isCacheFresh = Date.now() - (parsedCache?.cachedAt || 0) < CHOICES_CACHE_TTL_MS
+
+          if (isCacheFresh && parsedCache?.categoryChoices?.length > 0 && parsedCache?.equipmentChoices?.length > 0 && parsedCache?.muscleChoices?.length > 0 && parsedCache?.goalChoices?.length > 0 && parsedCache?.difficultyChoices?.length > 0) {
+            setCategoryChoices(parsedCache.categoryChoices)
+            setEquipmentChoices(parsedCache.equipmentChoices)
+            setMuscleChoices(parsedCache.muscleChoices)
+            setGoalChoices(parsedCache.goalChoices)
+            setDifficultyChoices(parsedCache.difficultyChoices)
+            setIsChoicesLoading(false)
+            return
+          }
+        }
+      } catch {
+        localStorage.removeItem(CHOICES_CACHE_KEY)
+      }
+
+      try {
+        const requestConfig = buildRequestConfig()
+        const response = await axios.get(CHOICES_API_URL, requestConfig)
+        const data = response?.data
+
+        setCategoryChoices(data?.category)
+        setEquipmentChoices(data?.equipment)
+        setMuscleChoices(data?.primary_muscle_group)
+        setGoalChoices(data?.goal)
+        setDifficultyChoices(data?.difficulty)
+
+        localStorage.setItem(
+          CHOICES_CACHE_KEY,
+          JSON.stringify({
+            categoryChoices: data?.category,
+            equipmentChoices: data?.equipment,
+            muscleChoices: data?.primary_muscle_group,
+            goalChoices: data?.goal,
+            difficultyChoices: data?.difficulty,
+            cachedAt: Date.now(),
+          }),
+        )
+      } catch (error) {
+        if (error?.response?.status === 401 || error?.response?.status === 403) {
+          setChoicesErrorMessage("Please log in to load exercises and categories.")
+          return
+        }
+        const message = error?.response?.data?.detail || "Unable to load choices. Please refresh and try again."
+        setChoicesErrorMessage(message)
+      } finally {
+        setIsChoicesLoading(false)
+      }
+    }
+
+    loadChoices()
+  }, [])
 
   
   const filteredAndSortedLibrary = useMemo(() => {
@@ -196,17 +269,32 @@ function App() {
             searchName={searchName}
             sortOrder={sortOrder}
             filters={filters}
+            isChoicesLoading={isChoicesLoading}
+            goalChoices={goalChoices}
+            difficultyChoices={difficultyChoices}
+            categoryChoices={categoryChoices}
+            equipmentChoices={equipmentChoices}
+            muscleChoices={muscleChoices}
+            choicesErrorMessage={choicesErrorMessage}
+            isChoicesLoading={isChoicesLoading}
           />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="programs" element={<Programs 
             exerciseLibraryState={exerciseLibraryState} 
             setExerciseLibraryState={setExerciseLibraryState}
-            filteredAndSortedLibrary={filteredAndSortedLibrary}
             sortOrder={sortOrder}
             searchName={searchName}
             currentPage={currentPage}
             setCurrentPage={setCurrentPage}
             filters={filters}
+            isChoicesLoading={isChoicesLoading}
+            goalChoices={goalChoices}
+            difficultyChoices={difficultyChoices}
+            categoryChoices={categoryChoices}
+            equipmentChoices={equipmentChoices}
+            muscleChoices={muscleChoices}
+            choicesErrorMessage={choicesErrorMessage}
+            isChoicesLoading={isChoicesLoading}
           />} />
           <Route path="billing/success" element={<BillingReturnRedirect status="success" />} />
           <Route path="billing/cancel" element={<BillingReturnRedirect status="cancel" />} />

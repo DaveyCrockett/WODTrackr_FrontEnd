@@ -886,10 +886,9 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
   return [...new Set(mappedValues)]
 }
 
-function Programs({ exerciseLibraryState, setExerciseLibraryState, filteredAndSortedLibrary, filters, setFilters, currentPage, setCurrentPage, searchName, sortOrder }) {
+function Programs({ isChoicesLoading, exerciseLibraryState, setExerciseLibraryState, filteredAndSortedLibrary, filters, setFilters, currentPage, setCurrentPage, searchName, sortOrder, goalChoices, difficultyChoices, categoryChoices, equipmentChoices, muscleChoices, errorMessage }) {
   const [programs, setPrograms] = useState([])
   const [isLoading, setIsLoading] = useState(false)
-  const [errorMessage, setErrorMessage] = useState("")
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [createFormValues, setCreateFormValues] = useState(EMPTY_PROGRAM_FORM_VALUES)
   const [createFieldErrors, setCreateFieldErrors] = useState({})
@@ -921,12 +920,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState, filteredAndSo
   const [detailPlanWeek, setDetailPlanWeek] = useState(1)
   const [detailPlanExerciseId, setDetailPlanExerciseId] = useState("")
   const [detailPlanWorkoutId, setDetailPlanWorkoutId] = useState("")
-  const [categoryChoices, setCategoryChoices] = useState([])
-  const [goalChoices, setGoalChoices] = useState([])
-  const [difficultyChoices, setDifficultyChoices] = useState([])
-  const [equipmentChoices, setEquipmentChoices] = useState([])
   const [durationRange, setDurationRange] = useState({ min: DEFAULT_DURATION_MIN, max: DEFAULT_DURATION_MAX })
-  const [isChoicesLoading, setIsChoicesLoading] = useState(false)
   // Schedule-to-calendar state
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false)
   const [scheduleStartDate, setScheduleStartDate] = useState("")
@@ -1066,112 +1060,6 @@ const buildRequestConfig = (overrides = {}) => {
       document.removeEventListener("visibilitychange", syncWorkoutsFromStorage)
     }
   }, [])
-
-  useEffect(() => {
-    const loadChoices = async () => {
-      setIsChoicesLoading(true)
-
-      try {
-        const cachedRaw = localStorage.getItem(PROGRAMS_CHOICES_CACHE_KEY)
-        if (cachedRaw) {
-          const parsed = JSON.parse(cachedRaw)
-          const isFresh = Date.now() - (parsed?.cachedAt || 0) < CHOICES_CACHE_TTL_MS
-          if (
-            isFresh &&
-            (parsed?.categoryChoices?.length ||
-              parsed?.goalChoices?.length ||
-              parsed?.difficultyChoices?.length ||
-              parsed?.equipmentChoices?.length)
-          ) {
-            setCategoryChoices(parsed.categoryChoices || [])
-            setGoalChoices(parsed.goalChoices || [])
-            setDifficultyChoices(parsed.difficultyChoices || [])
-            setEquipmentChoices(parsed.equipmentChoices || [])
-            if (parsed?.durationRange?.min && parsed?.durationRange?.max) {
-              setDurationRange(parsed.durationRange)
-            }
-          }
-        }
-      } catch {
-        localStorage.removeItem(PROGRAMS_CHOICES_CACHE_KEY)
-      }
-
-      try {
-        const requestConfig = buildRequestConfig()
-        const [choicesResult, equipmentResult] = await Promise.allSettled([
-          axios.get(`${API_URL}choices/`, requestConfig),
-          axios.get(EQUIPMENT_API_URL, requestConfig),
-        ])
-    
-        const data = choicesResult.status === "fulfilled" ? choicesResult.value?.data ?? {} : {}
-        const equipmentData = equipmentResult.status === "fulfilled" ? equipmentResult.value?.data : null
-        const directCategoryChoices = normalizeChoices(data.category ?? data.categories ?? [])
-        const directGoalChoices = normalizeChoices(data.goal ?? data.goals ?? [])
-        const directDifficultyChoices = normalizeChoices(data.difficulty ?? data.difficulties ?? [])
-        const directEquipmentChoices = normalizeEquipmentChoices(data.equipment ?? data.equipments ?? [])
-        const equipmentChoicesFromEndpoint = normalizeEquipmentChoices(normalizeEquipmentPayload(equipmentData))
-
-        const category =
-          directCategoryChoices.length > 0 ? directCategoryChoices : getChoicesFromMetadata(data, ["category", "categories"])
-        const goal = directGoalChoices.length > 0 ? directGoalChoices : getChoicesFromMetadata(data, ["goal", "goals"])
-        const difficulty =
-          directDifficultyChoices.length > 0
-            ? directDifficultyChoices
-            : getChoicesFromMetadata(data, ["difficulty", "difficulties"])
-        const equipment =
-          equipmentChoicesFromEndpoint.length > 0
-            ? equipmentChoicesFromEndpoint
-            : directEquipmentChoices.length > 0
-            ? directEquipmentChoices
-            : getChoicesFromMetadata(data, ["equipment", "equipments"])
-        const durationConfig =
-          data.duration_weeks ??
-          data.durationWeeks ??
-          data.fields?.duration_weeks ??
-          data.properties?.duration_weeks ??
-          {}
-
-        const minDurationCandidate = Number(
-          durationConfig.min ?? durationConfig.minimum ?? durationConfig.min_value ?? durationConfig.minValue,
-        )
-        const maxDurationCandidate = Number(
-          durationConfig.max ?? durationConfig.maximum ?? durationConfig.max_value ?? durationConfig.maxValue,
-        )
-
-        const minDuration = Number.isFinite(minDurationCandidate) ? minDurationCandidate : DEFAULT_DURATION_MIN
-        const maxDuration = Number.isFinite(maxDurationCandidate) ? maxDurationCandidate : DEFAULT_DURATION_MAX
-        const nextDurationRange =
-          maxDuration >= minDuration
-            ? { min: minDuration, max: maxDuration }
-            : { min: DEFAULT_DURATION_MIN, max: DEFAULT_DURATION_MAX }
-
-        setCategoryChoices(category)
-        setGoalChoices(goal)
-        setDifficultyChoices(difficulty)
-        setEquipmentChoices(equipment)
-        setDurationRange(nextDurationRange)
-        localStorage.setItem(
-          PROGRAMS_CHOICES_CACHE_KEY,
-          JSON.stringify({
-            categoryChoices: category,
-            goalChoices: goal,
-            difficultyChoices: difficulty,
-            equipmentChoices: equipment,
-            durationRange: nextDurationRange,
-            cachedAt: Date.now(),
-          }),
-        )
-      } catch {
-        // Non-critical — filters will still work from loaded program data.
-      } finally {
-        setIsChoicesLoading(false)
-      }
-    }
-
-    loadChoices()
-  }, [])
-
-  
 
   const selectedProgram = useMemo(
     () => {
