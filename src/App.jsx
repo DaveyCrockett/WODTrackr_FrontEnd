@@ -102,7 +102,15 @@ function App() {
   const [difficultyChoices, setDifficultyChoices] = useState([])
   const [equipmentChoices, setEquipmentChoices] = useState([])
   const [muscleChoices, setMuscleChoices] = useState([])
-   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
+  const [isChoicesLoading, setIsChoicesLoading] = useState(false)
+
+  const handleFilterChange = (filterName, selectedValues) => {
+    setFilters((prev) => ({
+      ...prev,
+      [filterName]: selectedValues,
+    }))
+    setCurrentPage(1)
+  }
 
   const handleClearFilters = () => {
     setSearchName("")
@@ -203,6 +211,7 @@ function App() {
             muscleChoices={muscleChoices}
             choicesErrorMessage={choicesErrorMessage}
             setFilters={setFilters}
+            handleFilterChange={handleFilterChange}
           />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="programs" element={<Programs 
@@ -222,6 +231,7 @@ function App() {
             muscleChoices={muscleChoices}
             choicesErrorMessage={choicesErrorMessage}
             setFilters={setFilters}
+            handleFilterChange={handleFilterChange}
           />} />
           <Route path="billing/success" element={<BillingReturnRedirect status="success" />} />
           <Route path="billing/cancel" element={<BillingReturnRedirect status="cancel" />} />

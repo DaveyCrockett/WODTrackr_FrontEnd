@@ -203,7 +203,7 @@ const getExerciseFormValues = (exercise) => ({
 })
 
 
-function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscleChoices, exerciseLibraryState, setExerciseLibraryState, handleSearchChange, handleSortChange, handleClearFilters, searchName, setSearchName, sortOrder, setSortOrder, filters, setFilters, setIsChoicesLoading })
+function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equipmentChoices, muscleChoices, goalChoices, exerciseLibraryState, setExerciseLibraryState, handleSearchChange, handleSortChange, handleClearFilters, searchName, setSearchName, sortOrder, setSortOrder, filters, setFilters, setIsChoicesLoading })
 {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -258,8 +258,8 @@ function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscle
         )
       }
 
-      if (difficulty.length > 0) {
-        result = result.filter((p) => difficulty.includes(p.difficulty))
+      if (filters.difficulty.length > 0) {
+        result = result.filter((p) => filters.difficulty.includes(p.difficulty))
         setExerciseLibraryState(prevState => ({
           ...prevState,
           exerciseLibrary: result,
@@ -267,26 +267,26 @@ function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscle
         result = JSON.stringify(result)
       }
     
-      if (Array.isArray(category) && category.length > 0) {
-        result = result.filter((p) => category.includes(p.category))
+      if (Array.isArray(filters.category) && filters.category.length > 0) {
+        result = result.filter((p) => filters.category.includes(p.category))
         setExerciseLibraryState(prevState => ({
           ...prevState,
           exerciseLibrary: result,
         }))
         result = JSON.stringify(result)
       }
-      if (Array.isArray(goal) && goal.length > 0) {
-        result = result.filter((p) => goal.includes(p.goal))
+      if (Array.isArray(filters.goal) && filters.goal.length > 0) {
+        result = result.filter((p) => filters.goal.includes(p.goal))
         setExerciseLibraryState(prevState => ({
           ...prevState,
           exerciseLibrary: result,
         }))
         result = JSON.stringify(result)
       }
-      if (Array.isArray(equipment) && equipment.length > 0) {
+      if (Array.isArray(filters.equipment) && filters.equipment.length > 0) {
         result = result.filter((p) => {
           const programEquipment = getProgramEquipmentValues(p)
-          return equipment.some((selectedValue) => programEquipment.includes(normalizeEquipmentEntry(selectedValue)))
+          return filters.equipment.some((selectedValue) => programEquipment.includes(normalizeEquipmentEntry(selectedValue)))
         })
         setExerciseLibraryState(prevState => ({
           ...prevState,
@@ -294,10 +294,10 @@ function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscle
         }))
         result = JSON.stringify(result)
       }
-      if (Array.isArray(muscle) && muscle.length > 0) {
+      if (Array.isArray(filters.muscle) && filters.muscle.length > 0) {
         result = result.filter((p) => {
           const programMuscles = getProgramMuscleValues(p)
-          return muscle.some((selectedValue) => programMuscles.includes(normalizeMuscleEntry(selectedValue)))
+          return filters.muscle.some((selectedValue) => programMuscles.includes(normalizeMuscleEntry(selectedValue)))
         })
         setExerciseLibraryState(prevState => ({
           ...prevState,
@@ -305,9 +305,9 @@ function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscle
         }))
         result = JSON.stringify(result)
       }
-
+      console.log('Filtered and sorted result:', result)
       result.sort((a, b) => {
-        const cmp = String(a?.name || "").localeCompare(String(b?.name || ""))
+        const cmp = String(a?.title || "").localeCompare(String(b?.title || ""))
         return sortOrder === "asc" ? cmp : -cmp
       })
 
@@ -712,7 +712,7 @@ function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscle
               <MultiSelect
                             options={categoryChoices}
                             value={filters.category || []}
-                            onChange={(e) => setFilters({ ...filters, category: e.target.value })}
+                            onChange={(selectedValues) => handleFilterChange("category", selectedValues)}
                             name="category"
               />
             </label>
@@ -723,7 +723,7 @@ function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscle
               <MultiSelect
                             options={equipmentChoices}
                             value={filters.equipment || []}
-                            onChange={(e) => setFilters({ ...filters, equipment: e.target.value })}
+                            onChange={(selectedValues) => handleFilterChange("equipment", selectedValues)}
                             name="equipment"
               />
             </label>
@@ -733,8 +733,17 @@ function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscle
               <MultiSelect
                             options={muscleChoices}
                             value={filters.muscle || []}
-                            onChange={(e) => setFilters({ ...filters, muscle: e.target.value })}
+                            onChange={(selectedValues) => handleFilterChange("muscle", selectedValues)}
                             name="muscle"
+              />
+            </label>
+            <label className="exercise-field">
+              <span>Goal</span>
+              <MultiSelect
+                            options={goalChoices}
+                            value={filters.goal || []}
+                            onChange={(selectedValues) => handleFilterChange("goal", selectedValues)}
+                            name="goal"
               />
             </label>
 
@@ -1021,6 +1030,24 @@ function Exercises({ isChoicesLoading, categoryChoices, equipmentChoices, muscle
                     ))}
                   </select>
                   {editFieldErrors.primary_muscle_group ? <small className="exercise-field-error">{editFieldErrors.primary_muscle_group}</small> : null}
+                </label>
+                <label className="exercise-field">
+                  <span>Goal</span>
+                  <select
+                    name="goal"
+                    value={editFormValues.goal}
+                    onChange={handleEditChange}
+                    disabled={isChoicesLoading}
+                    required
+                  >
+                    <option value="">{isChoicesLoading ? "Loading goals..." : "Select goal"}</option>
+                    {goalChoices.map((choice) => (
+                      <option key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </select>
+                  {editFieldErrors.goal ? <small className="exercise-field-error">{editFieldErrors.goal}</small> : null}
                 </label>
 
                 <label className="exercise-checkbox">
