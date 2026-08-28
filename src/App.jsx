@@ -87,6 +87,7 @@ function App() {
       hasMoreExercises: false,
     })
   const [filters, setFilters] = useState({ 
+    searchName: "",
     difficulty: [],
     category: [], 
     goal: [], 
@@ -112,10 +113,12 @@ function App() {
     setCurrentPage(1)
   }
 
+
   const handleClearFilters = () => {
     setSearchName("")
     setSortOrder("asc")
     setFilters({ 
+      searchName: "",
       difficulty: [],
       category: [], 
       goal: [], 

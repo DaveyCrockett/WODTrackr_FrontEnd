@@ -203,7 +203,7 @@ const getExerciseFormValues = (exercise) => ({
 })
 
 
-function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equipmentChoices, muscleChoices, goalChoices, exerciseLibraryState, setExerciseLibraryState, handleSearchChange, handleSortChange, handleClearFilters, searchName, setSearchName, sortOrder, setSortOrder, filters, setFilters, setIsChoicesLoading })
+function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equipmentChoices, muscleChoices, goalChoices, exerciseLibraryState, setExerciseLibraryState, handleSearchChange, handleSortChange, handleClearFilters,sortOrder, setSortOrder, filters, setFilters, setIsChoicesLoading })
 {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -233,6 +233,7 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
     isExerciseLibraryLoading, 
     exerciseLibraryError } = exerciseLibraryState
 
+
   useEffect(() => {
     if (!successMessage) {
       return undefined
@@ -249,61 +250,30 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
     const library = exerciseLibraryState.exerciseLibrary || []
     let result = [...library]
     try {
-      if (searchName.trim()) {
-        const query = searchName.trim().toLowerCase()
+      if (filters.searchName.trim()) {
+        const query = filters.searchName.trim().toLowerCase()
         result = result.filter(
           (p) =>
-            String(p?.name || "").toLowerCase().includes(query) ||
+            String(p?.title || "").toLowerCase().includes(query) ||
             String(p?.description || "").toLowerCase().includes(query),
         )
       }
 
-      if (filters.difficulty.length > 0) {
+      if (Array.isArray(filters.difficulty) && filters.difficulty.length > 0) {
         result = result.filter((p) => filters.difficulty.includes(p.difficulty))
-        setExerciseLibraryState(prevState => ({
-          ...prevState,
-          exerciseLibrary: result,
-        }))
-        result = JSON.stringify(result)
       }
     
       if (Array.isArray(filters.category) && filters.category.length > 0) {
         result = result.filter((p) => filters.category.includes(p.category))
-        setExerciseLibraryState(prevState => ({
-          ...prevState,
-          exerciseLibrary: result,
-        }))
-        result = JSON.stringify(result)
       }
       if (Array.isArray(filters.goal) && filters.goal.length > 0) {
         result = result.filter((p) => filters.goal.includes(p.goal))
-        setExerciseLibraryState(prevState => ({
-          ...prevState,
-          exerciseLibrary: result,
-        }))
-        result = JSON.stringify(result)
       }
       if (Array.isArray(filters.equipment) && filters.equipment.length > 0) {
-        result = result.filter((p) => {
-          const programEquipment = getProgramEquipmentValues(p)
-          return filters.equipment.some((selectedValue) => programEquipment.includes(normalizeEquipmentEntry(selectedValue)))
-        })
-        setExerciseLibraryState(prevState => ({
-          ...prevState,
-          exerciseLibrary: result,
-        }))
-        result = JSON.stringify(result)
+        result = result.filter((p) => filters.equipment.includes(p.equipment))
       }
       if (Array.isArray(filters.muscle) && filters.muscle.length > 0) {
-        result = result.filter((p) => {
-          const programMuscles = getProgramMuscleValues(p)
-          return filters.muscle.some((selectedValue) => programMuscles.includes(normalizeMuscleEntry(selectedValue)))
-        })
-        setExerciseLibraryState(prevState => ({
-          ...prevState,
-          exerciseLibrary: result,
-        }))
-        result = JSON.stringify(result)
+        result = result.filter((p) => filters.muscle.includes(p.muscle))
       }
       console.log('Filtered and sorted result:', result)
       result.sort((a, b) => {
@@ -316,7 +286,8 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
       console.error('Error filtering and sorting library:', error)
       return []
     }
-  }, [exerciseLibraryState, searchName, sortOrder, filters])
+  }, [exerciseLibraryState.exerciseLibrary, filters.searchName, sortOrder, filters]);
+
 
   const normalizeExercisesPayload = (data) => {
     if (Array.isArray(data?.data)) return data.data
@@ -599,20 +570,15 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
       }
     }
     loadExerciseLibrary()
-  }, [searchName, sortOrder, filters])
+  }, [filters.searchName, sortOrder, filters])
 
   useEffect(() => {
     if (exerciseLibrary.length === 0) {
       setSelectedExerciseId(null)
       return
     }
+  }, [exerciseLibrary])
 
-    const hasSelectedExercise = exerciseLibrary.some((exercise) => (exercise.id ?? null) === selectedExerciseId)
-    if (!hasSelectedExercise) {
-      const fallbackId = exerciseLibrary[0]?.id ?? null
-      setSelectedExerciseId(fallbackId)
-    }
-  }, [exerciseLibrary, selectedExerciseId])
 
   return (
     <main className="exercise-page" aria-label="Exercise Library">
@@ -642,7 +608,6 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
             aria-label={!isExerciseLibraryLoading && exerciseLibrary.length > 0 ? "Exercises" : undefined}
             aria-busy={isExerciseLibraryLoading}
           >
-            {console.log("isExerciseLibraryLoading:", isExerciseLibraryLoading, "exerciseLibrary.length:", exerciseLibrary.length)}
             {isExerciseLibraryLoading ? (
               Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (
                 <div className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`} aria-hidden="true">
@@ -652,10 +617,10 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
                   <div className="exercise-skeleton exercise-skeleton-line" />
                 </div>
               ))
-            ) : exerciseLibrary.length === 0 ? (
+            ) : filteredAndSortedLibrary.length === 0 ? (
               <p className="exercise-empty" role="status">No exercises found.</p>
             ) : (
-              exerciseLibrary.map((exercise, index) => (
+              filteredAndSortedLibrary.map((exercise, index) => (
                 <article
                   className={`exercise-item ${(exercise.id ?? null) === selectedExerciseId ? "exercise-item-selected" : ""}`}
                   key={exercise.id ?? index}
@@ -700,15 +665,14 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
               <input
                 type="text"
                 name="name"
-                value={searchName}
-                onChange={(event) => setSearchName(event.target.value)}
+                value={filters.searchName || ""}
+                onChange={(event) => handleFilterChange("searchName", event.target.value)}
                 placeholder="Back squat, pull-up, row"
               />
             </label>
 
             <label className="exercise-field">
               <span>Category</span>
-              {console.log(filters.category)}
               <MultiSelect
                             options={categoryChoices}
                             value={filters.category || []}
@@ -719,7 +683,6 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
 
             <label className="exercise-field">
               <span>Equipment</span>
-              {console.log(filters.equipment)}
               <MultiSelect
                             options={equipmentChoices}
                             value={filters.equipment || []}
