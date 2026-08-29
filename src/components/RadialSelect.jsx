@@ -90,6 +90,7 @@ export default function MultiSelect({ options, value, onChange, disabled, name, 
             <label key={option.value} className="multiselect-label">
               <input
                 type="checkbox"
+                name={name}
                 value={option.value}
                 checked={selectedKeys.includes(toSelectionKey(option.value))}
                 onChange={() => handleCheckboxChange(option.value)}

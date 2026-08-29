@@ -115,7 +115,6 @@ function App() {
 
 
   const handleClearFilters = () => {
-    setSearchName("")
     setSortOrder("asc")
     setFilters({ 
       searchName: "",
@@ -137,6 +136,7 @@ function App() {
         const cachedRawValue = localStorage.getItem(CHOICES_CACHE_KEY)
         if (cachedRawValue) {
           const parsedCache = JSON.parse(cachedRawValue)
+          console.log("Loaded choices from cache: ", parsedCache)
           const isCacheFresh = Date.now() - (parsedCache?.cachedAt || 0) < CHOICES_CACHE_TTL_MS
 
           if (isCacheFresh && parsedCache?.categoryChoices?.length > 0 && parsedCache?.equipmentChoices?.length > 0 && parsedCache?.muscleChoices?.length > 0 && parsedCache?.goalChoices?.length > 0 && parsedCache?.difficultyChoices?.length > 0) {
@@ -157,6 +157,7 @@ function App() {
         // const requestConfig = buildRequestConfig()
         const response = await axios.get(CHOICES_API_URL)
         const data = response?.data
+        console.log("Loaded choices: ", data)
 
         setCategoryChoices(data?.category)
         setEquipmentChoices(data?.equipment)
@@ -202,8 +203,9 @@ function App() {
             setExerciseLibraryState={setExerciseLibraryState}
             currentPage={currentPage}
             setCurrentPage={setCurrentPage}
-            searchName={searchName}
+            handleClearFilters={handleClearFilters}
             sortOrder={sortOrder}
+            setSortOrder={setSortOrder}
             filters={filters}
             isChoicesLoading={isChoicesLoading}
             setIsChoicesLoading={setIsChoicesLoading}
@@ -221,7 +223,8 @@ function App() {
             exerciseLibraryState={exerciseLibraryState} 
             setExerciseLibraryState={setExerciseLibraryState}
             sortOrder={sortOrder}
-            searchName={searchName}
+            setSortOrder={setSortOrder}
+            handleClearFilters={handleClearFilters}
             currentPage={currentPage}
             setCurrentPage={setCurrentPage}
             filters={filters}
