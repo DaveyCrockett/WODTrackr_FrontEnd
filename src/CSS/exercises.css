@@ -1,8 +1,8 @@
 .exercise-page {
-    display: flex;
-    flex-direction: row;
-    column-gap: 1.25rem;
-    height: calc(100vh - 4rem);
+  display: flex;
+  flex-direction: row;
+  column-gap: 1.25rem;
+  height: calc(100vh - 4rem);
 }
 
 .exercise-top-actions {
@@ -72,6 +72,70 @@
   grid-template-columns: minmax(0, 0.75fr) minmax(320px, 1fr);
   gap: 1.25rem;
   height: 100%;
+}
+
+.exercise-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+/* 1. SHARED BUTTON STYLES */
+.exercise-btn-base {
+  cursor: pointer;
+  font-weight: 600;
+  /* Smoothly animates size, color, and pseudo-elements */
+  transition: transform 0.2s ease-in-out, color 0.2s ease;
+  position: relative; /* CRITICAL: Acts as the anchor for the background overlay */
+  isolation: isolate;
+}
+
+.exercise-modal-close-btn-wrapper {
+  position: relative;
+  z-index: 1002; /* Ensures the close button is above the modal content */
+}
+
+.exercise-modal-close-btn svg {
+  pointer-events: none;
+}
+
+/* 2. CLOSE BUTTON */
+.exercise-modal-close-btn {
+  z-index: 2000; /* Ensures the "X" text is above the background overlay */
+  border: 1px solid transparent;
+  padding: 0.55rem 0.8rem;
+  background: transparent;
+  position: absolute;
+  color: #334155;
+  border-radius: 10px;
+  top: 0; /* Positions the button at the top of the modal */
+  left: 0; /* Positions the button at the left of the modal */
+  overflow: hidden; /* Ensures the background overlay doesn't spill outside the rounded corners */
+}
+
+/* Create the hidden background overlay */
+.exercise-modal-close-btn::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.08); /* Light dark tint */
+  opacity: 0; /* Hidden by default */
+  border-radius: 10px; /* Matches the button's rounded corners */
+  transform: scale(0.8); /* Slightly smaller initially */
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: -1; /* Keeps the overlay behind the "X" text */
+}
+
+/* Hover effects for Close Button */
+.exercise-modal-close-btn:hover {
+  transform: scale(1.08); /* Scales up the whole button */
+}
+.exercise-modal-close-btn:hover::before {
+  opacity: 1; /* Fades the overlay in */
+  transform: scale(1); /* Expands the overlay to full size */
 }
 
 .exercise-library-panel,
@@ -234,8 +298,6 @@
 .exercise-secondary-btn:hover {
   background: #f8fafc;
 }
-
-
 
 .exercise-header {
   display: flex;
@@ -449,7 +511,8 @@
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   padding: 1.1rem;
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22)
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
+  z-index: 1000; /* Ensures the modal is above the backdrop */
 }
 
 .exercise-modal-header {
@@ -457,6 +520,8 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+  position: relative;
+  z-index: 1001; /* Ensures the modal header is above the modal content */
 }
 
 .exercise-modal-header h2 {

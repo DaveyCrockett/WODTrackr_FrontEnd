@@ -313,7 +313,7 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
     setIsSubmitting(true)
     setFieldErrors({})
 
-    try { 
+    try {
       const response = await axios.post(
         `${API_URL}`,
         {
@@ -385,7 +385,7 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
     }
   }
 
- 
+
 
   const handleOpenAddModal = () => {
     setIsAddModalOpen(true)
@@ -745,8 +745,8 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
           <aside className="exercise-modal" role="dialog" aria-modal="true" aria-labelledby="exercise-modal-title" aria-describedby="exercise-modal-desc" ref={addModalRef}>
             {/* TODO: Change Add Exercise to be modal. */}
             <header className="exercise-modal-header">
-              <div>
-                <button type="button" className="programs-btn-base programs-modal-secondary-btn" onClick={handleCloseAddModal}>
+              <div className="exercise-modal-close-btn-wrapper">
+                <button type="button" className="exercise-btn-base exercise-modal-close-btn" onClick={handleCloseAddModal}>
                   {console.log("Closing add modal: ", isAddModalOpen)}
                   <svg viewBox="0 0 24 24" width="24" height="24">
                     <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
