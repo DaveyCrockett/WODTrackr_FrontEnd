@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react"
+import "../CSS/multiselect.css"
 
 const getComparableValue = (entry) => {
   if (entry && typeof entry === "object") {

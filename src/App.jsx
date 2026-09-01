@@ -13,8 +13,51 @@ import Register from './components/Register'
 import Settings from './components/Settings'
 
 const CHOICES_API_URL = "/api/wodtrackr/exercises/choices/"
+const PROGRAM_CHOICES_API_URL = "/api/wodtrackr/exercise-programs/choices/"
 const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
+const CHOICES_CACHE_VERSION = 2
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
+
+const canonicalizeEquipmentValue = (value) => {
+  const normalized = String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ")
+  if (normalized === "bodyweight") return "body weight"
+  return normalized
+}
+
+const normalizeChoiceArray = (choices) => {
+  if (!Array.isArray(choices)) return []
+
+  const seen = new Set()
+  const normalized = []
+
+  for (const choice of choices) {
+    let value = ""
+    let label = ""
+
+    if (choice && typeof choice === "object" && !Array.isArray(choice)) {
+      value = String(choice.value ?? "").trim()
+      label = String(choice.label ?? choice.name ?? choice.display_name ?? value).trim()
+    } else {
+      value = String(choice ?? "").trim()
+      label = value
+    }
+
+    if (!value) continue
+
+    const canonicalValue = canonicalizeEquipmentValue(value)
+    const normalizedValue = canonicalValue || value.toLowerCase()
+    const finalValue = normalizedValue === "body weight" ? "body weight" : value
+    const finalLabel = normalizedValue === "body weight" ? "Body Weight" : label
+
+    const key = normalizedValue
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    normalized.push({ value: finalValue, label: finalLabel || finalValue })
+  }
+
+  return normalized.sort((left, right) => left.label.localeCompare(right.label))
+}
 
 
 const saveUserSession = (data, fallbackUsername) => {
@@ -93,6 +136,8 @@ function App() {
     goal: [], 
     equipment: [],
     muscle: [],
+    bodyPart: [],
+    target: [],
    })
   const [searchName, setSearchName] = useState("")
   const [choicesErrorMessage, setChoicesErrorMessage] = useState("")
@@ -103,6 +148,8 @@ function App() {
   const [difficultyChoices, setDifficultyChoices] = useState([])
   const [equipmentChoices, setEquipmentChoices] = useState([])
   const [muscleChoices, setMuscleChoices] = useState([])
+  const [bodyPartChoices, setBodyPartChoices] = useState([])
+  const [targetChoices, setTargetChoices] = useState([])
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
 
   const handleFilterChange = (filterName, selectedValues) => {
@@ -123,6 +170,8 @@ function App() {
       goal: [], 
       equipment: [],
       muscle: [],
+      bodyPart: [],
+      target: [],
     })
     setCurrentPage(1)
   }
@@ -139,12 +188,16 @@ function App() {
           console.log("Loaded choices from cache: ", parsedCache)
           const isCacheFresh = Date.now() - (parsedCache?.cachedAt || 0) < CHOICES_CACHE_TTL_MS
 
-          if (isCacheFresh && parsedCache?.categoryChoices?.length > 0 && parsedCache?.equipmentChoices?.length > 0 && parsedCache?.muscleChoices?.length > 0 && parsedCache?.goalChoices?.length > 0 && parsedCache?.difficultyChoices?.length > 0) {
-            setCategoryChoices(parsedCache.categoryChoices)
-            setEquipmentChoices(parsedCache.equipmentChoices)
-            setMuscleChoices(parsedCache.muscleChoices)
-            setGoalChoices(parsedCache.goalChoices)
-            setDifficultyChoices(parsedCache.difficultyChoices)
+          const isCacheCompatible = parsedCache?.version === CHOICES_CACHE_VERSION
+
+          if (isCacheFresh && isCacheCompatible && parsedCache?.categoryChoices?.length > 0 && parsedCache?.equipmentChoices?.length > 0 && parsedCache?.muscleChoices?.length > 0) {
+            setCategoryChoices(normalizeChoiceArray(parsedCache.categoryChoices))
+            setEquipmentChoices(normalizeChoiceArray(parsedCache.equipmentChoices))
+            setMuscleChoices(normalizeChoiceArray(parsedCache.muscleChoices))
+            setBodyPartChoices(Array.isArray(parsedCache?.bodyPartChoices) ? normalizeChoiceArray(parsedCache.bodyPartChoices) : [])
+            setTargetChoices(Array.isArray(parsedCache?.targetChoices) ? normalizeChoiceArray(parsedCache.targetChoices) : [])
+            setGoalChoices(Array.isArray(parsedCache?.goalChoices) ? normalizeChoiceArray(parsedCache.goalChoices) : [])
+            setDifficultyChoices(Array.isArray(parsedCache?.difficultyChoices) ? normalizeChoiceArray(parsedCache.difficultyChoices) : [])
             setIsChoicesLoading(false)
             return
           }
@@ -154,25 +207,44 @@ function App() {
       }
 
       try {
-        // const requestConfig = buildRequestConfig()
-        const response = await axios.get(CHOICES_API_URL)
-        const data = response?.data
-        console.log("Loaded choices: ", data)
+        const [exerciseChoicesResponse, programChoicesResponse] = await Promise.all([
+          axios.get(CHOICES_API_URL),
+          axios.get(PROGRAM_CHOICES_API_URL).catch(() => ({ data: {} })),
+        ])
+        const exerciseChoicesData = exerciseChoicesResponse?.data || {}
+        const programChoicesData = programChoicesResponse?.data || {}
 
-        setCategoryChoices(data?.category)
-        setEquipmentChoices(data?.equipment)
-        setMuscleChoices(data?.primary_muscle_group)
-        setGoalChoices(data?.goal)
-        setDifficultyChoices(data?.difficulty)
+        const nextCategoryChoices = normalizeChoiceArray(exerciseChoicesData?.category)
+        const nextEquipmentChoices = normalizeChoiceArray(exerciseChoicesData?.equipment)
+        const nextMuscleChoices = Array.isArray(exerciseChoicesData?.muscle_group)
+          ? normalizeChoiceArray(exerciseChoicesData.muscle_group)
+          : Array.isArray(exerciseChoicesData?.primary_muscle_group)
+            ? normalizeChoiceArray(exerciseChoicesData.primary_muscle_group)
+            : []
+        const nextBodyPartChoices = normalizeChoiceArray(exerciseChoicesData?.body_part)
+        const nextTargetChoices = normalizeChoiceArray(exerciseChoicesData?.target)
+        const nextGoalChoices = normalizeChoiceArray(programChoicesData?.goal)
+        const nextDifficultyChoices = normalizeChoiceArray(programChoicesData?.difficulty)
+
+        setCategoryChoices(nextCategoryChoices)
+        setEquipmentChoices(nextEquipmentChoices)
+        setMuscleChoices(nextMuscleChoices)
+        setBodyPartChoices(nextBodyPartChoices)
+        setTargetChoices(nextTargetChoices)
+        setGoalChoices(nextGoalChoices)
+        setDifficultyChoices(nextDifficultyChoices)
 
         localStorage.setItem(
           CHOICES_CACHE_KEY,
           JSON.stringify({
-            categoryChoices: data?.category,
-            equipmentChoices: data?.equipment,
-            muscleChoices: data?.primary_muscle_group,
-            goalChoices: data?.goal,
-            difficultyChoices: data?.difficulty,
+            version: CHOICES_CACHE_VERSION,
+            categoryChoices: nextCategoryChoices,
+            equipmentChoices: nextEquipmentChoices,
+            muscleChoices: nextMuscleChoices,
+            bodyPartChoices: nextBodyPartChoices,
+            targetChoices: nextTargetChoices,
+            goalChoices: nextGoalChoices,
+            difficultyChoices: nextDifficultyChoices,
             cachedAt: Date.now(),
           }),
         )
@@ -214,6 +286,8 @@ function App() {
             categoryChoices={categoryChoices}
             equipmentChoices={equipmentChoices}
             muscleChoices={muscleChoices}
+            bodyPartChoices={bodyPartChoices}
+            targetChoices={targetChoices}
             choicesErrorMessage={choicesErrorMessage}
             setFilters={setFilters}
             handleFilterChange={handleFilterChange}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { validateExerciseForm } from "../utils/exerciseUtils"
 import FilterIcon from "../assets/filter.png"
 import MultiSelect from "./MultiSelect"
+import RadialSelect from "./RadialSelect"
 
 const API_URL = "/api/wodtrackr/exercises/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
@@ -41,6 +42,11 @@ const getStoredUsername = () => {
   }
 }
 const getAuthToken = () => {
+  const directToken = localStorage.getItem("wodtrackrAuthToken")
+  if (directToken) {
+    return directToken
+  }
+
   try {
     const rawValue = localStorage.getItem("wodtrackrUser")
     const userData = rawValue ? JSON.parse(rawValue) : null
@@ -60,10 +66,31 @@ const buildRequestConfig = (overrides = {}) => {
 
 const normalizeChoices = (choices) => {
   if (choices && typeof choices === "object" && !Array.isArray(choices)) {
-    choices[Object.keys(choices)[0]].map((choice) => {
-      return choice
-    })
+    return Object.entries(choices)
+      .map(([value, label]) => ({ value, label: String(label) }))
+      .filter((choice) => choice.value !== "" && choice.value !== null && choice.value !== undefined)
   }
+
+  if (!Array.isArray(choices)) {
+    return []
+  }
+
+  return choices
+    .map((choice) => {
+      if (Array.isArray(choice)) {
+        const [value, label] = choice
+        return { value, label: label ?? String(value ?? "") }
+      }
+
+      if (choice && typeof choice === "object") {
+        const value = choice.value ?? choice.id ?? choice.key ?? ""
+        const label = choice.label ?? choice.name ?? choice.display_name ?? String(value)
+        return { value, label }
+      }
+
+      return { value: choice, label: String(choice) }
+    })
+    .filter((choice) => choice.value !== "" && choice.value !== null && choice.value !== undefined)
 }
 
 const normalizeSchemaChoices = (fieldConfig) => {
@@ -176,6 +203,32 @@ const formatTimestamp = (value) => {
   return parsed.toLocaleString()
 }
 
+const getExerciseImageUrl = (exercise) => {
+  if (!exercise || typeof exercise !== "object") {
+    return ""
+  }
+
+  const imageValue =
+    exercise?.gif_url ??
+    exercise?.gifUrl ??
+    exercise?.image_url ??
+    exercise?.imageUrl ??
+    exercise?.exercise_image ??
+    exercise?.exerciseImage ??
+    exercise?.thumbnail_url ??
+    exercise?.thumbnailUrl ??
+    exercise?.image ??
+    ""
+
+  return typeof imageValue === "string" ? imageValue.trim() : ""
+}
+
+const canonicalizeEquipmentValue = (value) => {
+  const normalized = String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ")
+  if (normalized === "bodyweight") return "body weight"
+  return normalized
+}
+
 const getFieldErrorsFromResponse = (data) => {
   if (!data || typeof data !== "object") {
     return {}
@@ -204,7 +257,27 @@ const getExerciseFormValues = (exercise) => ({
 })
 
 
-function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equipmentChoices, muscleChoices, goalChoices, difficultyChoices, exerciseLibraryState, setExerciseLibraryState, handleSearchChange, handleSortChange, handleClearFilters, sortOrder, setSortOrder, filters, setFilters, setIsChoicesLoading }) {
+function Exercises({
+  handleFilterChange = () => {},
+  isChoicesLoading = false,
+  categoryChoices = [],
+  equipmentChoices = [],
+  muscleChoices = [],
+  bodyPartChoices = [],
+  targetChoices = [],
+  goalChoices = [],
+  difficultyChoices = [],
+  exerciseLibraryState,
+  setExerciseLibraryState = () => {},
+  handleSearchChange = () => {},
+  handleSortChange = () => {},
+  handleClearFilters = () => {},
+  sortOrder = "asc",
+  setSortOrder = () => {},
+  filters,
+  setFilters = () => {},
+  setIsChoicesLoading = () => {},
+}) {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -230,9 +303,24 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
   const addModalPreviouslyOpen = useRef(false)
   const editModalPreviouslyOpen = useRef(false)
 
-  const { exerciseLibrary,
-    isExerciseLibraryLoading,
-    exerciseLibraryError } = exerciseLibraryState
+  const resolvedExerciseLibraryState = exerciseLibraryState ?? {
+    exerciseLibrary: [],
+    isExerciseLibraryLoading: false,
+    exerciseLibraryError: "",
+  }
+  const resolvedFilters = filters ?? {
+    searchName: "",
+    category: [],
+    equipment: [],
+    muscle: [],
+    bodyPart: [],
+    target: [],
+  }
+  const {
+    exerciseLibrary = [],
+    isExerciseLibraryLoading = false,
+    exerciseLibraryError = "",
+  } = resolvedExerciseLibraryState
 
 
   useEffect(() => {
@@ -248,38 +336,66 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
   }, [successMessage])
 
   const filteredAndSortedLibrary = useMemo(() => {
-    const library = exerciseLibraryState.exerciseLibrary || []
+    const library = exerciseLibrary || []
     let result = [...library]
     try {
-      if (filters.searchName.trim()) {
-        const query = filters.searchName.trim().toLowerCase()
+      if (resolvedFilters.searchName.trim()) {
+        const query = resolvedFilters.searchName.trim().toLowerCase()
         result = result.filter(
           (p) =>
-            String(p?.title || "").toLowerCase().includes(query) ||
-            String(p?.description || "").toLowerCase().includes(query),
+            String(p?.title || p?.name || "").toLowerCase().includes(query) ||
+            String(p?.description || "").toLowerCase().includes(query) ||
+            String(p?.category || "").toLowerCase().includes(query) ||
+            String(p?.equipment || "").toLowerCase().includes(query) ||
+            String(p?.body_part || "").toLowerCase().includes(query) ||
+            String(p?.primary_muscle_group || p?.muscle_group || "").toLowerCase().includes(query) ||
+            String(p?.target || p?.target_muscle || "").toLowerCase().includes(query),
         )
       }
 
-      if (Array.isArray(filters.difficulty) && filters.difficulty.length > 0) {
-        result = result.filter((p) => filters.difficulty.includes(p.difficulty))
+      if (Array.isArray(resolvedFilters.category) && resolvedFilters.category.length > 0) {
+        result = result.filter((p) => resolvedFilters.category.includes(p.category))
       }
-
-      if (Array.isArray(filters.category) && filters.category.length > 0) {
-        result = result.filter((p) => filters.category.includes(p.category))
+      if (Array.isArray(resolvedFilters.equipment) && resolvedFilters.equipment.length > 0) {
+        const selectedEquipment = new Set(resolvedFilters.equipment.map((entry) => canonicalizeEquipmentValue(entry)))
+        result = result.filter((p) => selectedEquipment.has(canonicalizeEquipmentValue(p.equipment)))
       }
-      if (Array.isArray(filters.goal) && filters.goal.length > 0) {
-        result = result.filter((p) => filters.goal.includes(p.goal))
+      if (Array.isArray(resolvedFilters.muscle) && resolvedFilters.muscle.length > 0) {
+        result = result.filter((p) =>
+          resolvedFilters.muscle.includes(p.primary_muscle_group || p.muscle_group || ""),
+        )
       }
-      if (Array.isArray(filters.equipment) && filters.equipment.length > 0) {
-        result = result.filter((p) => filters.equipment.includes(p.equipment))
+      if (Array.isArray(resolvedFilters.bodyPart) && resolvedFilters.bodyPart.length > 0) {
+        result = result.filter((p) => resolvedFilters.bodyPart.includes(p.body_part))
       }
-      if (Array.isArray(filters.muscle) && filters.muscle.length > 0) {
-        result = result.filter((p) => filters.muscle.includes(p.muscle))
+      if (Array.isArray(resolvedFilters.target) && resolvedFilters.target.length > 0) {
+        result = result.filter((p) => resolvedFilters.target.includes(p.target || p.target_muscle))
       }
       console.log('Filtered and sorted result:', result)
       result.sort((a, b) => {
-        const cmp = String(a?.title || "").localeCompare(String(b?.title || ""))
-        return sortOrder === "asc" ? cmp : -cmp
+        const aName = String(a?.title || a?.name || "")
+        const bName = String(b?.title || b?.name || "")
+        const aCreated = new Date(a?.created_at || 0).getTime()
+        const bCreated = new Date(b?.created_at || 0).getTime()
+        const aUpdated = new Date(a?.updated_at || 0).getTime()
+        const bUpdated = new Date(b?.updated_at || 0).getTime()
+
+        if (sortOrder === "-name" || sortOrder === "desc") {
+          return bName.localeCompare(aName)
+        }
+        if (sortOrder === "created_at") {
+          return aCreated - bCreated
+        }
+        if (sortOrder === "-created_at") {
+          return bCreated - aCreated
+        }
+        if (sortOrder === "updated_at") {
+          return aUpdated - bUpdated
+        }
+        if (sortOrder === "-updated_at") {
+          return bUpdated - aUpdated
+        }
+        return aName.localeCompare(bName)
       })
 
       return result
@@ -287,7 +403,7 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
       console.error('Error filtering and sorting library:', error)
       return []
     }
-  }, [exerciseLibraryState.exerciseLibrary, filters.searchName, filters.difficulty, filters.category, filters.goal, filters.equipment, filters.muscle, sortOrder]);
+  }, [exerciseLibrary, resolvedFilters.searchName, resolvedFilters.category, resolvedFilters.equipment, resolvedFilters.muscle, resolvedFilters.bodyPart, resolvedFilters.target, sortOrder]);
 
 
   const normalizeExercisesPayload = (data) => {
@@ -321,9 +437,7 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
           description: formValues.description,
           category: formValues.category,
           equipment: formValues.equipment,
-          muscle: formValues.primary_muscle_group,
-          goal: formValues.goal,
-          difficulty: formValues.difficulty,
+          primary_muscle_group: formValues.primary_muscle_group,
           created_by: currentUsername || formValues.created_by,
           is_public: formValues.is_public,
         },
@@ -431,6 +545,14 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
     setIsDetailsModalOpen(false)
   }
 
+  const toSubTitleCase = (str) => {
+    if (!str) return ""
+    return str
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ")
+  }
+
   const handleEditSubmit = async (event) => {
     event.preventDefault()
     if (!selectedExercise?.id) {
@@ -450,14 +572,11 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
     setEditFieldErrors({})
 
     try {
-      const response = await axios.patch(
+      const response = await axios.put(
         `${API_URL}${selectedExercise.id}/`,
         {
           name: editFormValues.name,
           description: editFormValues.description,
-          muscle: editFormValues.primary_muscle_group,
-          goal: editFormValues.goal,
-          difficulty: editFormValues.difficulty,
           category: editFormValues.category,
           equipment: editFormValues.equipment,
           primary_muscle_group: editFormValues.primary_muscle_group,
@@ -531,6 +650,11 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
     setIsDetailsModalOpen(true)
   }
 
+  function capitalizeFirstLetter(str) {
+    if (!str) return ''; // Handle empty strings safely
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
   const selectedExercise = exerciseLibrary.find((exercise) => (exercise.id ?? null) === selectedExerciseId) || null
   const currentUsername = getStoredUsername()
   const selectedExerciseOwner =
@@ -578,7 +702,7 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
       }
     }
     loadExerciseLibrary()
-  }, [filters.searchName, sortOrder, filters])
+  }, [resolvedFilters.searchName, sortOrder, resolvedFilters])
 
   useEffect(() => {
     if (exerciseLibrary.length === 0) {
@@ -599,10 +723,10 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
             </button>
           </div>
           <p>Browse and manage exercises in the library. Use the search and filter options to find specific exercises.</p>
+          <div className="exercise-counts" aria-live="polite" aria-atomic="true">
+            <span>{filteredAndSortedLibrary ? filteredAndSortedLibrary.length : exerciseLibrary.length} total</span>
+          </div>
         </header>
-        <div className="exercise-counts" aria-live="polite" aria-atomic="true">
-          <span>{filteredAndSortedLibrary ? filteredAndSortedLibrary.length : exerciseLibrary.length} total</span>
-        </div>
         {isExerciseLibraryLoading ? (
           <p className="exercise-loading-note" role="status">Still loading exercises. Thanks for hanging tight.</p>
         ) : null}
@@ -627,7 +751,9 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
           ) : filteredAndSortedLibrary.length === 0 ? (
             <p className="exercise-empty" role="status">No exercises found.</p>
           ) : (
-            filteredAndSortedLibrary.map((exercise, index) => (
+            filteredAndSortedLibrary.map((exercise, index) => {
+              const exerciseImageUrl = getExerciseImageUrl(exercise)
+              return (
               <article
                 className={`exercise-item ${(exercise.id ?? null) === selectedExerciseId ? "exercise-item-selected" : ""}`}
                 key={exercise.id ?? index}
@@ -643,28 +769,42 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
                   }
                 }}
               >
+                {exerciseImageUrl ? (
+                  <div className="exercise-card-image-wrap" aria-hidden="true">
+                    <img
+                      src={exerciseImageUrl}
+                      alt=""
+                      loading="lazy"
+                      className="exercise-card-image"
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none"
+                      }}
+                    />
+                  </div>
+                ) : null}
                 <div className="exercise-header">
-                  <h3>{exercise.name}</h3>
-                  <span>{exercise.category}</span>
+                  <h3>{(exercise.title || exercise.name || "Exercise").toUpperCase()}</h3>
+                  <span><strong>Visibility:</strong> {capitalizeFirstLetter(exercise.is_public ? "Public" : "Private")}</span>
+                  <span><strong>Category:</strong> {capitalizeFirstLetter(exercise.category)}</span>
                 </div>
-                <p className="exercise-meta">
-                  {exercise.equipment} · {exercise.primary_muscle_group}
-                </p>
-                <p className="exercise-meta">
-                  Created by {exercise.created_by_username || exercise.username || exercise.created_by || "Unknown"} · {exercise.is_public ? "Public" : "Private"}
-                </p>
-                <p className="exercise-meta">
-                  Created {formatTimestamp(exercise.created_at)} · Updated {formatTimestamp(exercise.updated_at)}
-                </p>
+                <div className="exercise-subheader">
+                  <p className="exercise-meta">
+                    <strong>Primary Muscle:</strong> {capitalizeFirstLetter(exercise.primary_muscle_group)}
+                  </p>
+                  <p className="exercise-meta">
+                    <strong>Created by:</strong> {capitalizeFirstLetter(exercise.created_by_username || exercise.username || exercise.created_by || "Unknown")} 
+                  </p>
+                </div>
               </article>
-            ))
+              )
+            })
           )}
         </div>
       </section>
       <section className="exercise-form-panel">
         <div className="exercise-search-header">
           <h2>Search & Filter</h2>
-          <p>Filter the exercise library by name, category, equipment, or muscle group.</p>
+          <p>Filter the exercise library by name, category, body part, equipment, muscle group, or target.</p>
         </div>
         <div className="exercise-search-grid">
           <label className="exercise-field exercise-field-wide">
@@ -672,7 +812,7 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
             <input
               type="text"
               name="name"
-              value={filters.searchName || ""}
+              value={resolvedFilters.searchName || ""}
               onChange={(event) => handleFilterChange("searchName", event.target.value)}
               placeholder="Back squat, pull-up, row"
             />
@@ -682,7 +822,7 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
             <span>Category</span>
             <MultiSelect
               options={categoryChoices}
-              value={filters.category || []}
+              value={resolvedFilters.category || []}
               onChange={(selectedValues) => handleFilterChange("category", selectedValues)}
               name="category"
             />
@@ -692,7 +832,7 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
             <span>Equipment</span>
             <MultiSelect
               options={equipmentChoices}
-              value={filters.equipment || []}
+              value={resolvedFilters.equipment || []}
               onChange={(selectedValues) => handleFilterChange("equipment", selectedValues)}
               name="equipment"
             />
@@ -702,18 +842,29 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
             <span>Muscle</span>
             <MultiSelect
               options={muscleChoices}
-              value={filters.muscle || []}
+              value={resolvedFilters.muscle || []}
               onChange={(selectedValues) => handleFilterChange("muscle", selectedValues)}
               name="muscle"
             />
           </label>
+
           <label className="exercise-field">
-            <span>Goal</span>
+            <span>Body Part</span>
             <MultiSelect
-              options={goalChoices}
-              value={filters.goal || []}
-              onChange={(selectedValues) => handleFilterChange("goal", selectedValues)}
-              name="goal"
+              options={bodyPartChoices}
+              value={resolvedFilters.bodyPart || []}
+              onChange={(selectedValues) => handleFilterChange("bodyPart", selectedValues)}
+              name="body_part"
+            />
+          </label>
+
+          <label className="exercise-field">
+            <span>Target</span>
+            <MultiSelect
+              options={targetChoices}
+              value={resolvedFilters.target || []}
+              onChange={(selectedValues) => handleFilterChange("target", selectedValues)}
+              name="target"
             />
           </label>
 
@@ -743,7 +894,6 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
       {isAddModalOpen ? (
         <div className="exercise-modal-backdrop">
           <aside className="exercise-modal" role="dialog" aria-modal="true" aria-labelledby="exercise-modal-title" aria-describedby="exercise-modal-desc" ref={addModalRef}>
-            {/* TODO: Change Add Exercise to be modal. */}
             <header className="exercise-modal-header">
               <div className="exercise-modal-close-btn-wrapper">
                 <button type="button" className="exercise-btn-base exercise-modal-close-btn" onClick={handleCloseAddModal}>
@@ -753,7 +903,7 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
                   </svg>
                 </button>
               </div>
-              <div>
+              <div className="exercise-modal-title-wrapper">
                 <h2 id="exercise-modal-title">Add Exercise</h2>
                 <p id="exercise-modal-desc">Create a new exercise in your library.</p>
               </div>
@@ -824,7 +974,7 @@ function Exercises({ handleFilterChange, isChoicesLoading, categoryChoices, equi
               <label className="exercise-field">
                 <span>Difficulty</span>
                 {console.log("options: ", difficultyChoices, "value: ", formValues.difficulty)}
-                <MultiSelect
+                <RadialSelect
                   type="dropdown"
                   options={difficultyChoices}
                   value={formValues.difficulty || []}

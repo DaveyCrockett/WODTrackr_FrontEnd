@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import MultiSelect from "./MultiSelect"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
-const EQUIPMENT_API_URL = "/api/wodtrackr/equipment/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 const STRIPE_CHECKOUT_API_URL = String(
   import.meta.env.VITE_CHECKOUT_SESSION_API_URL || "/api/users/billing/stripe/checkout-session/",
@@ -253,6 +252,42 @@ const areWorkoutPlansEqual = (leftPlan, rightPlan) => {
   })
 }
 
+const addExerciseIdsToWeekPlan = (durationValue, currentPlan, weekNumber, exerciseIdsToAdd) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedIds = (Array.isArray(exerciseIdsToAdd) ? exerciseIdsToAdd : [])
+    .map((exerciseId) => Number(exerciseId))
+    .filter((exerciseId) => Number.isFinite(exerciseId))
+
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || normalizedIds.length === 0) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    return {
+      ...weekEntry,
+      exercise_ids: [...new Set([...weekEntry.exercise_ids, ...normalizedIds])],
+    }
+  })
+}
+
+const removeExerciseIdFromWeekPlan = (durationValue, currentPlan, weekNumber, exerciseIdToRemove) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedExerciseId = Number(exerciseIdToRemove)
+
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !Number.isFinite(normalizedExerciseId)) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    return {
+      ...weekEntry,
+      exercise_ids: weekEntry.exercise_ids.filter((candidateId) => candidateId !== normalizedExerciseId),
+    }
+  })
+}
+
 const clearFormFieldError = (previousErrors, fieldName, clearWorkoutPlan = false) => ({
   ...previousErrors,
   [fieldName]: "",
@@ -359,7 +394,7 @@ const EMPTY_PROGRAM_FORM_VALUES = {
 }
 
 const buildProgramFormValues = (program) => ({
-  title: String(program?.title ?? ""),
+  title: String(program?.title ?? program?.name ?? ""),
   description: String(program?.description ?? ""),
   difficulty: program?.difficulty ?? "",
   duration_weeks:
@@ -886,7 +921,36 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
   return [...new Set(mappedValues)]
 }
 
-function Programs({ handleFilterChange, isChoicesLoading, exerciseLibraryState, setExerciseLibraryState, filteredAndSortedLibrary, filters, setFilters, currentPage, setCurrentPage, searchName, sortOrder, goalChoices, difficultyChoices, categoryChoices, equipmentChoices, muscleChoices, errorMessage, setIsChoicesLoading }) {
+function Programs({
+  handleFilterChange = () => {},
+  isChoicesLoading = false,
+  exerciseLibraryState,
+  setExerciseLibraryState = () => {},
+  filters,
+  setFilters = () => {},
+  currentPage = 1,
+  setCurrentPage = () => {},
+  sortOrder = "asc",
+  goalChoices = [],
+  difficultyChoices = [],
+  categoryChoices = [],
+  equipmentChoices = [],
+  muscleChoices = [],
+  setIsChoicesLoading = () => {},
+}) {
+  const [searchName, setSearchName] = useState("")
+  const [errorMessage, setErrorMessage] = useState("")
+  const resolvedFilters = filters ?? { difficulty: [], category: [], goal: [], equipment: [] }
+  const resolvedExerciseLibraryState = exerciseLibraryState ?? {
+    exerciseLibrary: [],
+    isExerciseLibraryLoading: false,
+    exerciseLibraryError: "",
+  }
+  const {
+    exerciseLibrary = [],
+    isExerciseLibraryLoading = false,
+    exerciseLibraryError = "",
+  } = resolvedExerciseLibraryState
   const [programs, setPrograms] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -1152,9 +1216,51 @@ const buildRequestConfig = (overrides = {}) => {
   const editEquipmentSelection = Array.isArray(editFormValues.equipment) ? editFormValues.equipment : []
   const createEquipmentValues = normalizeEquipmentValues(createFormValues.equipment)
   const editEquipmentValues = normalizeEquipmentValues(editFormValues.equipment)
-  const filterCategoryValues = Array.isArray(filters.category) ? filters.category : []
-  const filterGoalValues = Array.isArray(filters.goal) ? filters.goal : []
-  const filterEquipmentValues = Array.isArray(filters.equipment) ? filters.equipment : []
+  const filterCategoryValues = Array.isArray(resolvedFilters.category) ? resolvedFilters.category : []
+  const filterGoalValues = Array.isArray(resolvedFilters.goal) ? resolvedFilters.goal : []
+  const filterEquipmentValues = Array.isArray(resolvedFilters.equipment) ? resolvedFilters.equipment : []
+  const filterDifficultyValues = Array.isArray(resolvedFilters.difficulty) ? resolvedFilters.difficulty : []
+
+  const filteredAndSortedLibrary = useMemo(() => {
+    let result = [...programs]
+
+    if (searchName.trim()) {
+      const query = searchName.trim().toLowerCase()
+      result = result.filter((program) => {
+        const name = String(program?.name ?? program?.title ?? "").toLowerCase()
+        const description = String(program?.description ?? "").toLowerCase()
+        return name.includes(query) || description.includes(query)
+      })
+    }
+
+    if (filterDifficultyValues.length > 0) {
+      result = result.filter((program) => filterDifficultyValues.includes(program?.difficulty))
+    }
+
+    if (filterCategoryValues.length > 0) {
+      result = result.filter((program) => filterCategoryValues.includes(program?.category))
+    }
+
+    if (filterGoalValues.length > 0) {
+      result = result.filter((program) => filterGoalValues.includes(program?.goal))
+    }
+
+    if (filterEquipmentValues.length > 0) {
+      result = result.filter((program) => {
+        const values = canonicalizeEquipmentValues(getProgramEquipmentValues(program), equipmentChoices)
+        return filterEquipmentValues.some((equipmentValue) => values.includes(equipmentValue))
+      })
+    }
+
+    result.sort((left, right) => {
+      const leftName = String(left?.name ?? left?.title ?? "").toLowerCase()
+      const rightName = String(right?.name ?? right?.title ?? "").toLowerCase()
+      return sortOrder === "desc" ? rightName.localeCompare(leftName) : leftName.localeCompare(rightName)
+    })
+
+    return result
+  }, [programs, searchName, sortOrder, filterDifficultyValues, filterCategoryValues, filterGoalValues, filterEquipmentValues, equipmentChoices])
+  const filterEquipmentOptions = equipments
 
   const totalPages = Math.max(1, Math.ceil(filteredAndSortedLibrary.length / PROGRAMS_PER_PAGE))
   const safePage = Math.min(currentPage, totalPages)
@@ -1251,19 +1357,8 @@ const buildRequestConfig = (overrides = {}) => {
   }
 
   const handleAddWorkoutToPlanWeek = (weekNumber, selectedExerciseIds) => {
-    // TODO: Refactor exercise-list in excise component -- create a 
-    // reusable function maybe in its own function  also for programs 
-    // exercise list. see Line 964 in Exercises component.
     setCreateFormValues((prev) => {
-      const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        const nextExerciseIds = [...new Set([...weekEntry.exercise_ids, ...selectedExerciseIds])]
-        if (nextExerciseIds.length === weekEntry.exercise_ids.length) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: nextExerciseIds,
-        }
-      })
+      const nextPlan = addExerciseIdsToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, selectedExerciseIds)
       return { ...prev, workout_plan: nextPlan }
     })
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
@@ -1279,13 +1374,7 @@ const buildRequestConfig = (overrides = {}) => {
     if (!Number.isFinite(weekNumber) || workoutExerciseIds.length === 0) return
 
     setCreateFormValues((prev) => {
-      const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: [...new Set([...weekEntry.exercise_ids, ...workoutExerciseIds])],
-        }
-      })
+      const nextPlan = addExerciseIdsToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, workoutExerciseIds)
       return { ...prev, workout_plan: nextPlan }
     })
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
@@ -1294,13 +1383,7 @@ const buildRequestConfig = (overrides = {}) => {
 
   const handleRemoveExerciseFromWorkoutWeek = (weekNumber, exerciseId) => {
     setCreateFormValues((prev) => {
-      const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: weekEntry.exercise_ids.filter((candidateId) => candidateId !== exerciseId),
-        }
-      })
+      const nextPlan = removeExerciseIdFromWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, exerciseId)
       return { ...prev, workout_plan: nextPlan }
     })
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
@@ -1318,16 +1401,6 @@ const buildRequestConfig = (overrides = {}) => {
     if (!createFormValues.difficulty) {
       nextErrors.difficulty = "Difficulty is required."
     }
-    if (!createFormValues.category.trim()) {
-      nextErrors.category = "Category is required."
-    }
-    if (!createFormValues.goal.trim()) {
-      nextErrors.goal = "Goal is required."
-    }
-    if (!Array.isArray(createFormValues.equipment) || createFormValues.equipment.length === 0) {
-      nextErrors.equipment = "Equipment is required."
-    }
-
     const durationValue = Number(createFormValues.duration_weeks)
     if (!Number.isFinite(durationValue) || durationValue < durationRange.min || durationValue > durationRange.max) {
       nextErrors.duration_weeks = `Duration must be between ${durationRange.min} and ${durationRange.max} weeks.`
@@ -1358,17 +1431,13 @@ const buildRequestConfig = (overrides = {}) => {
       const selectedExerciseIds = [...new Set(normalizedWorkoutPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))]
       console.log("Selected exercise IDs for submission:", selectedExerciseIds) 
       const payload = {
-        title: createFormValues.title.trim(),
+        name: createFormValues.title.trim(),
         description: createFormValues.description.trim(),
         difficulty: createFormValues.difficulty,
         duration_weeks: Number(createFormValues.duration_weeks),
-        category: createFormValues.category.trim(),
-        goal: createFormValues.goal.trim(),
-        equipment: canonicalizeEquipmentValues(createFormValues.equipment, equipmentChoices),
         is_public: Boolean(createFormValues.is_public),
         exercises: selectedExerciseIds,
-        workout_plan: normalizedWorkoutPlan,
-        program_image: createFormValues.program_image,
+        items: buildProgramItemsFromWorkoutPlan(normalizedWorkoutPlan),
       }
       const response = await axios.post(API_URL, payload, buildRequestConfig())
       
@@ -1397,7 +1466,7 @@ const buildRequestConfig = (overrides = {}) => {
             equipment:
               canonicalizeEquipmentValues(getProgramEquipmentValues(createdProgram), equipmentChoices).length > 0
                 ? canonicalizeEquipmentValues(getProgramEquipmentValues(createdProgram), equipmentChoices)
-                : payload.equipment,
+                : canonicalizeEquipmentValues(createFormValues.equipment, equipmentChoices),
           }
         : null
 
@@ -1416,14 +1485,12 @@ const buildRequestConfig = (overrides = {}) => {
       const responseData = error?.response?.data
       if (responseData && typeof responseData === "object") {
         const knownFields = [
-          "title",
+          "name",
           "description",
           "difficulty",
           "duration_weeks",
-          "category",
-          "goal",
-          "equipment",
           "is_public",
+          "items",
         ]
         for (const fieldName of knownFields) {
           const rawValue = responseData[fieldName]
@@ -1473,16 +1540,6 @@ const buildRequestConfig = (overrides = {}) => {
     if (!editFormValues.difficulty) {
       nextErrors.difficulty = "Difficulty is required."
     }
-    if (!editFormValues.category.trim()) {
-      nextErrors.category = "Category is required."
-    }
-    if (!editFormValues.goal.trim()) {
-      nextErrors.goal = "Goal is required."
-    }
-    if (!Array.isArray(editFormValues.equipment) || editFormValues.equipment.length === 0) {
-      nextErrors.equipment = "Equipment is required."
-    }
-
     const durationValue = Number(editFormValues.duration_weeks)
     if (!Number.isFinite(durationValue) || durationValue < durationRange.min || durationValue > durationRange.max) {
       nextErrors.duration_weeks = `Duration must be between ${durationRange.min} and ${durationRange.max} weeks.`
@@ -1672,17 +1729,13 @@ const buildRequestConfig = (overrides = {}) => {
       }
       const existingWorkoutPlan = buildWorkoutPlanFromProgram(currentProgram)
       const payload = {
-        title: editFormValues.title.trim(),
+        name: editFormValues.title.trim(),
         description: editFormValues.description.trim(),
         difficulty: editFormValues.difficulty,
         duration_weeks: Number(editFormValues.duration_weeks),
-        category: editFormValues.category.trim(),
-        goal: editFormValues.goal.trim(),
-        equipment: canonicalizeEquipmentValues(editFormValues.equipment, equipmentChoices),
         is_public: Boolean(editFormValues.is_public),
         exercises: selectedExerciseIds,
-        workout_plan: normalizedDetailWorkoutPlan,
-        program_image: editFormValues.program_image,
+        items: buildProgramItemsFromWorkoutPlan(normalizedDetailWorkoutPlan),
       }
       const response = await axios.put(`${API_URL}${selectedProgramId}/`, payload, buildRequestConfig())
       if (!areWorkoutPlansEqual(normalizedDetailWorkoutPlan, existingWorkoutPlan)) {
@@ -1791,7 +1844,7 @@ const buildRequestConfig = (overrides = {}) => {
                 equipment:
                   canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices).length > 0
                     ? canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices)
-                    : payload.equipment,
+                    : canonicalizeEquipmentValues(editFormValues.equipment, equipmentChoices),
               }
             : program,
         ),
@@ -1806,7 +1859,7 @@ const buildRequestConfig = (overrides = {}) => {
           equipment:
             canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices).length > 0
               ? canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices)
-              : payload.equipment,
+              : canonicalizeEquipmentValues(editFormValues.equipment, equipmentChoices),
         },
       }))
       handleCloseDetailsModal()
@@ -1815,14 +1868,12 @@ const buildRequestConfig = (overrides = {}) => {
       const responseData = error?.response?.data
       if (responseData && typeof responseData === "object") {
         const knownFields = [
-          "title",
+          "name",
           "description",
           "difficulty",
           "duration_weeks",
-          "category",
-          "goal",
-          "equipment",
           "is_public",
+          "items",
         ]
         for (const fieldName of knownFields) {
           const rawValue = responseData[fieldName]
@@ -1930,15 +1981,8 @@ const buildRequestConfig = (overrides = {}) => {
 
     const totalWeeks = normalizeDurationWeeks(editFormValues.duration_weeks)
     setDetailWorkoutPlan((prev) => {
-      const basePlan = totalWeeks > 0 ? buildWorkoutPlanForDuration(totalWeeks, prev) : [...prev]
-      return basePlan.map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        if (weekEntry.exercise_ids.includes(exerciseId)) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: [...weekEntry.exercise_ids, exerciseId],
-        }
-      })
+      const durationValue = totalWeeks > 0 ? totalWeeks : prev.length
+      return addExerciseIdsToWeekPlan(durationValue, prev, weekNumber, [exerciseId])
     })
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
     setDetailPlanExerciseId("")
@@ -1956,14 +2000,8 @@ const buildRequestConfig = (overrides = {}) => {
 
     const totalWeeks = normalizeDurationWeeks(editFormValues.duration_weeks)
     setDetailWorkoutPlan((prev) => {
-      const basePlan = totalWeeks > 0 ? buildWorkoutPlanForDuration(totalWeeks, prev) : [...prev]
-      return basePlan.map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: [...new Set([...weekEntry.exercise_ids, ...workoutExerciseIds])],
-        }
-      })
+      const durationValue = totalWeeks > 0 ? totalWeeks : prev.length
+      return addExerciseIdsToWeekPlan(durationValue, prev, weekNumber, workoutExerciseIds)
     })
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
     setDetailPlanWorkoutId("")
@@ -1972,15 +2010,7 @@ const buildRequestConfig = (overrides = {}) => {
   const handleRemoveExerciseFromDetailWeek = (weekNumber, exerciseId) => {
     if (!isDetailsEditMode || !canEditSelectedProgram) return
 
-    setDetailWorkoutPlan((prev) =>
-      prev.map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: weekEntry.exercise_ids.filter((candidateId) => candidateId !== exerciseId),
-        }
-      }),
-    )
+    setDetailWorkoutPlan((prev) => removeExerciseIdFromWeekPlan(editFormValues.duration_weeks, prev, weekNumber, exerciseId))
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
@@ -2173,12 +2203,12 @@ const buildRequestConfig = (overrides = {}) => {
                   <input
                     type="checkbox"
                     value={d.value}
-                    checked={filters.difficulty.includes(d.value)}
+                    checked={filterDifficultyValues.includes(d.value)}
                     onChange={(e) => {
                       const next = e.target.checked
-                        ? [...filters.difficulty, d.value]
-                        : filters.difficulty.filter((v) => v !== d.value)
-                      filteredAndSortedLibrary("difficulty", next)
+                        ? [...filterDifficultyValues, d.value]
+                        : filterDifficultyValues.filter((v) => v !== d.value)
+                      handleFilterChange("difficulty", next)
                     }}
                   />
                   {d.label}
@@ -2192,7 +2222,7 @@ const buildRequestConfig = (overrides = {}) => {
             <MultiSelect
               options={filterCategoryOptions}
               value={filterCategoryValues}
-              onChange={(selected) => filteredAndSortedLibrary("category", selected)}
+              onChange={(selected) => handleFilterChange("category", selected)}
               name="filter-category"
             />
           </div>
@@ -2202,7 +2232,7 @@ const buildRequestConfig = (overrides = {}) => {
             <MultiSelect
               options={filterGoalOptions}
               value={filterGoalValues}
-              onChange={(selected) => filteredAndSortedLibrary("goal", selected)}
+              onChange={(selected) => handleFilterChange("goal", selected)}
               name="filter-goal"
             />
           </div>
@@ -2212,7 +2242,7 @@ const buildRequestConfig = (overrides = {}) => {
             <MultiSelect
               options={filterEquipmentOptions}
               value={filterEquipmentValues}
-              onChange={(selected) => filteredAndSortedLibrary("equipment", selected)}
+              onChange={(selected) => handleFilterChange("equipment", selected)}
               name="filter-equipment"
               emitOptionObjects
             />
@@ -2526,17 +2556,17 @@ const buildRequestConfig = (overrides = {}) => {
                           key={exercise.id}
                           type="checkbox"
                           name={"plan_exercises"}
-                          value={exercise.title}
-                          checked={createPlanExercise.includes(exercise.title)}
+                          value={String(exercise.id)}
+                          checked={createPlanExercise.includes(String(exercise.id))}
                           onChange={(event) => {
                             const selectedIds = event.target.checked
-                              ? [...createPlanExercise, String(exercise.title)]
-                              : createPlanExercise.filter((id) => id !== String(exercise.title))
+                              ? [...createPlanExercise, String(exercise.id)]
+                              : createPlanExercise.filter((id) => id !== String(exercise.id))
                             setCreatePlanExercise(selectedIds)
                           }}
                           disabled={exerciseOptions.length === 0 || workoutPlan.length === 0}
                         />
-                        <div className="multiselect-option">{exercise.title}</div>
+                        <div className="multiselect-option">{exercise.title || exercise.name}</div>
                       </label>
                     ))}
                   </label>
@@ -2544,7 +2574,7 @@ const buildRequestConfig = (overrides = {}) => {
                   <button
                     type="button"
                     className="programs-modal-secondary-btn programs-plan-add-btn"
-                    onClick={() => handleAddWorkoutToPlanWeek(weekEntry.week_number, weekEntry.exercise_ids)}
+                    onClick={() => handleAddWorkoutToPlanWeek(Number(createPlanWeek), createPlanExercise.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry)))}
                     disabled={createPlanExercise.length === 0 || workoutPlan.length === 0}
                   >
                     {console.log("Rendering Add Workout button", { createPlanExercise, workoutPlan })}

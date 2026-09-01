@@ -4,6 +4,10 @@ import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
 
+const USERS_API_BASE_URL = String(import.meta.env.VITE_USERS_API_BASE_URL || "/api/users").replace(/\/+$/, "")
+const LOGIN_API_URL = `${USERS_API_BASE_URL}/auth/login/`
+const GUEST_LOGIN_API_URL = `${USERS_API_BASE_URL}/auth/guest/`
+
 function Login() {
   const navigate = useNavigate()
   const [formValues, setFormValues] = useState({
@@ -69,14 +73,14 @@ function Login() {
       let response
       try {
         response = await axios.post(
-          "http://127.0.0.1:8000/api/users/auth/login/",
+          LOGIN_API_URL,
           loginPayload,
           { withCredentials: true },
         )
       } catch (primaryError) {
         if (!primaryError?.response) {
           response = await axios.post(
-            "http://127.0.0.1:8000/api/users/auth/login/",
+            LOGIN_API_URL,
             loginPayload,
           )
         } else {
@@ -104,13 +108,13 @@ function Login() {
       let response
       try {
         response = await axios.post(
-          "http://127.0.0.1:8000/api/users/auth/guest/",
+          GUEST_LOGIN_API_URL,
           {},
           { withCredentials: true },
         )
       } catch (primaryError) {
         if (!primaryError?.response) {
-          response = await axios.post("http://127.0.0.1:8000/api/users/auth/guest/")
+          response = await axios.post(GUEST_LOGIN_API_URL)
         } else {
           throw primaryError
         }

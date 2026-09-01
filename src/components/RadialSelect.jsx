@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react"
+import "../CSS/radial.css"
 
 const getComparableValue = (entry) => {
   if (entry && typeof entry === "object") {
@@ -13,7 +14,7 @@ const toSelectionKey = (entry) => {
   return String(comparable).trim()
 }
 
-export default function MultiSelect({ options, value, onChange, disabled, name, emitOptionObjects = false }) {
+export default function RadialSelect({ options, value, onChange, disabled, name, emitOptionObjects = false }) {
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef(null)
   const selectedValues = Array.isArray(value) ? value : []
@@ -72,31 +73,31 @@ export default function MultiSelect({ options, value, onChange, disabled, name, 
     .filter(Boolean)
 
   return (
-    <div className="multiselect-dropdown" ref={dropdownRef}>
+    <div className="radial-dropdown" ref={dropdownRef}>
       <button
         type="button"
-        className="multiselect-toggle"
+        className="radial-toggle"
         onClick={() => setOpen((o) => !o)}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
         {selectedLabels.length > 0 ? selectedLabels.join(", ") : "Select options"}
-        <span className="multiselect-arrow">▾</span>
+        <span className="radial-arrow">▾</span>
       </button>
       {open && (
-        <div className="multiselect-list" role="listbox">
+        <div className="radial-list" role="listbox">
           {Array.isArray(options) && options.map((option) => (
-            <label key={option.value} className="multiselect-label">
+            <label key={option.value} className="radial-label">
               <input
-                type="checkbox"
+                type="radio"
                 name={name}
                 value={option.value}
                 checked={selectedKeys.includes(toSelectionKey(option.value))}
                 onChange={() => handleCheckboxChange(option.value)}
                 disabled={disabled}
               />
-              <div className="multiselect-option">{option.label}</div>
+              <div className="radial-option">{option.label}</div>
             </label>
           ))}
         </div>
