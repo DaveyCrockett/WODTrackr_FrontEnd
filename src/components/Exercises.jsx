@@ -203,14 +203,28 @@ const formatTimestamp = (value) => {
   return parsed.toLocaleString()
 }
 
+const getExerciseGifUrl = (exercise) => {
+  if (!exercise || typeof exercise !== "object") {
+    return ""
+  }
+
+  const videoValue =
+    exercise?.gif_url ??
+    exercise?.gifUrl ??
+    exercise?.exercise_gif ??
+    exercise?.exerciseGif ??
+    ""
+
+  return typeof videoValue === "string" ? videoValue.trim() : ""
+}
+
 const getExerciseImageUrl = (exercise) => {
   if (!exercise || typeof exercise !== "object") {
     return ""
   }
 
   const imageValue =
-    exercise?.gif_url ??
-    exercise?.gifUrl ??
+    exercise?.image ??
     exercise?.image_url ??
     exercise?.imageUrl ??
     exercise?.exercise_image ??
@@ -338,6 +352,7 @@ function Exercises({
   const filteredAndSortedLibrary = useMemo(() => {
     const library = exerciseLibrary || []
     let result = [...library]
+    
     try {
       if (resolvedFilters.searchName.trim()) {
         const query = resolvedFilters.searchName.trim().toLowerCase()
@@ -371,7 +386,6 @@ function Exercises({
       if (Array.isArray(resolvedFilters.target) && resolvedFilters.target.length > 0) {
         result = result.filter((p) => resolvedFilters.target.includes(p.target || p.target_muscle))
       }
-      console.log('Filtered and sorted result:', result)
       result.sort((a, b) => {
         const aName = String(a?.title || a?.name || "")
         const bName = String(b?.title || b?.name || "")
@@ -397,10 +411,8 @@ function Exercises({
         }
         return aName.localeCompare(bName)
       })
-
       return result
     } catch (error) {
-      console.error('Error filtering and sorting library:', error)
       return []
     }
   }, [exerciseLibrary, resolvedFilters.searchName, resolvedFilters.category, resolvedFilters.equipment, resolvedFilters.muscle, resolvedFilters.bodyPart, resolvedFilters.target, sortOrder]);
@@ -414,7 +426,6 @@ function Exercises({
   }
 
   const handleAddSubmit = async (event) => {
-    console.log("event triggered for handleAddSubmit")
     event.preventDefault()
     setErrorMessage("")
     setSuccessMessage("")
@@ -443,7 +454,6 @@ function Exercises({
         },
         buildRequestConfig(),
       )
-      console.log("Response from adding exercise: ", response)
       if (response?.data?.data) {
         setExercises((prev) => [response.data.data, ...prev])
       }
@@ -678,11 +688,8 @@ function Exercises({
         isExerciseLibraryLoading: true,
         exerciseLibraryError: '',
       }))
-      console.log('Loading exercise library...')
       try {
-        console.log("config:", config)
         const response = await axios.get(EXERCISES_API_URL, config)
-        console.log('Exercise library loaded:', response?.data.all_exercises || response?.data || [])
         const nextNode = response?.data?.next
         setExerciseLibraryState((prevState) => ({
           ...prevState,
@@ -782,18 +789,18 @@ function Exercises({
                     />
                   </div>
                 ) : null}
-                <div className="exercise-header">
-                  <h3>{(exercise.title || exercise.name || "Exercise").toUpperCase()}</h3>
-                  <span><strong>Visibility:</strong> {capitalizeFirstLetter(exercise.is_public ? "Public" : "Private")}</span>
-                  <span><strong>Category:</strong> {capitalizeFirstLetter(exercise.category)}</span>
-                </div>
-                <div className="exercise-subheader">
-                  <p className="exercise-meta">
-                    <strong>Primary Muscle:</strong> {capitalizeFirstLetter(exercise.primary_muscle_group)}
-                  </p>
-                  <p className="exercise-meta">
-                    <strong>Created by:</strong> {capitalizeFirstLetter(exercise.created_by_username || exercise.username || exercise.created_by || "Unknown")} 
-                  </p>
+                <div>
+                  <h3 className="exercise-header-title">{(exercise.title || exercise.name || "Exercise").toUpperCase()}</h3>
+                  <div className="exercise-header">
+                    <span><strong>Visibility:</strong> {capitalizeFirstLetter(exercise.is_public ? "Public" : "Private")}</span>
+                    <span><strong>Category:</strong> {capitalizeFirstLetter(exercise.category)}</span>
+                    <p className="exercise-meta">
+                      <strong>Primary Muscle:</strong> {capitalizeFirstLetter(exercise.primary_muscle_group)}
+                    </p>
+                    <p className="exercise-meta">
+                      <strong>Created by:</strong> {capitalizeFirstLetter(exercise.created_by_username || exercise.username || exercise.created_by || "Unknown")} 
+                    </p>
+                  </div>
                 </div>
               </article>
               )
@@ -897,7 +904,6 @@ function Exercises({
             <header className="exercise-modal-header">
               <div className="exercise-modal-close-btn-wrapper">
                 <button type="button" className="exercise-btn-base exercise-modal-close-btn" onClick={handleCloseAddModal}>
-                  {console.log("Closing add modal: ", isAddModalOpen)}
                   <svg viewBox="0 0 24 24" width="24" height="24">
                     <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                   </svg>
@@ -973,7 +979,6 @@ function Exercises({
               </label>
               <label className="exercise-field">
                 <span>Difficulty</span>
-                {console.log("options: ", difficultyChoices, "value: ", formValues.difficulty)}
                 <RadialSelect
                   type="dropdown"
                   options={difficultyChoices}

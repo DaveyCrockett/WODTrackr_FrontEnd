@@ -294,6 +294,7 @@
   height: 100%;
   overflow-y: auto;
   padding-right: 0.2rem;
+  grid-template-columns: 48% 48%;
 }
 
 .exercise-list-actions {
@@ -315,11 +316,13 @@
   background: #f8fafc;
 }
 
+.exercise-header-title {
+  text-align: center;
+}
+
 .exercise-header {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
+  flex-direction: column;
 }
 
 .exercise-header h3 {
@@ -332,10 +335,6 @@
   color: #5b6777;
 }
 
-.exercise-subheader {
-  display: flex;
-  justify-content: space-between;
-}
 .exercise-meta {
   margin: 0.35rem 0 0;
   color: #6b7280;
@@ -360,10 +359,12 @@
   padding: 0.85rem;
   background: #f8fafc;
   cursor: pointer;
+  display: flex;
+  gap: 1rem;
 }
 
 .exercise-card-image-wrap {
-  width: 100%;
+  width: 25%;
   height: 180px;
   border-radius: 10px;
   overflow: hidden;
