@@ -222,12 +222,8 @@ const getExerciseGifUrl = (exercise) => {
 }
 
 const normalizeMediaUrlForFrontend =  (urlValue) => {
-  console.log("normalizeMediaUrlForFrontend called with urlValue:", urlValue)
   const trimmedUrl = typeof urlValue === "string" ? urlValue.trim() : ""
-  const relativeTrimmedUrl = trimmedUrl.replace(/^https?:\/\/[^/]+/i, "")
-  console.log("trimmedUrl:", trimmedUrl)
-  console.log("relativeTrimmedUrl:", relativeTrimmedUrl)
-  
+  const relativeTrimmedUrl = trimmedUrl.replace(/^https?:\/\/[^/]+/i, "")  
   if (!relativeTrimmedUrl) {
     return ""
   }
@@ -236,17 +232,17 @@ const normalizeMediaUrlForFrontend =  (urlValue) => {
     return relativeTrimmedUrl
   }
 
-  // if (relativeTrimmedUrl.startsWith("/media/")) {
-  //   return relativeTrimmedUrl
-  // }
+  if (relativeTrimmedUrl.startsWith("/media/")) {
+    return relativeTrimmedUrl
+  }
 
-  // if (relativeTrimmedUrl.startsWith("media/")) {
-  //   return `/${relativeTrimmedUrl}`
-  // }
+  if (relativeTrimmedUrl.startsWith("media/")) {
+    return `/${relativeTrimmedUrl}`
+  }
 
-  // if (relativeTrimmedUrl.startsWith("exercise_dataset/")) {
-  //   return `/media/${relativeTrimmedUrl}`
-  // }
+  if (relativeTrimmedUrl.startsWith("exercise_dataset/")) {
+    return `/media/${relativeTrimmedUrl}`
+  }
 
   const hostlessMediaMatch = relativeTrimmedUrl.match(/^[^\s/]+:\d+\/(media\/.*)$/i)
   if (hostlessMediaMatch?.[1]) {
@@ -513,7 +509,6 @@ function Exercises({
     try {
       const payload = new FormData()
       payload.append("name", formValues.name)
-      console.log("Form values before appending instructions:", formValues.detail.instructions)
       payload.append("instructions", JSON.stringify(formValues.detail.instructions) || "")
       payload.append("category", formValues.category)
       payload.append("equipment", formValues.equipment)
@@ -571,7 +566,6 @@ function Exercises({
     const { name, value, type, checked, files } = event.target
     const inputValue = type === "textarea" ? value :  value;
     setFormValues((prev) => {
-      console.log(name === "instructions", "inputValue:", inputValue)
       if (name === "instructions") {
         return {
           ...prev,
@@ -872,7 +866,6 @@ function Exercises({
           ) : (
             visibleExercises.map((exercise, index) => {
               const exerciseImageUrl = String(getExerciseImageUrl(exercise))
-              console.log("exerciseImageUrl:", exerciseImageUrl)
               return (
               <article
                 className={`exercise-item ${(exercise.id ?? null) === selectedExerciseId ? "exercise-item-selected" : ""}`}
@@ -1190,11 +1183,15 @@ function Exercises({
             aria-labelledby="exercise-details-modal-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <header className="exercise-modal-header">
-              <div>
+              <header className="exercise-modal-header">
+                <div className="exercise-modal-close-btn-wrapper">
+                  <button type="button" className="exercise-btn-base exercise-modal-close-btn" onClick={handleCloseExerciseDetailsModal}>
+                    <svg viewBox="0 0 24 24" width="24" height="24">
+                      <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
                 <h2 className="exercise-modal-title">{selectedExercise.name}</h2>
-              </div>
-              <div className="exercise-header-actions">
                 {canEditSelectedExercise ? (
                   <button
                     type="button"
@@ -1205,11 +1202,17 @@ function Exercises({
                     Edit Exercise
                   </button>
                 ) : null}
-                <button type="button" className="exercise-secondary-btn" onClick={handleCloseExerciseDetailsModal}>
-                  Close
-                </button>
-              </div>
-            </header>
+              </header>
+              <div className="exercise-modal-content">
+              <section className="exercise-card-image-wrap">
+                {(() => {
+                  const gifExists = () => selectedExercise.gif_url ?? null;
+                  const gifUrl = normalizeMediaUrlForFrontend(gifExists());
+                  return <img src={gifUrl} alt={selectedExercise.name} className="exercise-card-image" />;
+                })()}
+              </section>
+              
+
                <section className="exercise-details" aria-live="polite">
             
             <p className="exercise-meta">
@@ -1247,6 +1250,7 @@ function Exercises({
               </button>
             ) : null}
           </section>
+          </div>
           </aside>
        
         </div>

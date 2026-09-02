@@ -534,6 +534,8 @@
 }
 
 .exercise-modal {
+  display: flex;
+  flex-direction: column;
   width: min(560px, 100%);
   max-height: calc(100vh - 2rem);
   overflow: auto;
@@ -546,16 +548,21 @@
 }
 
 .exercise-modal-header {
-  display: inline;
+  display: flex;
+  flex-direction: row;
   width: 100%;
   position: relative;
   z-index: 1001; /* Ensures the modal header is above the modal content */
 }
 
 .exercise-modal-close-btn-wrapper {
-  position: absolute;
-  top: -1rem;
+  flex: .1;
+  top: 0rem;
   left: 0.5rem;
+}
+.exercise-modal-title {
+  flex: 1;
+  text-align: center;
 }
 
 .exercise-modal-title-wrapper { 
@@ -566,6 +573,12 @@
 .exercise-modal-header p {
   margin: 0.25rem 0 0;
   color: #475569;
+}
+
+.exercise-modal-content {
+  display: flex;
+  flex-direction: row;
+  gap: 1rem;
 }
 
 @media (max-width: 1080px) {
