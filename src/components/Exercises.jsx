@@ -899,11 +899,11 @@ function Exercises({
                     />
                   </div>
                 ) : null}
-                <div>
+                <div className="exercise-item-content">
                   <h3 className="exercise-header-title">{(exercise.title || exercise.name || "Exercise").toUpperCase()}</h3>
                   <div className="exercise-header">
-                    <span><strong>Visibility:</strong> {capitalizeFirstLetter(exercise.is_public ? "Public" : "Private")}</span>
-                    <span><strong>Category:</strong> {capitalizeFirstLetter(exercise.category)}</span>
+                    <p className="exercise-meta"><strong>Visibility:</strong> {capitalizeFirstLetter(exercise.is_public ? "Public" : "Private")}</p>
+                    <p className="exercise-meta"><strong>Category:</strong> {capitalizeFirstLetter(exercise.category)}</p>
                     <p className="exercise-meta">
                       <strong>Primary Muscle:</strong> {capitalizeFirstLetter(exercise.primary_muscle_group)}
                     </p>
