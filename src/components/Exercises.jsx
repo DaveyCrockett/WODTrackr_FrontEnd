@@ -23,7 +23,7 @@ const EMPTY_EXERCISE_FORM_VALUES = {
   image: null,
   is_public: false,
   detail: {
-    instructions: "",
+    instructions: [""],
   },
 }
 
@@ -511,7 +511,8 @@ function Exercises({
     try {
       const payload = new FormData()
       payload.append("name", formValues.name)
-      payload.append("instructions", formValues.detail.instructions || "")
+      console.log("Form values before appending instructions:", formValues.detail.instructions)
+      payload.append("instructions", JSON.stringify(formValues.detail.instructions) || "")
       payload.append("category", formValues.category)
       payload.append("equipment", formValues.equipment)
       payload.append("primary_muscle_group", formValues.primary_muscle_group)
@@ -560,16 +561,21 @@ function Exercises({
     }
   }
 
+  useEffect(() => {
+    console.log("Updated state inside useEffect:", formValues.detail, typeof formValues.detail)
+  }, [formValues])
+
   const handleAddChange = (event) => {
     const { name, value, type, checked, files } = event.target
-    const inputValue = type === "checkbox" ? checked :  value;
+    const inputValue = type === "textarea" ? value :  value;
     setFormValues((prev) => {
+      console.log(name === "instructions", "inputValue:", inputValue)
       if (name === "instructions") {
         return {
           ...prev,
           detail: {
             ...prev.detail,
-            instructions: inputValue,
+            instructions: [inputValue],
           },
         }
       }
@@ -1047,12 +1053,15 @@ function Exercises({
                 <span>Instructions</span>
                 <textarea
                   name="instructions"
-                  value={Array.isArray(formValues.detail.instructions) ? "" : formValues.detail.instructions || ""}
+                  value={Array.isArray(formValues.detail?.instructions) 
+                    ? formValues.detail.instructions.join("\n") // Turns ['Step 1', 'Step 2'] into readable text
+                    : formValues.detail?.instructions || ""
+                  }
                   onChange={handleAddChange}
                   rows={4}
                   maxLength={1000}
                   placeholder="Type instructions here..."
-                ></textarea>
+                />
                 {fieldErrors.instructions ? (
                 <small className="exercise-field-error">
                   {Array.isArray(fieldErrors.instructions) ? fieldErrors.instructions[0] : fieldErrors.instructions}
