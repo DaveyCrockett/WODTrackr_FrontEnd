@@ -4,12 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { validateExerciseForm } from "../utils/exerciseUtils"
 import FilterIcon from "../assets/filter.png"
 import MultiSelect from "./MultiSelect"
-import RadialSelect from "./RadialSelect"
 
 const API_URL = "/api/wodtrackr/exercises/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 const CUSTOM_EXERCISES_API_URL = "/api/wodtrackr/custom-exercises/"
-const PAGE_SIZE = 4
+const PAGE_SIZE = 6
 const SKELETON_CARD_COUNT = 6
 const buildApiUrl = (path = "") => `${API_URL}${String(path).replace(/^\/+/, "")}`
 const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
@@ -21,9 +20,12 @@ const EMPTY_EXERCISE_FORM_VALUES = {
   primary_muscle_group: "",
   created_by: "",
   difficulty: "",
+  image: null,
   is_public: false,
+  detail: {
+    instructions: "",
+  },
 }
-
 
 const getDefaultExerciseFormValues = (username = "") => ({
   ...EMPTY_EXERCISE_FORM_VALUES,
@@ -209,6 +211,7 @@ const getExerciseGifUrl = (exercise) => {
   }
 
   const videoValue =
+    exercise?.gif_absolute_url ??
     exercise?.gif_url ??
     exercise?.gifUrl ??
     exercise?.exercise_gif ??
@@ -218,15 +221,62 @@ const getExerciseGifUrl = (exercise) => {
   return typeof videoValue === "string" ? videoValue.trim() : ""
 }
 
+const normalizeMediaUrlForFrontend = (urlValue) => {
+  const trimmedUrl = typeof urlValue === "string" ? urlValue.trim() : ""
+  if (!trimmedUrl) {
+    return ""
+  }
+
+  if (!import.meta.env.DEV) {
+    return trimmedUrl
+  }
+
+  if (trimmedUrl.startsWith("/media/")) {
+    return trimmedUrl
+  }
+
+  if (trimmedUrl.startsWith("media/")) {
+    return `/${trimmedUrl}`
+  }
+
+  if (trimmedUrl.startsWith("exercise_dataset/")) {
+    return `/media/${trimmedUrl}`
+  }
+
+  const mediaPathIndex = trimmedUrl.indexOf("/media/")
+  if (mediaPathIndex >= 0) {
+    return trimmedUrl.slice(mediaPathIndex)
+  }
+
+  const hostlessMediaMatch = trimmedUrl.match(/^[^\s/]+:\d+\/(media\/.*)$/i)
+  if (hostlessMediaMatch?.[1]) {
+    return `/${hostlessMediaMatch[1]}`
+  }
+
+  try {
+    const candidateUrl = /^https?:\/\//i.test(trimmedUrl) ? trimmedUrl : `http://${trimmedUrl}`
+    const parsedUrl = new URL(candidateUrl, window.location.origin)
+    if (parsedUrl.pathname.startsWith("/media/")) {
+      return `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`
+    }
+  } catch {
+    return trimmedUrl
+  }
+
+  return trimmedUrl
+}
+
 const getExerciseImageUrl = (exercise) => {
   if (!exercise || typeof exercise !== "object") {
     return ""
   }
-
   const imageValue =
     exercise?.image ??
+    exercise?.imageAbsoluteUrl ??
     exercise?.image_url ??
     exercise?.imageUrl ??
+    exercise?.exercise_image_url ??
+    exercise?.exerciseImageUrl ??
     exercise?.exercise_image ??
     exercise?.exerciseImage ??
     exercise?.thumbnail_url ??
@@ -234,7 +284,7 @@ const getExerciseImageUrl = (exercise) => {
     exercise?.image ??
     ""
 
-  return typeof imageValue === "string" ? imageValue.trim() : ""
+  return normalizeMediaUrlForFrontend(imageValue)
 }
 
 const canonicalizeEquipmentValue = (value) => {
@@ -248,7 +298,7 @@ const getFieldErrorsFromResponse = (data) => {
     return {}
   }
 
-  const possibleFields = ["name", "description", "category", "equipment", "primary_muscle_group", "created_by", "is_public"]
+  const possibleFields = ["name", "instructions", "category", "equipment", "primary_muscle_group","secondary_muscle_group", "gif_url", "image_upload", "image_url", "created_by", "is_public"]
   return possibleFields.reduce((accumulator, fieldName) => {
     const rawValue = data[fieldName]
     if (!rawValue) {
@@ -262,9 +312,13 @@ const getFieldErrorsFromResponse = (data) => {
 
 const getExerciseFormValues = (exercise) => ({
   name: exercise?.name || "",
-  description: exercise?.description || "",
+  instructions: exercise?.detail.instructions || [],
   category: exercise?.category || "",
   equipment: exercise?.equipment || "",
+  secondary_muscle_group: exercise?.secondary_muscle_group || "",
+  gif_url: exercise?.gif_url || "",
+  image: exercise?.image || "",
+  image_upload: exercise?.image_upload || "",
   primary_muscle_group: exercise?.primary_muscle_group || "",
   created_by: exercise?.created_by_username || exercise?.username || exercise?.created_by || "",
   is_public: Boolean(exercise?.is_public),
@@ -279,8 +333,6 @@ function Exercises({
   muscleChoices = [],
   bodyPartChoices = [],
   targetChoices = [],
-  goalChoices = [],
-  difficultyChoices = [],
   exerciseLibraryState,
   setExerciseLibraryState = () => {},
   handleSearchChange = () => {},
@@ -308,6 +360,7 @@ function Exercises({
   const [formValues, setFormValues] = useState(() => getDefaultExerciseFormValues(getStoredUsername()))
   const [editFormValues, setEditFormValues] = useState(EMPTY_EXERCISE_FORM_VALUES)
   const [exercisesErrorMessage, setExercisesErrorMessage] = useState("")
+  const [visibleExerciseCount, setVisibleExerciseCount] = useState(PAGE_SIZE)
 
   // Refs for modal focus management
   const addModalRef = useRef(null)
@@ -359,7 +412,7 @@ function Exercises({
         result = result.filter(
           (p) =>
             String(p?.title || p?.name || "").toLowerCase().includes(query) ||
-            String(p?.description || "").toLowerCase().includes(query) ||
+            String(p?.detail?.instructions || "").toLowerCase().includes(query) ||
             String(p?.category || "").toLowerCase().includes(query) ||
             String(p?.equipment || "").toLowerCase().includes(query) ||
             String(p?.body_part || "").toLowerCase().includes(query) ||
@@ -417,6 +470,21 @@ function Exercises({
     }
   }, [exerciseLibrary, resolvedFilters.searchName, resolvedFilters.category, resolvedFilters.equipment, resolvedFilters.muscle, resolvedFilters.bodyPart, resolvedFilters.target, sortOrder]);
 
+  useEffect(() => {
+    setVisibleExerciseCount(PAGE_SIZE)
+  }, [filteredAndSortedLibrary.length, sortOrder, resolvedFilters.searchName, resolvedFilters.category, resolvedFilters.equipment, resolvedFilters.muscle, resolvedFilters.bodyPart, resolvedFilters.target])
+
+  const visibleExercises = useMemo(
+    () => filteredAndSortedLibrary.slice(0, visibleExerciseCount),
+    [filteredAndSortedLibrary, visibleExerciseCount],
+  )
+
+  const hasMoreVisibleExercises = visibleExerciseCount < filteredAndSortedLibrary.length
+
+  const handleLoadMoreExercises = () => {
+    setVisibleExerciseCount((previousCount) => previousCount + PAGE_SIZE)
+  }
+
 
   const normalizeExercisesPayload = (data) => {
     if (Array.isArray(data?.data)) return data.data
@@ -441,21 +509,34 @@ function Exercises({
     setFieldErrors({})
 
     try {
-      const response = await axios.post(
-        `${API_URL}`,
-        {
-          name: formValues.name,
-          description: formValues.description,
-          category: formValues.category,
-          equipment: formValues.equipment,
-          primary_muscle_group: formValues.primary_muscle_group,
-          created_by: currentUsername || formValues.created_by,
-          is_public: formValues.is_public,
-        },
-        buildRequestConfig(),
-      )
-      if (response?.data?.data) {
-        setExercises((prev) => [response.data.data, ...prev])
+      const payload = new FormData()
+      payload.append("name", formValues.name)
+      payload.append("instructions", formValues.detail.instructions || "")
+      payload.append("category", formValues.category)
+      payload.append("equipment", formValues.equipment)
+      payload.append("primary_muscle_group", formValues.primary_muscle_group)
+      payload.append("is_public", String(Boolean(formValues.is_public)))
+      payload.append("body_part", formValues.body_part || "")
+      payload.append("target", formValues.target || "")
+      payload.append("difficulty", formValues.difficulty || "")
+      payload.append("secondary_muscle_group", formValues.secondary_muscle_group || "")
+
+
+      if (formValues.image_upload instanceof File) {
+        payload.append("image_upload", formValues.image_upload)
+      }
+
+      if (formValues.gif_url instanceof File) {
+        payload.append("gif_url", formValues.gif_url)
+      }
+
+      const response = await axios.post(`${API_URL}`, payload, buildRequestConfig())
+      const createdExercise = response?.data?.data ?? response?.data
+      if (createdExercise) {
+        setExerciseLibraryState((prevState) => ({
+          ...prevState,
+          exerciseLibrary: [createdExercise, ...(prevState?.exerciseLibrary || [])],
+        }))
       }
 
       setFormValues(getDefaultExerciseFormValues(currentUsername))
@@ -471,7 +552,7 @@ function Exercises({
         return
       }
       const message =
-        error?.response?.data?.detail ||
+        error?.response?.data?.detail?.instructions ||
         "Unable to save exercise. Please check your inputs."
       setErrorMessage(message)
     } finally {
@@ -480,15 +561,34 @@ function Exercises({
   }
 
   const handleAddChange = (event) => {
-    const { name, value, type, checked } = event.target
-    setFormValues((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }))
+    const { name, value, type, checked, files } = event.target
+    const inputValue = type === "checkbox" ? checked :  value;
+    setFormValues((prev) => {
+      if (name === "instructions") {
+        return {
+          ...prev,
+          detail: {
+            ...prev.detail,
+            instructions: inputValue,
+          },
+        }
+      }
+      return {
+        ...prev,
+        [name]: inputValue,
+      }
+    })
     if (fieldErrors[name]) {
       setFieldErrors((prev) => {
         const next = { ...prev }
         delete next[name]
+        return next
+      })
+    }
+    if (fieldErrors.detail?.instructions) {
+      setFieldErrors((prev) => {
+        const next = { ...prev }
+        delete next.detail.instructions
         return next
       })
     }
@@ -586,7 +686,7 @@ function Exercises({
         `${API_URL}${selectedExercise.id}/`,
         {
           name: editFormValues.name,
-          description: editFormValues.description,
+          instructions: editFormValues.detail?.instructions,
           category: editFormValues.category,
           equipment: editFormValues.equipment,
           primary_muscle_group: editFormValues.primary_muscle_group,
@@ -598,11 +698,12 @@ function Exercises({
 
       const updatedExercise = response?.data?.data ?? response?.data
       if (updatedExercise) {
-        setExercises((prev) =>
-          prev.map((exercise) =>
+        setExerciseLibraryState((prevState) => ({
+          ...prevState,
+          exerciseLibrary: (prevState?.exerciseLibrary || []).map((exercise) =>
             exercise.id === updatedExercise.id ? updatedExercise : exercise,
           ),
-        )
+        }))
       }
 
       setSuccessMessage("Exercise updated successfully.")
@@ -638,7 +739,10 @@ function Exercises({
 
     try {
       await axios.delete(`${API_URL}${selectedExercise.id}/`, buildRequestConfig())
-      setExercises((prev) => prev.filter((exercise) => exercise.id !== selectedExercise.id))
+      setExerciseLibraryState((prevState) => ({
+        ...prevState,
+        exerciseLibrary: (prevState?.exerciseLibrary || []).filter((exercise) => exercise.id !== selectedExercise.id),
+      }))
       setSuccessMessage("Exercise deleted successfully.")
     } catch (error) {
       if (error?.response?.status === 401 || error?.response?.status === 403) {
@@ -758,7 +862,7 @@ function Exercises({
           ) : filteredAndSortedLibrary.length === 0 ? (
             <p className="exercise-empty" role="status">No exercises found.</p>
           ) : (
-            filteredAndSortedLibrary.map((exercise, index) => {
+            visibleExercises.map((exercise, index) => {
               const exerciseImageUrl = getExerciseImageUrl(exercise)
               return (
               <article
@@ -807,6 +911,13 @@ function Exercises({
             })
           )}
         </div>
+        {!isExerciseLibraryLoading && hasMoreVisibleExercises ? (
+          <div className="exercise-search-actions">
+            <button type="button" className="exercise-secondary-btn" onClick={handleLoadMoreExercises}>
+              Load More
+            </button>
+          </div>
+        ) : null}
       </section>
       <section className="exercise-form-panel">
         <div className="exercise-search-header">
@@ -933,78 +1044,123 @@ function Exercises({
               </label>
 
               <label className="exercise-field">
-                <span>Description</span>
-                <input
-                  type="text"
-                  name="description"
-                  value={formValues.description}
+                <span>Instructions</span>
+                <textarea
+                  name="instructions"
+                  value={Array.isArray(formValues.detail.instructions) ? "" : formValues.detail.instructions || ""}
                   onChange={handleAddChange}
-                  placeholder="Optional details"
-                />
-                {fieldErrors.description ? <small className="exercise-field-error">{fieldErrors.description}</small> : null}
+                  rows={4}
+                  maxLength={1000}
+                  placeholder="Type instructions here..."
+                ></textarea>
+                {fieldErrors.instructions ? (
+                <small className="exercise-field-error">
+                  {Array.isArray(fieldErrors.instructions) ? fieldErrors.instructions[0] : fieldErrors.instructions}
+                </small>
+              ) : null}
               </label>
 
               <label className="exercise-field">
-                <span>Muscle</span>
-                <MultiSelect
-                  type="dropdown"
-                  options={muscleChoices}
-                  value={formValues.muscle || []}
-                  onChange={(selectedValues) => handleAddChange({ target: { name: "muscle", value: selectedValues } })}
-                  name="muscle"
-                />
-                {fieldErrors.muscle ? <small className="exercise-field-error">{fieldErrors.muscle}</small> : null}
+                <span>Category</span>
+                <select
+                  name="category"
+                  value={typeof formValues.category === "string" ? formValues.category : ""}
+                  onChange={handleAddChange}
+                  disabled={isChoicesLoading}
+                  required
+                >
+                  <option value="">{isChoicesLoading ? "Loading categories..." : "Select category"}</option>
+                  {categoryChoices.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.category ? <small className="exercise-field-error">{fieldErrors.category}</small> : null}
               </label>
+
               <label className="exercise-field">
                 <span>Equipment</span>
-                <MultiSelect
-                  type="dropdown"
-                  options={equipmentChoices}
-                  value={formValues.equipment || []}
-                  onChange={(selectedValues) => handleAddChange({ target: { name: "equipment", value: selectedValues } })}
+                <select
                   name="equipment"
-                />
+                  value={formValues.equipment}
+                  onChange={handleAddChange}
+                  disabled={isChoicesLoading}
+                  required
+                >
+                  <option value="">{isChoicesLoading ? "Loading equipment..." : "Select equipment"}</option>
+                  {equipmentChoices.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
                 {fieldErrors.equipment ? <small className="exercise-field-error">{fieldErrors.equipment}</small> : null}
               </label>
+
               <label className="exercise-field">
-                <span>Goal</span>
-                <MultiSelect
-                  type="dropdown"
-                  options={goalChoices}
-                  value={formValues.goal || []}
-                  onChange={(selectedValues) => handleAddChange({ target: { name: "goal", value: selectedValues } })}
-                  name="goal"
-                />
-                {fieldErrors.goal ? <small className="exercise-field-error">{fieldErrors.goal}</small> : null}
+                <span>Primary Muscle</span>
+                <select
+                  name="primary_muscle_group"
+                  value={formValues.primary_muscle_group}
+                  onChange={handleAddChange}
+                  disabled={isChoicesLoading}
+                  required
+                >
+                  <option value="">{isChoicesLoading ? "Loading muscle groups..." : "Select muscle group"}</option>
+                  {muscleChoices.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.primary_muscle_group ? <small className="exercise-field-error">{fieldErrors.primary_muscle_group}</small> : null}
               </label>
               <label className="exercise-field">
-                <span>Difficulty</span>
-                <RadialSelect
-                  type="dropdown"
-                  options={difficultyChoices}
-                  value={formValues.difficulty || []}
-                  onChange={(selectedValues) => handleAddChange({ target: { name: "difficulty", value: selectedValues } })}
-                  name="difficulty"
-                />
-                {fieldErrors.difficulty ? <small className="exercise-field-error">{fieldErrors.difficulty}</small> : null}
+                <span>Secondary Muscle</span>
+                <select
+                  name="secondary_muscle_group"
+                  value={formValues.secondary_muscle_group}
+                  onChange={handleAddChange}
+                  disabled={isChoicesLoading}
+                >
+                  <option value="">{isChoicesLoading ? "Loading muscle groups..." : "Select muscle group"}</option>
+                  {muscleChoices.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.secondary_muscle_group ? <small className="exercise-field-error">{fieldErrors.secondary_muscle_group}</small> : null}
               </label>
               <label className="exercise-field">
-                <span>Primary Muscle Group</span>
-                <MultiSelect
-                  type="dropdown"
-                  options={muscleChoices}
-                  value={formValues.primaryMuscle || []}
-                  onChange={(selectedValues) => handleAddChange({ target: { name: "primaryMuscle", value: selectedValues } })}
-                  name="primaryMuscle"
+                <span>Image Upload</span>
+                <input
+                  type="file"
+                  name="image"
+                  accept="image/*"
+                  onChange={handleAddChange}
                 />
-                {fieldErrors.primaryMuscle ? <small className="exercise-field-error">{fieldErrors.primaryMuscle}</small> : null}
+                {fieldErrors.image_upload ? <small className="exercise-field-error">{fieldErrors.image_upload}</small> : null}
               </label>
 
+              <label className="exercise-checkbox">
+                <input
+                  type="checkbox"
+                  name="is_public"
+                  checked={formValues.is_public}
+                  onChange={handleAddChange}
+                />
+                Public exercise
+              </label>
+              {fieldErrors.is_public ? <small className="exercise-field-error">{fieldErrors.is_public}</small> : null}
 
 
 
               <div className="exercise-form-actions">
-                <button type="submit" className="exercise-primary-btn">Add</button>
+                <button type="submit" className="exercise-primary-btn" disabled={isSubmitting}>
+                  {isSubmitting ? "Adding..." : "Add"}
+                </button>
               </div>
             </form>
             {errorMessage && <p className="exercise-form-error">{errorMessage}</p>}
@@ -1211,25 +1367,6 @@ function Exercises({
                 </select>
                 {editFieldErrors.primary_muscle_group ? <small className="exercise-field-error">{editFieldErrors.primary_muscle_group}</small> : null}
               </label>
-              <label className="exercise-field">
-                <span>Goal</span>
-                <select
-                  name="goal"
-                  value={editFormValues.goal}
-                  onChange={handleEditChange}
-                  disabled={isChoicesLoading}
-                  required
-                >
-                  <option value="">{isChoicesLoading ? "Loading goals..." : "Select goal"}</option>
-                  {goalChoices.map((choice) => (
-                    <option key={choice.value} value={choice.value}>
-                      {choice.label}Ctrl+
-                    </option>
-                  ))}
-                </select>
-                {editFieldErrors.goal ? <small className="exercise-field-error">{editFieldErrors.goal}</small> : null}
-              </label>
-
               <label className="exercise-checkbox">
                 <input
                   type="checkbox"

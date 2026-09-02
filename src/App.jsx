@@ -133,7 +133,6 @@ function App() {
     searchName: "",
     difficulty: [],
     category: [], 
-    goal: [], 
     equipment: [],
     muscle: [],
     bodyPart: [],
@@ -167,7 +166,6 @@ function App() {
       searchName: "",
       difficulty: [],
       category: [], 
-      goal: [], 
       equipment: [],
       muscle: [],
       bodyPart: [],
@@ -273,22 +271,17 @@ function App() {
           <Route path="exercises" element={<Exercises 
             exerciseLibraryState={exerciseLibraryState} 
             setExerciseLibraryState={setExerciseLibraryState}
-            currentPage={currentPage}
-            setCurrentPage={setCurrentPage}
             handleClearFilters={handleClearFilters}
             sortOrder={sortOrder}
             setSortOrder={setSortOrder}
             filters={filters}
             isChoicesLoading={isChoicesLoading}
             setIsChoicesLoading={setIsChoicesLoading}
-            goalChoices={goalChoices}
-            difficultyChoices={difficultyChoices}
             categoryChoices={categoryChoices}
             equipmentChoices={equipmentChoices}
             muscleChoices={muscleChoices}
             bodyPartChoices={bodyPartChoices}
             targetChoices={targetChoices}
-            choicesErrorMessage={choicesErrorMessage}
             setFilters={setFilters}
             handleFilterChange={handleFilterChange}
           />} />

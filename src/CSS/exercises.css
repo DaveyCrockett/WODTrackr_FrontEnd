@@ -285,6 +285,7 @@
 
 .exercise-search-actions {
   margin-top: 0.75rem;
+  text-align: center;
 }
 
 .exercise-list {
@@ -303,17 +304,17 @@
 }
 
 .exercise-secondary-btn {
-  border: 1px solid #cbd5e1;
+  border: none;
   border-radius: 10px;
   padding: 0.5rem 0.75rem;
-  background: #ffffff;
-  color: #334155;
+  background: #307cec;
+  color: #ffffff;
   font-weight: 600;
   cursor: pointer;
 }
 
 .exercise-secondary-btn:hover {
-  background: #f8fafc;
+  background: #2767c9;
 }
 
 .exercise-header-title {

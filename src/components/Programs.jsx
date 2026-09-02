@@ -940,7 +940,7 @@ function Programs({
 }) {
   const [searchName, setSearchName] = useState("")
   const [errorMessage, setErrorMessage] = useState("")
-  const resolvedFilters = filters ?? { difficulty: [], category: [], goal: [], equipment: [] }
+  const resolvedFilters = filters ?? { difficulty: [], category: [], equipment: [] }
   const resolvedExerciseLibraryState = exerciseLibraryState ?? {
     exerciseLibrary: [],
     isExerciseLibraryLoading: false,
@@ -1177,7 +1177,6 @@ const buildRequestConfig = (overrides = {}) => {
     const fromPrograms = programs.map((p) => p?.goal).filter(Boolean)
     return [...new Set(fromPrograms)].sort().map((v) => ({ value: v, label: v }))
   }, [programs, goalChoices])
-  const goalFilterOptions = goals
 
   const equipments = useMemo(() => {
     if (equipmentChoices.length > 0) {
@@ -1217,7 +1216,6 @@ const buildRequestConfig = (overrides = {}) => {
   const createEquipmentValues = normalizeEquipmentValues(createFormValues.equipment)
   const editEquipmentValues = normalizeEquipmentValues(editFormValues.equipment)
   const filterCategoryValues = Array.isArray(resolvedFilters.category) ? resolvedFilters.category : []
-  const filterGoalValues = Array.isArray(resolvedFilters.goal) ? resolvedFilters.goal : []
   const filterEquipmentValues = Array.isArray(resolvedFilters.equipment) ? resolvedFilters.equipment : []
   const filterDifficultyValues = Array.isArray(resolvedFilters.difficulty) ? resolvedFilters.difficulty : []
 
@@ -1241,10 +1239,6 @@ const buildRequestConfig = (overrides = {}) => {
       result = result.filter((program) => filterCategoryValues.includes(program?.category))
     }
 
-    if (filterGoalValues.length > 0) {
-      result = result.filter((program) => filterGoalValues.includes(program?.goal))
-    }
-
     if (filterEquipmentValues.length > 0) {
       result = result.filter((program) => {
         const values = canonicalizeEquipmentValues(getProgramEquipmentValues(program), equipmentChoices)
@@ -1259,7 +1253,7 @@ const buildRequestConfig = (overrides = {}) => {
     })
 
     return result
-  }, [programs, searchName, sortOrder, filterDifficultyValues, filterCategoryValues, filterGoalValues, filterEquipmentValues, equipmentChoices])
+  }, [programs, searchName, sortOrder, filterDifficultyValues, filterCategoryValues, filterEquipmentValues, equipmentChoices])
   const filterEquipmentOptions = equipments
 
   const totalPages = Math.max(1, Math.ceil(filteredAndSortedLibrary.length / PROGRAMS_PER_PAGE))
@@ -1312,7 +1306,7 @@ const buildRequestConfig = (overrides = {}) => {
   const handleClearFilters = () => {
     setSearchName("")
     setSortOrder("asc")
-    setFilters({ difficulty: [], category: [], goal: [], equipment: [] })
+    setFilters({ difficulty: [], category: [], equipment: [] })
     setCurrentPage(1)
   }
 
@@ -2224,16 +2218,6 @@ const buildRequestConfig = (overrides = {}) => {
               value={filterCategoryValues}
               onChange={(selected) => handleFilterChange("category", selected)}
               name="filter-category"
-            />
-          </div>
-
-          <div className="programs-filter-group">
-            <span className="programs-filter-label">Goal</span>
-            <MultiSelect
-              options={filterGoalOptions}
-              value={filterGoalValues}
-              onChange={(selected) => handleFilterChange("goal", selected)}
-              name="filter-goal"
             />
           </div>
 
