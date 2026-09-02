@@ -221,56 +221,60 @@ const getExerciseGifUrl = (exercise) => {
   return typeof videoValue === "string" ? videoValue.trim() : ""
 }
 
-const normalizeMediaUrlForFrontend = (urlValue) => {
+const normalizeMediaUrlForFrontend =  (urlValue) => {
+  console.log("normalizeMediaUrlForFrontend called with urlValue:", urlValue)
   const trimmedUrl = typeof urlValue === "string" ? urlValue.trim() : ""
-  if (!trimmedUrl) {
+  const relativeTrimmedUrl = trimmedUrl.replace(/^https?:\/\/[^/]+/i, "")
+  console.log("trimmedUrl:", trimmedUrl)
+  console.log("relativeTrimmedUrl:", relativeTrimmedUrl)
+  
+  if (!relativeTrimmedUrl) {
     return ""
   }
 
   if (!import.meta.env.DEV) {
-    return trimmedUrl
+    return relativeTrimmedUrl
   }
 
-  if (trimmedUrl.startsWith("/media/")) {
-    return trimmedUrl
-  }
+  // if (relativeTrimmedUrl.startsWith("/media/")) {
+  //   return relativeTrimmedUrl
+  // }
 
-  if (trimmedUrl.startsWith("media/")) {
-    return `/${trimmedUrl}`
-  }
+  // if (relativeTrimmedUrl.startsWith("media/")) {
+  //   return `/${relativeTrimmedUrl}`
+  // }
 
-  if (trimmedUrl.startsWith("exercise_dataset/")) {
-    return `/media/${trimmedUrl}`
-  }
+  // if (relativeTrimmedUrl.startsWith("exercise_dataset/")) {
+  //   return `/media/${relativeTrimmedUrl}`
+  // }
 
-  const mediaPathIndex = trimmedUrl.indexOf("/media/")
-  if (mediaPathIndex >= 0) {
-    return trimmedUrl.slice(mediaPathIndex)
-  }
-
-  const hostlessMediaMatch = trimmedUrl.match(/^[^\s/]+:\d+\/(media\/.*)$/i)
+  const hostlessMediaMatch = relativeTrimmedUrl.match(/^[^\s/]+:\d+\/(media\/.*)$/i)
   if (hostlessMediaMatch?.[1]) {
     return `/${hostlessMediaMatch[1]}`
   }
 
   try {
-    const candidateUrl = /^https?:\/\//i.test(trimmedUrl) ? trimmedUrl : `http://${trimmedUrl}`
-    const parsedUrl = new URL(candidateUrl, window.location.origin)
-    if (parsedUrl.pathname.startsWith("/media/")) {
-      return `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`
+    const candidateUrl = /^https?:\/\//i.test(relativeTrimmedUrl) ? relativeTrimmedUrl : `http://${relativeTrimmedUrl}`
+    if (candidateUrl.startsWith("/media/")) {
+      return candidateUrl
     }
   } catch {
-    return trimmedUrl
+    return relativeTrimmedUrl
   }
 
-  return trimmedUrl
+  return relativeTrimmedUrl
 }
 
 const getExerciseImageUrl = (exercise) => {
   if (!exercise || typeof exercise !== "object") {
     return ""
   }
+
+  const uploadedData = exercise?.image_upload ?? ""
+  const imageUploadValue = typeof uploadedData === "string" && uploadedData !== null ? (uploadedData?.url || uploadedData || uploadedData.path) : uploadedData
+  
   const imageValue =
+    imageUploadValue ??
     exercise?.image ??
     exercise?.imageAbsoluteUrl ??
     exercise?.image_url ??
@@ -281,9 +285,7 @@ const getExerciseImageUrl = (exercise) => {
     exercise?.exerciseImage ??
     exercise?.thumbnail_url ??
     exercise?.thumbnailUrl ??
-    exercise?.image ??
     ""
-
   return normalizeMediaUrlForFrontend(imageValue)
 }
 
@@ -869,7 +871,8 @@ function Exercises({
             <p className="exercise-empty" role="status">No exercises found.</p>
           ) : (
             visibleExercises.map((exercise, index) => {
-              const exerciseImageUrl = getExerciseImageUrl(exercise)
+              const exerciseImageUrl = String(getExerciseImageUrl(exercise))
+              console.log("exerciseImageUrl:", exerciseImageUrl)
               return (
               <article
                 className={`exercise-item ${(exercise.id ?? null) === selectedExerciseId ? "exercise-item-selected" : ""}`}
@@ -1177,7 +1180,7 @@ function Exercises({
           </aside>
         </div>
       ) : null}
-
+      
       {isDetailsModalOpen && selectedExercise ? (
         <div className="exercise-backdrop" role="presentation" onClick={handleCloseExerciseDetailsModal}>
           <aside
@@ -1189,8 +1192,7 @@ function Exercises({
           >
             <header className="exercise-modal-header">
               <div>
-                <h2 id="exercise-details-modal-title">Exercise Details</h2>
-                <p>Select an exercise from the library to review details.</p>
+                <h2 className="exercise-modal-title">{selectedExercise.name}</h2>
               </div>
               <div className="exercise-header-actions">
                 {canEditSelectedExercise ? (
@@ -1208,20 +1210,19 @@ function Exercises({
                 </button>
               </div>
             </header>
-          </aside>
-          <section className="exercise-details" aria-live="polite">
-            <h3>{selectedExercise.name}</h3>
+               <section className="exercise-details" aria-live="polite">
+            
             <p className="exercise-meta">
-              <strong>Category:</strong> {categoryLookup[selectedExercise.category] || selectedExercise.category || "N/A"}
+              <strong>Category:</strong> {selectedExercise.category || "N/A"}
             </p>
             <p className="exercise-meta">
-              <strong>Equipment:</strong> {equipmentLookup[selectedExercise.equipment] || selectedExercise.equipment || "N/A"}
+              <strong>Equipment:</strong> {selectedExercise.equipment || "N/A"}
             </p>
             <p className="exercise-meta">
               <strong>Muscle:</strong> {selectedExercise.primary_muscle_group || "N/A"}
             </p>
             <p className="exercise-meta">
-              <strong>Description:</strong> {selectedExercise.description || "No description provided."}
+              <strong>Instructions:</strong> {String(selectedExercise.details?.instructions) || "No description provided."}
             </p>
             <p className="exercise-meta">
               <strong>Created by:</strong> {selectedExercise.created_by_username || selectedExercise.username || selectedExercise.created_by || "Unknown"}
@@ -1246,6 +1247,8 @@ function Exercises({
               </button>
             ) : null}
           </section>
+          </aside>
+       
         </div>
       ) : null}
       {isEditModalOpen ? (
