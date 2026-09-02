@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { validateExerciseForm } from "../utils/exerciseUtils"
 import FilterIcon from "../assets/filter.png"
 import MultiSelect from "./MultiSelect"
+import ExerciseSteps from "./ExerciseSteps"
 
 const API_URL = "/api/wodtrackr/exercises/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 const CUSTOM_EXERCISES_API_URL = "/api/wodtrackr/custom-exercises/"
-const PAGE_SIZE = 6
+const PAGE_SIZE = 18
 const SKELETON_CARD_COUNT = 6
 const buildApiUrl = (path = "") => `${API_URL}${String(path).replace(/^\/+/, "")}`
 const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
@@ -310,7 +311,7 @@ const getFieldErrorsFromResponse = (data) => {
 
 const getExerciseFormValues = (exercise) => ({
   name: exercise?.name || "",
-  instructions: exercise?.detail.instructions || [],
+  instructions: exercise?.detail?.instructions || [],
   category: exercise?.category || "",
   equipment: exercise?.equipment || "",
   secondary_muscle_group: exercise?.secondary_muscle_group || "",
@@ -1214,6 +1215,7 @@ function Exercises({
               
 
                <section className="exercise-details" aria-live="polite">
+                {console.log("selectedExercise:", selectedExercise)}
             
             <p className="exercise-meta">
               <strong>Category:</strong> {selectedExercise.category || "N/A"}
@@ -1225,7 +1227,7 @@ function Exercises({
               <strong>Muscle:</strong> {selectedExercise.primary_muscle_group || "N/A"}
             </p>
             <p className="exercise-meta">
-              <strong>Instructions:</strong> {String(selectedExercise.details?.instructions) || "No description provided."}
+              <strong>Instructions:</strong> {selectedExercise.instructions.en || "No description provided."}
             </p>
             <p className="exercise-meta">
               <strong>Created by:</strong> {selectedExercise.created_by_username || selectedExercise.username || selectedExercise.created_by || "Unknown"}
@@ -1239,6 +1241,9 @@ function Exercises({
             <p className="exercise-meta">
               <strong>Updated:</strong> {formatTimestamp(selectedExercise.updated_at)}
             </p>
+            <div className="exercise-meta">
+              <strong>Steps:</strong> <ExerciseSteps instruction_steps={selectedExercise.instruction_steps || {}} />
+            </div>
             {canDeleteSelectedExercise ? (
               <button
                 type="button"
