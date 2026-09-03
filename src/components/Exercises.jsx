@@ -388,6 +388,7 @@ function Exercises({
     isExerciseLibraryLoading = false,
     exerciseLibraryError = "",
   } = resolvedExerciseLibraryState
+  
 
 
   useEffect(() => {
@@ -1228,7 +1229,8 @@ function Exercises({
                     </svg>
                   </button>
                 </div>
-                <h2 className="exercise-modal-title">{selectedExercise.name}</h2>
+                <div className="exercise-modal-title-wrapper">
+                <h2 className="exercise-modal-title">{toSubTitleCase(selectedExercise.name)}</h2>
                 {canEditSelectedExercise ? (
                   <button
                     type="button"
@@ -1239,8 +1241,9 @@ function Exercises({
                     Edit Exercise
                   </button>
                 ) : null}
+                </div>
               </header>
-              <div className="exercise-modal-content">
+              <div className="exercise-modal-content-container">
                 <section className="exercise-card-image-wrap">
                   {(() => {
                     const gifExists = () => selectedExercise.gif_url ?? null;
