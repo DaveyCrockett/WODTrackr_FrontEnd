@@ -5,6 +5,7 @@ import { validateExerciseForm } from "../utils/exerciseUtils"
 import FilterIcon from "../assets/filter.png"
 import MultiSelect from "./MultiSelect"
 import ExerciseSteps from "./ExerciseSteps"
+import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
 
 const API_URL = "/api/wodtrackr/exercises/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
@@ -832,13 +833,15 @@ function Exercises({
         <header className="exercise-panel-header">
           <div className="exercise-panel-header-top">
             <h1>Exercise Library</h1>
+              <p>Browse and manage exercises in the library. Use the search and filter options to find specific exercises.</p>
+          </div>
+          <div className="exercise-header-actions">
+            <div className="exercise-counts" aria-live="polite" aria-atomic="true">
+            <span>{filteredAndSortedLibrary ? filteredAndSortedLibrary.length : exerciseLibrary.length} total</span>
+            </div>
             <button className="exercise-primary-btn" type="submit" disabled={isAddModalOpen} onClick={() => handleAddExercise()}>
               Add Exercise
             </button>
-          </div>
-          <p>Browse and manage exercises in the library. Use the search and filter options to find specific exercises.</p>
-          <div className="exercise-counts" aria-live="polite" aria-atomic="true">
-            <span>{filteredAndSortedLibrary ? filteredAndSortedLibrary.length : exerciseLibrary.length} total</span>
           </div>
         </header>
         {isExerciseLibraryLoading ? (
@@ -924,6 +927,7 @@ function Exercises({
       </section>
       <section className="exercise-form-panel">
         <div className="exercise-search-header">
+          <img src={WODTrackrLogo} alt="WODTrackr Logo" />
           <h2>Search & Filter</h2>
           <p>Filter the exercise library by name, category, body part, equipment, muscle group, or target.</p>
         </div>

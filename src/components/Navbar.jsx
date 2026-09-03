@@ -5,8 +5,8 @@ import calendarIcon from "../assets/CalendarIconWhite.png"
 import programsIcon from "../assets/ProgramsIconWhite.png"
 import settingsIcon from "../assets/SettingsIcon.png"
 import helpIcon from "../assets/HelpIcon.png"
-import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
-import DEFAULT_AVATAR from "../assets/WLogo.png"
+import WODTrackrIcon from "../assets/WLogo.png"
+import DEFAULT_AVATAR from "../assets/DefaultAvatar.png"
 const navItems = [
   { label: "Home", to: "/", icon: homeIcon },
   { label: "Exercise", to: "/exercises", icon: exerciseIcon },
@@ -43,7 +43,9 @@ function Navbar() {
   return (
     <nav className="nav-rail">
       <div className="nav-logo">
-        <img src={WODTrackrLogo} alt="WODTrackr logo" />
+        <NavLink to="/">
+          <img src={WODTrackrIcon} alt="WODTrackr logo" />
+        </NavLink>
       </div>
       <div className="nav-links">
         <div className="nav-profile-menu">
