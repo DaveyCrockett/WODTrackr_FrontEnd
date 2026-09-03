@@ -1035,8 +1035,8 @@ function Exercises({
 
             <form className="exercise-form" onSubmit={handleAddSubmit}>
               {errorMessage ? <p className="exercise-error" role="alert">{errorMessage}</p> : null}
-
-              <label className="exercise-field">
+              <div className="add-exercise-fields-container">
+                <label className="exercise-field">
                 <span>Name</span>
                 <input
                   type="text"
@@ -1069,7 +1069,27 @@ function Exercises({
                 </small>
               ) : null}
               </label>
-
+              <label className="exercise-field">
+                <span>Instructions Steps</span>
+                <textarea
+                  name="instruction_steps"
+                  value={Array.isArray(formValues.detail?.instruction_steps) 
+                    ? formValues.detail.instruction_steps.join("\n") // Turns ['Step 1', 'Step 2'] into readable text
+                    : formValues.detail?.instruction_steps || ""
+                  }
+                  onChange={handleAddChange}
+                  rows={4}
+                  maxLength={1000}
+                  placeholder="Type instructions steps here..."
+                />
+                {fieldErrors.instruction_steps ? (
+                <small className="exercise-field-error">
+                  {Array.isArray(fieldErrors.instruction_steps) ? fieldErrors.instruction_steps[0] : fieldErrors.instruction_steps}
+                </small>
+              ) : null}
+              </label>
+              </div>
+              <div className="add-exercise-fields-container">
               <label className="exercise-field">
                 <span>Category</span>
                 <select
@@ -1153,6 +1173,17 @@ function Exercises({
                 />
                 {fieldErrors.image_upload ? <small className="exercise-field-error">{fieldErrors.image_upload}</small> : null}
               </label>
+              <label className="exercise-field">
+                <span>Gif Upload</span>
+                <input
+                  type="file"
+                  name="gif"
+                  accept="videos/*"
+                  onChange={handleAddChange}
+                />
+                {fieldErrors.gif_upload ? <small className="exercise-field-error">{fieldErrors.gif_upload}</small> : null}
+              </label>
+
 
               <label className="exercise-checkbox">
                 <input
@@ -1164,6 +1195,7 @@ function Exercises({
                 Public exercise
               </label>
               {fieldErrors.is_public ? <small className="exercise-field-error">{fieldErrors.is_public}</small> : null}
+              </div>
 
 
 
@@ -1209,13 +1241,13 @@ function Exercises({
                 ) : null}
               </header>
               <div className="exercise-modal-content">
-              <section className="exercise-card-image-wrap">
-                {(() => {
-                  const gifExists = () => selectedExercise.gif_url ?? null;
-                  const gifUrl = normalizeMediaUrlForFrontend(gifExists());
-                  return <img src={gifUrl} alt={selectedExercise.name} className="exercise-card-image" />;
-                })()}
-              </section>
+                <section className="exercise-card-image-wrap">
+                  {(() => {
+                    const gifExists = () => selectedExercise.gif_url ?? null;
+                    const gifUrl = normalizeMediaUrlForFrontend(gifExists());
+                    return <img src={gifUrl} alt={selectedExercise.name} className="exercise-card-image" />;
+                  })()}
+                </section>
               
 
                <section className="exercise-details" aria-live="polite">

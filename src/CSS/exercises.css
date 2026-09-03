@@ -320,8 +320,7 @@
   gap: 1rem;
   height: 100%;
   overflow-y: auto;
-  padding-right: 0.2rem;
-  grid-template-columns: 48% 48%;
+  grid-template-columns: 49% 49%;
 }
 
 .exercise-list-actions {
@@ -443,8 +442,8 @@
 
 .exercise-header {
   display: flex;
-  gap: 0.75rem;
-  flex-direction: column;
+  gap: 1rem;
+  flex-direction: row;
   margin-top: 1rem;
 }
 
@@ -462,13 +461,24 @@
 
 .exercise-form {
   margin-top: 1rem;
-  display: grid;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 0.75rem;
+}
+
+.add-exercise-fields-container {
+  flex: 1 1 calc(50% - 0.75rem);
+}
+
+.exercise-form-actions {
+  flex: 1 1 100%;
+  text-align: center;
 }
 
 .exercise-details {
   margin-top: 1rem;
-  display: grid;
+  flex-direction: column;
   gap: 0.6rem;
   overflow-y: auto;
   min-height: 0;
@@ -549,7 +559,7 @@
 .exercise-modal {
   display: flex;
   flex-direction: column;
-  width: min(400px, 100%);
+  width: min(600px, 100%);
   max-height: calc(100vh - 2rem);
   overflow: auto;
   background: #ffffff;
@@ -571,16 +581,18 @@
 .exercise-modal-close-btn-wrapper {
   flex: .1;
   top: 0rem;
-  left: 0.5rem;
 }
 .exercise-modal-title {
-  flex: 1;
   text-align: center;
 }
 
 .exercise-modal-title-wrapper { 
   color: #0f172a;
   text-align: center;
+  right: 8%;
+  position: relative;
+  flex: .9;
+
 }
 
 .exercise-modal-header p {
