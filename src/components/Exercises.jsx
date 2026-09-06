@@ -1271,10 +1271,12 @@ function Exercises({
                   </div>
                 </div>
                 <div className="exercise-meta-group">
-                    <strong>Instructions:</strong>
-                    <p className="exercise-meta">
+                  <div className="exercise-meta-container">
+                    <strong className="meta-label">Instructions:</strong>
+                    <p className="exercise-meta" id="instructions-description">
                       {selectedExercise.instructions.en || "No description provided."}
                     </p>
+                  </div>
                 </div>
                 <div className="exercise-meta-group">
                   <div className="exercise-meta-container">
@@ -1294,8 +1296,11 @@ function Exercises({
                     
                   </div>
                 <div className="exercise-meta-group">
+                  <div className="exercise-meta-container">
+                  <strong className="meta-label">Steps:</strong>
                   <div className="exercise-meta">
-                  <strong>Steps:</strong> <ExerciseSteps instruction_steps={selectedExercise.instruction_steps || {}} />
+                    <ExerciseSteps instruction_steps={selectedExercise.instruction_steps || {}} />
+                  </div>
                 </div>
                 </div>
                 {canDeleteSelectedExercise ? (

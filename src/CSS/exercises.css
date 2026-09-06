@@ -455,12 +455,22 @@
   margin: 0.28rem 0 0;
   color: #64748b;
   font-size: 0.88rem;
-  text-align: center;
   width: 100%;
   display: flex;
   justify-content: space-between;
-  flex-direction: row;
   flex-flow: row wrap;
+}
+
+.meta-label {
+  width: 100%;
+  text-align: center;
+}
+
+#instructions-description {
+  text-align: left;
+  text-indent: 1.5rem;
+  margin-left: 1rem;
+  margin-right: 1rem;
 }
 
 .exercise-meta-group {
@@ -619,7 +629,7 @@
   justify-content: center;
   align-items: center;
   width: 100%;
-  height: 35%;
+  height: 30%;
 }
 
 .exercise-details-card-image {
