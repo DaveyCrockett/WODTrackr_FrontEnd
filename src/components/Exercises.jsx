@@ -223,9 +223,9 @@ const getExerciseGifUrl = (exercise) => {
   return typeof videoValue === "string" ? videoValue.trim() : ""
 }
 
-const normalizeMediaUrlForFrontend =  (urlValue) => {
+const normalizeMediaUrlForFrontend = (urlValue) => {
   const trimmedUrl = typeof urlValue === "string" ? urlValue.trim() : ""
-  const relativeTrimmedUrl = trimmedUrl.replace(/^https?:\/\/[^/]+/i, "")  
+  const relativeTrimmedUrl = trimmedUrl.replace(/^https?:\/\/[^/]+/i, "")
   if (!relativeTrimmedUrl) {
     return ""
   }
@@ -270,7 +270,7 @@ const getExerciseImageUrl = (exercise) => {
 
   const uploadedData = exercise?.image_upload ?? ""
   const imageUploadValue = typeof uploadedData === "string" && uploadedData !== null ? (uploadedData?.url || uploadedData || uploadedData.path) : uploadedData
-  
+
   const imageValue =
     imageUploadValue ??
     exercise?.image ??
@@ -298,7 +298,7 @@ const getFieldErrorsFromResponse = (data) => {
     return {}
   }
 
-  const possibleFields = ["name", "instructions", "category", "equipment", "primary_muscle_group","secondary_muscle_group", "gif_url", "image_upload", "image_url", "created_by", "is_public"]
+  const possibleFields = ["name", "instructions", "category", "equipment", "primary_muscle_group", "secondary_muscle_group", "gif_url", "image_upload", "image_url", "created_by", "is_public"]
   return possibleFields.reduce((accumulator, fieldName) => {
     const rawValue = data[fieldName]
     if (!rawValue) {
@@ -326,7 +326,7 @@ const getExerciseFormValues = (exercise) => ({
 
 
 function Exercises({
-  handleFilterChange = () => {},
+  handleFilterChange = () => { },
   isChoicesLoading = false,
   categoryChoices = [],
   equipmentChoices = [],
@@ -334,15 +334,15 @@ function Exercises({
   bodyPartChoices = [],
   targetChoices = [],
   exerciseLibraryState,
-  setExerciseLibraryState = () => {},
-  handleSearchChange = () => {},
-  handleSortChange = () => {},
-  handleClearFilters = () => {},
+  setExerciseLibraryState = () => { },
+  handleSearchChange = () => { },
+  handleSortChange = () => { },
+  handleClearFilters = () => { },
   sortOrder = "asc",
-  setSortOrder = () => {},
+  setSortOrder = () => { },
   filters,
-  setFilters = () => {},
-  setIsChoicesLoading = () => {},
+  setFilters = () => { },
+  setIsChoicesLoading = () => { },
 }) {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -388,7 +388,7 @@ function Exercises({
     isExerciseLibraryLoading = false,
     exerciseLibraryError = "",
   } = resolvedExerciseLibraryState
-  
+
 
 
   useEffect(() => {
@@ -406,7 +406,7 @@ function Exercises({
   const filteredAndSortedLibrary = useMemo(() => {
     const library = exerciseLibrary || []
     let result = [...library]
-    
+
     try {
       if (resolvedFilters.searchName.trim()) {
         const query = resolvedFilters.searchName.trim().toLowerCase()
@@ -567,7 +567,7 @@ function Exercises({
 
   const handleAddChange = (event) => {
     const { name, value, type, checked, files } = event.target
-    const inputValue = type === "textarea" ? value :  value;
+    const inputValue = type === "textarea" ? value : value;
     setFormValues((prev) => {
       if (name === "instructions") {
         return {
@@ -834,11 +834,11 @@ function Exercises({
         <header className="exercise-panel-header">
           <div className="exercise-panel-header-top">
             <h1>Exercise Library</h1>
-              <p>Browse and manage exercises in the library. Use the search and filter options to find specific exercises.</p>
+            <p>Browse and manage exercises in the library. Use the search and filter options to find specific exercises.</p>
           </div>
           <div className="exercise-header-actions">
             <div className="exercise-counts" aria-live="polite" aria-atomic="true">
-            <span>{filteredAndSortedLibrary ? filteredAndSortedLibrary.length : exerciseLibrary.length} total</span>
+              <span>{filteredAndSortedLibrary ? filteredAndSortedLibrary.length : exerciseLibrary.length} total</span>
             </div>
             <button className="exercise-primary-btn" type="submit" disabled={isAddModalOpen} onClick={() => handleAddExercise()}>
               Add Exercise
@@ -872,48 +872,48 @@ function Exercises({
             visibleExercises.map((exercise, index) => {
               const exerciseImageUrl = String(getExerciseImageUrl(exercise))
               return (
-              <article
-                className={`exercise-item ${(exercise.id ?? null) === selectedExerciseId ? "exercise-item-selected" : ""}`}
-                key={exercise.id ?? index}
-                id={exercise.id ? `exercise-option-${exercise.id}` : undefined}
-                role="option"
-                aria-selected={(exercise.id ?? null) === selectedExerciseId}
-                tabIndex={(exercise.id ?? null) === selectedExerciseId ? 0 : -1}
-                onClick={() => handleOpenExerciseDetailsModal(exercise.id ?? null)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault()
-                    handleOpenExerciseDetailsModal(exercise.id ?? null)
-                  }
-                }}
-              >
-                {exerciseImageUrl ? (
-                  <div className="exercise-card-image-wrap" aria-hidden="true">
-                    <img
-                      src={exerciseImageUrl}
-                      alt=""
-                      loading="lazy"
-                      className="exercise-card-image"
-                      onError={(event) => {
-                        event.currentTarget.style.display = "none"
-                      }}
-                    />
+                <article
+                  className={`exercise-item ${(exercise.id ?? null) === selectedExerciseId ? "exercise-item-selected" : ""}`}
+                  key={exercise.id ?? index}
+                  id={exercise.id ? `exercise-option-${exercise.id}` : undefined}
+                  role="option"
+                  aria-selected={(exercise.id ?? null) === selectedExerciseId}
+                  tabIndex={(exercise.id ?? null) === selectedExerciseId ? 0 : -1}
+                  onClick={() => handleOpenExerciseDetailsModal(exercise.id ?? null)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault()
+                      handleOpenExerciseDetailsModal(exercise.id ?? null)
+                    }
+                  }}
+                >
+                  {exerciseImageUrl ? (
+                    <div className="exercise-card-image-wrap" aria-hidden="true">
+                      <img
+                        src={exerciseImageUrl}
+                        alt=""
+                        loading="lazy"
+                        className="exercise-card-image"
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none"
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="exercise-item-content">
+                    <h3 className="exercise-header-title">{(exercise.title || exercise.name || "Exercise").toUpperCase()}</h3>
+                    <div className="exercise-header">
+                      <p className="exercise-meta"><strong>Visibility:</strong> {capitalizeFirstLetter(exercise.is_public ? "Public" : "Private")}</p>
+                      <p className="exercise-meta"><strong>Category:</strong> {capitalizeFirstLetter(exercise.category)}</p>
+                      <p className="exercise-meta">
+                        <strong>Primary Muscle:</strong> {capitalizeFirstLetter(exercise.primary_muscle_group)}
+                      </p>
+                      <p className="exercise-meta">
+                        <strong>Created by:</strong> {capitalizeFirstLetter(exercise.created_by_username || exercise.username || exercise.created_by || "Unknown")}
+                      </p>
+                    </div>
                   </div>
-                ) : null}
-                <div className="exercise-item-content">
-                  <h3 className="exercise-header-title">{(exercise.title || exercise.name || "Exercise").toUpperCase()}</h3>
-                  <div className="exercise-header">
-                    <p className="exercise-meta"><strong>Visibility:</strong> {capitalizeFirstLetter(exercise.is_public ? "Public" : "Private")}</p>
-                    <p className="exercise-meta"><strong>Category:</strong> {capitalizeFirstLetter(exercise.category)}</p>
-                    <p className="exercise-meta">
-                      <strong>Primary Muscle:</strong> {capitalizeFirstLetter(exercise.primary_muscle_group)}
-                    </p>
-                    <p className="exercise-meta">
-                      <strong>Created by:</strong> {capitalizeFirstLetter(exercise.created_by_username || exercise.username || exercise.created_by || "Unknown")} 
-                    </p>
-                  </div>
-                </div>
-              </article>
+                </article>
               )
             })
           )}
@@ -1038,164 +1038,164 @@ function Exercises({
               {errorMessage ? <p className="exercise-error" role="alert">{errorMessage}</p> : null}
               <div className="add-exercise-fields-container">
                 <label className="exercise-field">
-                <span>Name</span>
-                <input
-                  type="text"
-                  name="name"
-                  value={formValues.name}
-                  onChange={handleAddChange}
-                  placeholder="Exercise name"
-                  maxLength={200}
-                  required
-                />
-                {fieldErrors.name ? <small className="exercise-field-error">{fieldErrors.name}</small> : null}
-              </label>
+                  <span>Name</span>
+                  <input
+                    type="text"
+                    name="name"
+                    value={formValues.name}
+                    onChange={handleAddChange}
+                    placeholder="Exercise name"
+                    maxLength={200}
+                    required
+                  />
+                  {fieldErrors.name ? <small className="exercise-field-error">{fieldErrors.name}</small> : null}
+                </label>
 
-              <label className="exercise-field">
-                <span>Instructions</span>
-                <textarea
-                  name="instructions"
-                  value={Array.isArray(formValues.detail?.instructions) 
-                    ? formValues.detail.instructions.join("\n") // Turns ['Step 1', 'Step 2'] into readable text
-                    : formValues.detail?.instructions || ""
-                  }
-                  onChange={handleAddChange}
-                  rows={4}
-                  maxLength={1000}
-                  placeholder="Type instructions here..."
-                />
-                {fieldErrors.instructions ? (
-                <small className="exercise-field-error">
-                  {Array.isArray(fieldErrors.instructions) ? fieldErrors.instructions[0] : fieldErrors.instructions}
-                </small>
-              ) : null}
-              </label>
-              <label className="exercise-field">
-                <span>Instructions Steps</span>
-                <textarea
-                  name="instruction_steps"
-                  value={Array.isArray(formValues.detail?.instruction_steps) 
-                    ? formValues.detail.instruction_steps.join("\n") // Turns ['Step 1', 'Step 2'] into readable text
-                    : formValues.detail?.instruction_steps || ""
-                  }
-                  onChange={handleAddChange}
-                  rows={4}
-                  maxLength={1000}
-                  placeholder="Type instructions steps here..."
-                />
-                {fieldErrors.instruction_steps ? (
-                <small className="exercise-field-error">
-                  {Array.isArray(fieldErrors.instruction_steps) ? fieldErrors.instruction_steps[0] : fieldErrors.instruction_steps}
-                </small>
-              ) : null}
-              </label>
+                <label className="exercise-field">
+                  <span>Instructions</span>
+                  <textarea
+                    name="instructions"
+                    value={Array.isArray(formValues.detail?.instructions)
+                      ? formValues.detail.instructions.join("\n") // Turns ['Step 1', 'Step 2'] into readable text
+                      : formValues.detail?.instructions || ""
+                    }
+                    onChange={handleAddChange}
+                    rows={4}
+                    maxLength={1000}
+                    placeholder="Type instructions here..."
+                  />
+                  {fieldErrors.instructions ? (
+                    <small className="exercise-field-error">
+                      {Array.isArray(fieldErrors.instructions) ? fieldErrors.instructions[0] : fieldErrors.instructions}
+                    </small>
+                  ) : null}
+                </label>
+                <label className="exercise-field">
+                  <span>Instructions Steps</span>
+                  <textarea
+                    name="instruction_steps"
+                    value={Array.isArray(formValues.detail?.instruction_steps)
+                      ? formValues.detail.instruction_steps.join("\n") // Turns ['Step 1', 'Step 2'] into readable text
+                      : formValues.detail?.instruction_steps || ""
+                    }
+                    onChange={handleAddChange}
+                    rows={4}
+                    maxLength={1000}
+                    placeholder="Type instructions steps here..."
+                  />
+                  {fieldErrors.instruction_steps ? (
+                    <small className="exercise-field-error">
+                      {Array.isArray(fieldErrors.instruction_steps) ? fieldErrors.instruction_steps[0] : fieldErrors.instruction_steps}
+                    </small>
+                  ) : null}
+                </label>
               </div>
               <div className="add-exercise-fields-container">
-              <label className="exercise-field">
-                <span>Category</span>
-                <select
-                  name="category"
-                  value={typeof formValues.category === "string" ? formValues.category : ""}
-                  onChange={handleAddChange}
-                  disabled={isChoicesLoading}
-                  required
-                >
-                  <option value="">{isChoicesLoading ? "Loading categories..." : "Select category"}</option>
-                  {categoryChoices.map((choice) => (
-                    <option key={choice.value} value={choice.value}>
-                      {choice.label}
-                    </option>
-                  ))}
-                </select>
-                {fieldErrors.category ? <small className="exercise-field-error">{fieldErrors.category}</small> : null}
-              </label>
+                <label className="exercise-field">
+                  <span>Category</span>
+                  <select
+                    name="category"
+                    value={typeof formValues.category === "string" ? formValues.category : ""}
+                    onChange={handleAddChange}
+                    disabled={isChoicesLoading}
+                    required
+                  >
+                    <option value="">{isChoicesLoading ? "Loading categories..." : "Select category"}</option>
+                    {categoryChoices.map((choice) => (
+                      <option key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </select>
+                  {fieldErrors.category ? <small className="exercise-field-error">{fieldErrors.category}</small> : null}
+                </label>
 
-              <label className="exercise-field">
-                <span>Equipment</span>
-                <select
-                  name="equipment"
-                  value={formValues.equipment}
-                  onChange={handleAddChange}
-                  disabled={isChoicesLoading}
-                  required
-                >
-                  <option value="">{isChoicesLoading ? "Loading equipment..." : "Select equipment"}</option>
-                  {equipmentChoices.map((choice) => (
-                    <option key={choice.value} value={choice.value}>
-                      {choice.label}
-                    </option>
-                  ))}
-                </select>
-                {fieldErrors.equipment ? <small className="exercise-field-error">{fieldErrors.equipment}</small> : null}
-              </label>
+                <label className="exercise-field">
+                  <span>Equipment</span>
+                  <select
+                    name="equipment"
+                    value={formValues.equipment}
+                    onChange={handleAddChange}
+                    disabled={isChoicesLoading}
+                    required
+                  >
+                    <option value="">{isChoicesLoading ? "Loading equipment..." : "Select equipment"}</option>
+                    {equipmentChoices.map((choice) => (
+                      <option key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </select>
+                  {fieldErrors.equipment ? <small className="exercise-field-error">{fieldErrors.equipment}</small> : null}
+                </label>
 
-              <label className="exercise-field">
-                <span>Primary Muscle</span>
-                <select
-                  name="primary_muscle_group"
-                  value={formValues.primary_muscle_group}
-                  onChange={handleAddChange}
-                  disabled={isChoicesLoading}
-                  required
-                >
-                  <option value="">{isChoicesLoading ? "Loading muscle groups..." : "Select muscle group"}</option>
-                  {muscleChoices.map((choice) => (
-                    <option key={choice.value} value={choice.value}>
-                      {choice.label}
-                    </option>
-                  ))}
-                </select>
-                {fieldErrors.primary_muscle_group ? <small className="exercise-field-error">{fieldErrors.primary_muscle_group}</small> : null}
-              </label>
-              <label className="exercise-field">
-                <span>Secondary Muscle</span>
-                <select
-                  name="secondary_muscle_group"
-                  value={formValues.secondary_muscle_group}
-                  onChange={handleAddChange}
-                  disabled={isChoicesLoading}
-                >
-                  <option value="">{isChoicesLoading ? "Loading muscle groups..." : "Select muscle group"}</option>
-                  {muscleChoices.map((choice) => (
-                    <option key={choice.value} value={choice.value}>
-                      {choice.label}
-                    </option>
-                  ))}
-                </select>
-                {fieldErrors.secondary_muscle_group ? <small className="exercise-field-error">{fieldErrors.secondary_muscle_group}</small> : null}
-              </label>
-              <label className="exercise-field">
-                <span>Image Upload</span>
-                <input
-                  type="file"
-                  name="image"
-                  accept="image/*"
-                  onChange={handleAddChange}
-                />
-                {fieldErrors.image_upload ? <small className="exercise-field-error">{fieldErrors.image_upload}</small> : null}
-              </label>
-              <label className="exercise-field">
-                <span>Gif Upload</span>
-                <input
-                  type="file"
-                  name="gif"
-                  accept="videos/*"
-                  onChange={handleAddChange}
-                />
-                {fieldErrors.gif_upload ? <small className="exercise-field-error">{fieldErrors.gif_upload}</small> : null}
-              </label>
+                <label className="exercise-field">
+                  <span>Primary Muscle</span>
+                  <select
+                    name="primary_muscle_group"
+                    value={formValues.primary_muscle_group}
+                    onChange={handleAddChange}
+                    disabled={isChoicesLoading}
+                    required
+                  >
+                    <option value="">{isChoicesLoading ? "Loading muscle groups..." : "Select muscle group"}</option>
+                    {muscleChoices.map((choice) => (
+                      <option key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </select>
+                  {fieldErrors.primary_muscle_group ? <small className="exercise-field-error">{fieldErrors.primary_muscle_group}</small> : null}
+                </label>
+                <label className="exercise-field">
+                  <span>Secondary Muscle</span>
+                  <select
+                    name="secondary_muscle_group"
+                    value={formValues.secondary_muscle_group}
+                    onChange={handleAddChange}
+                    disabled={isChoicesLoading}
+                  >
+                    <option value="">{isChoicesLoading ? "Loading muscle groups..." : "Select muscle group"}</option>
+                    {muscleChoices.map((choice) => (
+                      <option key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </select>
+                  {fieldErrors.secondary_muscle_group ? <small className="exercise-field-error">{fieldErrors.secondary_muscle_group}</small> : null}
+                </label>
+                <label className="exercise-field">
+                  <span>Image Upload</span>
+                  <input
+                    type="file"
+                    name="image"
+                    accept="image/*"
+                    onChange={handleAddChange}
+                  />
+                  {fieldErrors.image_upload ? <small className="exercise-field-error">{fieldErrors.image_upload}</small> : null}
+                </label>
+                <label className="exercise-field">
+                  <span>Gif Upload</span>
+                  <input
+                    type="file"
+                    name="gif"
+                    accept="videos/*"
+                    onChange={handleAddChange}
+                  />
+                  {fieldErrors.gif_upload ? <small className="exercise-field-error">{fieldErrors.gif_upload}</small> : null}
+                </label>
 
 
-              <label className="exercise-checkbox">
-                <input
-                  type="checkbox"
-                  name="is_public"
-                  checked={formValues.is_public}
-                  onChange={handleAddChange}
-                />
-                Public exercise
-              </label>
-              {fieldErrors.is_public ? <small className="exercise-field-error">{fieldErrors.is_public}</small> : null}
+                <label className="exercise-checkbox">
+                  <input
+                    type="checkbox"
+                    name="is_public"
+                    checked={formValues.is_public}
+                    onChange={handleAddChange}
+                  />
+                  Public exercise
+                </label>
+                {fieldErrors.is_public ? <small className="exercise-field-error">{fieldErrors.is_public}</small> : null}
               </div>
 
 
@@ -1211,7 +1211,7 @@ function Exercises({
           </aside>
         </div>
       ) : null}
-      
+
       {isDetailsModalOpen && selectedExercise ? (
         <div className="exercise-backdrop" role="presentation" onClick={handleCloseExerciseDetailsModal}>
           <aside
@@ -1221,15 +1221,15 @@ function Exercises({
             aria-labelledby="exercise-details-modal-title"
             onClick={(event) => event.stopPropagation()}
           >
-              <header className="exercise-modal-header">
-                <div className="exercise-modal-close-btn-wrapper">
-                  <button type="button" className="exercise-btn-base exercise-modal-close-btn" onClick={handleCloseExerciseDetailsModal}>
-                    <svg viewBox="0 0 24 24" width="24" height="24">
-                      <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="exercise-modal-title-wrapper">
+            <header className="exercise-modal-header">
+              <div className="exercise-modal-close-btn-wrapper">
+                <button type="button" className="exercise-btn-base exercise-modal-close-btn" onClick={handleCloseExerciseDetailsModal}>
+                  <svg viewBox="0 0 24 24" width="24" height="24">
+                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <div className="exercise-modal-title-wrapper">
                 <h2 className="exercise-modal-title">{toSubTitleCase(selectedExercise.name)}</h2>
                 {canEditSelectedExercise ? (
                   <button
@@ -1241,62 +1241,77 @@ function Exercises({
                     Edit Exercise
                   </button>
                 ) : null}
-                </div>
-              </header>
-              <div className="exercise-modal-content-container">
-                <section className="exercise-card-image-wrap">
-                  {(() => {
-                    const gifExists = () => selectedExercise.gif_url ?? null;
-                    const gifUrl = normalizeMediaUrlForFrontend(gifExists());
-                    return <img src={gifUrl} alt={selectedExercise.name} className="exercise-card-image" />;
-                  })()}
-                </section>
-              
+              </div>
+            </header>
+            <div className="exercise-modal-content-container">
+              <section className="exercise-details-image-wrap">
+                {(() => {
+                  const gifExists = () => selectedExercise.gif_url ?? null;
+                  const gifUrl = normalizeMediaUrlForFrontend(gifExists());
+                  return <img src={gifUrl} alt={selectedExercise.name} className="exercise-details-card-image" />;
+                })()}
+              </section>
 
-               <section className="exercise-details" aria-live="polite">
-                {console.log("selectedExercise:", selectedExercise)}
-            
-            <p className="exercise-meta">
-              <strong>Category:</strong> {selectedExercise.category || "N/A"}
-            </p>
-            <p className="exercise-meta">
-              <strong>Equipment:</strong> {selectedExercise.equipment || "N/A"}
-            </p>
-            <p className="exercise-meta">
-              <strong>Muscle:</strong> {selectedExercise.primary_muscle_group || "N/A"}
-            </p>
-            <p className="exercise-meta">
-              <strong>Instructions:</strong> {selectedExercise.instructions.en || "No description provided."}
-            </p>
-            <p className="exercise-meta">
-              <strong>Created by:</strong> {selectedExercise.created_by_username || selectedExercise.username || selectedExercise.created_by || "Unknown"}
-            </p>
-            <p className="exercise-meta">
-              <strong>Visibility:</strong> {selectedExercise.is_public ? "Public" : "Private"}
-            </p>
-            <p className="exercise-meta">
-              <strong>Created:</strong> {formatTimestamp(selectedExercise.created_at)}
-            </p>
-            <p className="exercise-meta">
-              <strong>Updated:</strong> {formatTimestamp(selectedExercise.updated_at)}
-            </p>
-            <div className="exercise-meta">
-              <strong>Steps:</strong> <ExerciseSteps instruction_steps={selectedExercise.instruction_steps || {}} />
+
+              <section className="exercise-details" aria-live="polite">
+                <div className="exercise-meta-group">
+                  <div className="exercise-meta-container">
+                    <strong>Category:</strong>
+                    <div className="exercise-meta exercise-meta-line">
+                      {selectedExercise.category || "N/A"}
+                    </div>
+                    <strong>Equipment:</strong>
+                    <div className="exercise-meta exercise-meta-line">
+                      {selectedExercise.equipment || "N/A"}
+                    </div>
+                    <strong>Muscle:</strong>
+                    <div className="exercise-meta">
+                       {selectedExercise.primary_muscle_group || "N/A"}
+                    </div>
+                  </div>
+                </div>
+                <div className="exercise-meta-group">
+                    <strong>Instructions:</strong>
+                    <p className="exercise-meta">
+                      {selectedExercise.instructions.en || "No description provided."}
+                    </p>
+                </div>
+                <div className="exercise-meta-group">
+                  <div className="exercise-meta-container">
+                    <p className="exercise-meta">
+                      <strong>Visibility:</strong> {selectedExercise.is_public ? "Public" : "Private"}
+                    </p>
+                    <p className="exercise-meta">
+                      <strong>Created by:</strong> {selectedExercise.created_by_username || selectedExercise.username || selectedExercise.created_by || "Unknown"}
+                    </p>
+                    <p className="exercise-meta">
+                      <strong>Created:</strong> {formatTimestamp(selectedExercise.created_at)}
+                    </p>
+                    <p className="exercise-meta">
+                      <strong>Updated:</strong> {formatTimestamp(selectedExercise.updated_at)}
+                    </p>
+                  </div>
+                    
+                  </div>
+                <div className="exercise-meta-group">
+                  <div className="exercise-meta">
+                  <strong>Steps:</strong> <ExerciseSteps instruction_steps={selectedExercise.instruction_steps || {}} />
+                </div>
+                </div>
+                {canDeleteSelectedExercise ? (
+                  <button
+                    type="button"
+                    className="exercise-danger-btn"
+                    onClick={handleDeleteExercise}
+                    disabled={isDeleteSubmitting}
+                  >
+                    {isDeleteSubmitting ? "Deleting..." : "Delete Exercise"}
+                  </button>
+                ) : null}
+              </section>
             </div>
-            {canDeleteSelectedExercise ? (
-              <button
-                type="button"
-                className="exercise-danger-btn"
-                onClick={handleDeleteExercise}
-                disabled={isDeleteSubmitting}
-              >
-                {isDeleteSubmitting ? "Deleting..." : "Delete Exercise"}
-              </button>
-            ) : null}
-          </section>
-          </div>
           </aside>
-       
+
         </div>
       ) : null}
       {isEditModalOpen ? (
