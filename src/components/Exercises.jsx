@@ -1297,8 +1297,8 @@ function Exercises({
                   </div>
                 <div className="exercise-meta-group">
                   <div className="exercise-meta-container">
-                  <strong className="meta-label">Steps:</strong>
-                  <div className="exercise-meta">
+                  <strong className="meta-label-steps">Steps:</strong>
+                  <div className="exercise-meta" id="exercise-steps">
                     <ExerciseSteps instruction_steps={selectedExercise.instruction_steps || {}} />
                   </div>
                 </div>

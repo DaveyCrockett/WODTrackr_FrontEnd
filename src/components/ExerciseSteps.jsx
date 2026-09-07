@@ -16,52 +16,43 @@ const LANGUAGE_NAMES = {
 
 const ExerciseSteps = ({ instruction_steps }) => {
 
-  const [availableLang, setAvailableLang] = useState([]); 
-  const [selectedLang, setSelectedLang] = useState('default'); 
+  const [availableLang, setAvailableLang] = useState(Object.keys(instruction_steps));
+  const [selectedLang, setSelectedLang] = useState('default');
 
   useEffect(() => {
-    if (availableLang.length > 0) {
-      if (availableLang.includes('default')) {
-        setSelectedLang('default');
-      } else {
-        setSelectedLang(availableLang[0]); // Selects the first item if 'default' isn't there
-      }
-    }
-  }, [availableLang]); // This triggers automatically the exact millisecond availableLang updates
-    // Guard clause if the instructions object is empty or missing
-    if (!availableLang.length) {
-      return <p>No instructions available.</p>;
+    let keys = Object.keys(instruction_steps); // e.g., ['en', 'es', 'tr', 'default']
+
+    // 🚀 THE FIX: If 'default' exists, pull it out and place it at index 0
+    if (keys.includes('default')) {
+      keys = ['default', ...keys.filter(key => key !== 'default')];
     }
 
+    setAvailableLang(keys); // Now it's safely ordered: ['default', 'en', 'es', 'tr']
+
+    // Only update selection if current language vanishes
+    if (keys.length > 0 && (!selectedLang || !keys.includes(selectedLang))) {
+      if (keys.includes('default')) {
+        setSelectedLang('default');
+      } else {
+        setSelectedLang(keys[0]);
+      }
+    }
+  }, [instruction_steps]);
+
+
   // Get the array of steps for the currently selected language
-  console.log("selectedLang:", selectedLang);
   const currentSteps = instruction_steps[selectedLang] || [];
-  console.log("currentSteps:", currentSteps);
 
   return (
     <div style={{ fontFamily: 'sans-serif', maxWidth: '500px', padding: '16px' }}>
       {/* Dropdown Label */}
       <div className="language-selector">
-        <label 
-          htmlFor="lang-select" 
-          style={{ fontWeight: '500' }}
-        >
-          Select Language:
-        </label>
 
         {/* Language Selector Dropdown */}
         <select
           id="lang-select"
           value={selectedLang}
           onChange={(e) => setSelectedLang(e.target.value)}
-          style={{
-            width: '100%',
-            padding: '8px',
-            borderRadius: '4px',
-            border: '1px solid #ccc',
-            fontSize: '16px',
-            marginBottom: '16px'
-          }}
         >
       
           {/* Map available languages to dropdown options */}
