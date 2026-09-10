@@ -75,6 +75,8 @@
 }
 
 .exercise-backdrop {
+  visibility: hidden;
+  opacity: 0;
   position: fixed;
   top: 0;
   left: 0;
@@ -84,6 +86,12 @@
   display: flex;
   justify-content: center;
   z-index: 1000;
+  transition: opacity 0.2s, visibility 0.2s ease; 
+}
+
+.exercise-backdrop-open {
+  visibility: visible;
+  opacity: 1;
 }
 
 .exercise-modal-actions {
@@ -457,8 +465,22 @@
   font-size: 0.88rem;
   width: 100%;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   flex-flow: row wrap;
+}
+
+.exercise-meta-column {
+  flex: 1 1 50%;;
+}
+
+.exercise-meta-column:nth-child(1){
+  text-align: right;
+  padding-right: 0.5rem;
+}
+
+.exercise-meta-column:nth-child(2){
+  text-align: left;
+  padding-left: 0.5rem;
 }
 
 .meta-label {
@@ -505,8 +527,9 @@
   color: #64748b;
   font-size: 0.88rem;
   text-align: center;
-  width: 50%;
+  width: 100%;
 }
+
 
 .exercise-meta::first-letter {
   text-transform: capitalize;
@@ -541,13 +564,10 @@
 }
 
 .exercise-details {
-  margin-top: 1rem;
+  padding-right: 0.2rem;
   display: flex;
   flex-direction: column;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  min-height: 0;
-  padding-right: 0.2rem;
+  row-gap: 1rem;
   height: 500px;
 }
 
