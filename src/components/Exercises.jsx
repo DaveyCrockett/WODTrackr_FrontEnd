@@ -365,6 +365,7 @@ function Exercises({
   const [exercisesErrorMessage, setExercisesErrorMessage] = useState("")
   const [visibleExerciseCount, setVisibleExerciseCount] = useState(PAGE_SIZE)
 
+
   // Refs for modal focus management
   const addModalRef = useRef(null)
   const editModalRef = useRef(null)
@@ -515,7 +516,7 @@ function Exercises({
     try {
       const payload = new FormData()
       payload.append("name", formValues.name)
-      payload.append("instruction_steps.en", JSON.stringify(formValues.detail.instruction_steps.en) || "")
+      payload.append("instruction_steps", JSON.stringify(formValues.detail.instruction_steps) || "")
       payload.append("category", formValues.category)
       payload.append("equipment", formValues.equipment)
       payload.append("primary_muscle_group", formValues.primary_muscle_group)
@@ -578,7 +579,7 @@ function Exercises({
           detail: {
             ...prev.detail,
             instruction_steps: {
-              en: inputValue.split(', ').map(step => [step.trim()]),
+              en: inputValue.split(/,\s*/).map(step => [step.trim()]),
             },
           },
         }
@@ -586,6 +587,20 @@ function Exercises({
       return {
         ...prev,
         [name]: inputValue,
+      }
+      if (name === "image_upload" && files?.[0]) {
+        return {
+          ...prev,
+          image_upload: files[0],
+          image_url: files[0].url,
+        }
+      }
+      if (name === "gif_upload" && files?.[0]) {
+        return {
+          ...prev,
+          image_upload: files[0],
+          gif_url: files[0].url,
+        }  
       }
     })
     if (fieldErrors[name]) {
@@ -1057,12 +1072,13 @@ function Exercises({
                 </label>
                 <label className="exercise-field">
                   <span>Instruction Steps</span>
-                  {console.log(formValues.detail?.instruction_steps.en)}
+                    <ul style={{ color: '#666', listStyleType: 'none', margin: '0' }}>
+                      <li style={{ fontStyle: 'italic' }}><span style={{ fontWeight: 'bold', lineHeight: '0', fontSize: '16px'}}>* </span>Separate steps with commas. Don't number steps.</li>
+                    </ul>
+                  {console.log("instruction steps: ", formValues.detail?.instruction_steps.en)}
                   <textarea
                     name="instruction_steps"
-                    value={Array.isArray(formValues.detail?.instruction_steps.en)
-                      ? formValues.detail.instruction_steps.en : ""
-                    }
+                    value={formValues.detail?.instruction_steps.en}
                     onChange={handleAddChange}
                     rows={4}
                     maxLength={1000}
@@ -1164,7 +1180,7 @@ function Exercises({
                   <input
                     type="file"
                     name="gif"
-                    accept="videos/*"
+                    accept="image/gif,video/*"
                     onChange={handleAddChange}
                   />
                   {fieldErrors.gif_upload ? <small className="exercise-field-error">{fieldErrors.gif_upload}</small> : null}
