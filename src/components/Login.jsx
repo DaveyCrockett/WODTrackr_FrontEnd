@@ -69,14 +69,14 @@ function Login() {
       let response
       try {
         response = await axios.post(
-          "http://127.0.0.1:8000/api/users/auth/login/",
+          "/api/users/auth/login/",
           loginPayload,
           { withCredentials: true },
         )
       } catch (primaryError) {
         if (!primaryError?.response) {
           response = await axios.post(
-            "http://127.0.0.1:8000/api/users/auth/login/",
+            "/api/users/auth/login/",
             loginPayload,
           )
         } else {
@@ -104,13 +104,13 @@ function Login() {
       let response
       try {
         response = await axios.post(
-          "http://127.0.0.1:8000/api/users/auth/guest/",
+          "/api/users/auth/guest/",
           {},
           { withCredentials: true },
         )
       } catch (primaryError) {
         if (!primaryError?.response) {
-          response = await axios.post("http://127.0.0.1:8000/api/users/auth/guest/")
+          response = await axios.post("/api/users/auth/guest/")
         } else {
           throw primaryError
         }
