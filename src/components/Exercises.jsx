@@ -519,6 +519,7 @@ function Exercises({
     setFieldErrors({})
 
     try {
+      console.log("Form values before creating payload:", formValues)
       const payload = new FormData()
       payload.append("name", formValues.name)
       payload.append("instruction_steps", JSON.stringify(formValues.detail.instruction_steps) || "")
@@ -531,18 +532,20 @@ function Exercises({
       payload.append("difficulty", formValues.difficulty || "")
       payload.append("secondary_muscle_group", formValues.secondary_muscle_group || "")
 
+      console.log("Image Upload form values:", formValues.image_upload, "Type:", typeof formValues.image_upload)
+      console.log("GIF Upload form values:", formValues.gif_upload, "Type:", typeof formValues.gif_upload)
 
       if (formValues.image_upload instanceof File) {
         payload.append("image_upload", formValues.image_upload)
       }
-
+      console.log("is gif_upload a File?", formValues.gif_upload instanceof File)
       if (formValues.gif_upload instanceof File) {
         payload.append("gif_upload", formValues.gif_upload)
       }
 
-      console.log("Submitting payload:", payload)
       const response = await axios.post(`${API_URL}`, payload, buildRequestConfig())
       const createdExercise = response?.data?.data ?? response?.data
+      console.log("Created exercise response:", createdExercise)
       if (createdExercise) {
         setExerciseLibraryState((prevState) => ({
           ...prevState,
@@ -578,7 +581,7 @@ function Exercises({
 
   const handleAddChange = (event) => {
     const { name, value, type, checked, files } = event.target
-    console.log("Handling add change for files:", files)
+    console.log("Handling add change for event target:", event.target.name, "Type:", type, "Value:", value, "Checked:", checked, "Files:", files, "name:", name)
     const inputValue = type === "textarea" ? value : value;
     setFormValues((prev) => {
       if (name === "instruction_steps") {
@@ -592,11 +595,16 @@ function Exercises({
           },
         }
       }
-      if ((name === "image_upload" || name === "gif_upload") && files?.[0]) {
+      if (name === "image_upload" && files?.[0]) {
         return {
           ...prev,
           [name]: files[0],
-          // [`${name.replace("_upload", "_url")}`]: files[0].url,
+        }
+      }
+      if (name === "gif_upload" && files?.[0]) {
+        return {
+          ...prev,
+          [name]: files[0],
         }
       } else {
         return {
@@ -892,6 +900,7 @@ function Exercises({
             <p className="exercise-empty" role="status">No exercises found.</p>
           ) : (
             visibleExercises.map((exercise, index) => {
+              console.log("Rendering exercise:", exercise)
               const exerciseImageUrl = String(getExerciseImageUrl(exercise))
               return (
                 <article
@@ -1171,7 +1180,7 @@ function Exercises({
                   <span>Image Upload</span>
                   <input
                     type="file"
-                    name="image"
+                    name="image_upload"
                     accept="image/*"
                     onChange={handleAddChange}
                   />
@@ -1181,7 +1190,7 @@ function Exercises({
                   <span>Gif Upload</span>
                   <input
                     type="file"
-                    name="gif"
+                    name="gif_upload"
                     accept="image/gif,video/*"
                     onChange={handleAddChange}
                   />
@@ -1248,8 +1257,7 @@ function Exercises({
           <div className="exercise-modal-content-container">
             <section className="exercise-details-image-wrap">
               {(() => {
-                const gifExists = () => selectedExercise?.gif_url ?? null;
-                console.log("gifExists():", gifExists());
+                const gifExists = () => selectedExercise?.gif_upload ?? null;
                 const gifUrl = normalizeMediaUrlForFrontend(gifExists());
                 return <img src={gifUrl} alt={selectedExercise?.name} className="exercise-details-card-image" />;
               })()}
