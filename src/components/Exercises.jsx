@@ -24,6 +24,10 @@ const EMPTY_EXERCISE_FORM_VALUES = {
   difficulty: "",
   image: null,
   is_public: false,
+  image_url: "",
+  image_upload: null,
+  gif_upload: null,
+  gif_url: "",
   detail: {
     instruction_steps: { en: [""] },
   },
@@ -319,6 +323,7 @@ const getExerciseFormValues = (exercise) => ({
   category: exercise?.category || "",
   equipment: exercise?.equipment || "",
   secondary_muscle_group: exercise?.secondary_muscle_group || "",
+  gif_upload: exercise?.gif_upload || "",
   gif_url: exercise?.gif_url || "",
   image: exercise?.image || "",
   image_upload: exercise?.image_upload || "",
@@ -531,10 +536,11 @@ function Exercises({
         payload.append("image_upload", formValues.image_upload)
       }
 
-      if (formValues.gif_url instanceof File) {
-        payload.append("gif_url", formValues.gif_url)
+      if (formValues.gif_upload instanceof File) {
+        payload.append("gif_upload", formValues.gif_upload)
       }
 
+      console.log("Submitting payload:", payload)
       const response = await axios.post(`${API_URL}`, payload, buildRequestConfig())
       const createdExercise = response?.data?.data ?? response?.data
       if (createdExercise) {
@@ -562,6 +568,7 @@ function Exercises({
       setErrorMessage(message)
     } finally {
       setIsSubmitting(false)
+      setIsAddModalOpen(false)
     }
   }
 
@@ -571,6 +578,7 @@ function Exercises({
 
   const handleAddChange = (event) => {
     const { name, value, type, checked, files } = event.target
+    console.log("Handling add change for files:", files)
     const inputValue = type === "textarea" ? value : value;
     setFormValues((prev) => {
       if (name === "instruction_steps") {
@@ -579,29 +587,23 @@ function Exercises({
           detail: {
             ...prev.detail,
             instruction_steps: {
-              en: inputValue.split(/,\s*/).map(step => [step.trim()]),
+              en: inputValue.split(/,\s*/).map(step => step.trim()),
             },
           },
         }
       }
-      return {
-        ...prev,
-        [name]: inputValue,
-      }
-      if (name === "image_upload" && files?.[0]) {
+      if ((name === "image_upload" || name === "gif_upload") && files?.[0]) {
         return {
           ...prev,
-          image_upload: files[0],
-          image_url: files[0].url,
+          [name]: files[0],
+          // [`${name.replace("_upload", "_url")}`]: files[0].url,
         }
-      }
-      if (name === "gif_upload" && files?.[0]) {
+      } else {
         return {
           ...prev,
-          image_upload: files[0],
-          gif_url: files[0].url,
-        }  
-      }
+          [name]: inputValue,
+        }
+      } 
     })
     if (fieldErrors[name]) {
       setFieldErrors((prev) => {
