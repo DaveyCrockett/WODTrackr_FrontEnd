@@ -25,6 +25,7 @@ const canonicalizeEquipmentValue = (value) => {
 }
 
 const normalizeChoiceArray = (choices) => {
+  console.log("Normalizing choices array: ", choices)
   if (!Array.isArray(choices)) return []
 
   const seen = new Set()
@@ -137,6 +138,7 @@ function App() {
     muscle: [],
     bodyPart: [],
     target: [],
+    goal: [],
    })
   const [searchName, setSearchName] = useState("")
   const [choicesErrorMessage, setChoicesErrorMessage] = useState("")
@@ -170,6 +172,7 @@ function App() {
       muscle: [],
       bodyPart: [],
       target: [],
+      goal: [],
     })
     setCurrentPage(1)
   }
@@ -188,7 +191,7 @@ function App() {
 
           const isCacheCompatible = parsedCache?.version === CHOICES_CACHE_VERSION
 
-          if (isCacheFresh && isCacheCompatible && parsedCache?.categoryChoices?.length > 0 && parsedCache?.equipmentChoices?.length > 0 && parsedCache?.muscleChoices?.length > 0) {
+          if (isCacheFresh && isCacheCompatible && parsedCache?.categoryChoices?.length > 0 && parsedCache?.equipmentChoices?.length > 0 && parsedCache?.muscleChoices?.length > 0 && parsedCache?.bodyPartChoices?.length > 0 && parsedCache?.targetChoices?.length > 0 && parsedCache?.goalChoices?.length > 0 && parsedCache?.difficultyChoices?.length > 0) {
             setCategoryChoices(normalizeChoiceArray(parsedCache.categoryChoices))
             setEquipmentChoices(normalizeChoiceArray(parsedCache.equipmentChoices))
             setMuscleChoices(normalizeChoiceArray(parsedCache.muscleChoices))
@@ -219,11 +222,12 @@ function App() {
           : Array.isArray(exerciseChoicesData?.primary_muscle_group)
             ? normalizeChoiceArray(exerciseChoicesData.primary_muscle_group)
             : []
+        console.log("ProgramChoicesData: ", programChoicesData)
         const nextBodyPartChoices = normalizeChoiceArray(exerciseChoicesData?.body_part)
         const nextTargetChoices = normalizeChoiceArray(exerciseChoicesData?.target)
-        const nextGoalChoices = normalizeChoiceArray(programChoicesData?.goal)
+        const nextGoalChoices = normalizeChoiceArray(programChoicesData?.goals)
         const nextDifficultyChoices = normalizeChoiceArray(programChoicesData?.difficulty)
-
+        console.log("Next Goal Choices: ", nextGoalChoices)
         setCategoryChoices(nextCategoryChoices)
         setEquipmentChoices(nextEquipmentChoices)
         setMuscleChoices(nextMuscleChoices)
@@ -260,7 +264,13 @@ function App() {
 
     loadChoices()
   }, [])
-
+  console.log("Goal Choices: ", goalChoices)
+  console.log("Difficulty Choices: ", difficultyChoices)
+  console.log("Category Choices: ", categoryChoices)
+  console.log("Equipment Choices: ", equipmentChoices)
+  console.log("Muscle Choices: ", muscleChoices)
+  console.log("Body Part Choices: ", bodyPartChoices)
+  console.log("Target Choices: ", targetChoices)
   return (
     <BrowserRouter>
       <Routes>

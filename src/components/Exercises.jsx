@@ -611,7 +611,7 @@ function Exercises({
           ...prev,
           [name]: inputValue,
         }
-      } 
+      }
     })
     if (fieldErrors[name]) {
       setFieldErrors((prev) => {
@@ -1083,9 +1083,9 @@ function Exercises({
                 </label>
                 <label className="exercise-field">
                   <span>Instruction Steps</span>
-                    <ul style={{ color: '#666', listStyleType: 'none', margin: '0' }}>
-                      <li style={{ fontStyle: 'italic' }}><span style={{ fontWeight: 'bold', lineHeight: '0', fontSize: '16px'}}>* </span>Separate steps with commas. Don't number steps.</li>
-                    </ul>
+                  <ul style={{ color: '#666', listStyleType: 'none', margin: '0' }}>
+                    <li style={{ fontStyle: 'italic' }}><span style={{ fontWeight: 'bold', lineHeight: '0', fontSize: '16px' }}>* </span>Separate steps with commas. Don't number steps.</li>
+                  </ul>
                   {console.log("instruction steps: ", formValues.detail?.instruction_steps.en)}
                   <textarea
                     name="instruction_steps"

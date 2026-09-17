@@ -12,7 +12,8 @@ const STRIPE_CHECKOUT_API_URL = String(
 const WORKOUTS_STORAGE_KEY = "wodtrackrWorkouts"
 const PURCHASED_PROGRAMS_STORAGE_KEY = "wodtrackrPurchasedProgramIds"
 const PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY = "wodtrackrPendingCheckoutProgramId"
-const PROGRAMS_PER_PAGE = 10
+const PAGE_SIZE = 18
+const SKELETON_CARD_COUNT = 6
 const DEFAULT_DIFFICULTIES = ["All Levels", "Beginner", "Intermediate", "Advanced"]
 const DEFAULT_DURATION_MIN = 1
 const DEFAULT_DURATION_MAX = 12
@@ -196,8 +197,8 @@ const buildWorkoutPlanForDuration = (durationValue, previousPlan = []) => {
       Number(entry?.week_number),
       Array.isArray(entry?.exercise_ids)
         ? entry.exercise_ids
-            .map((exerciseId) => Number(exerciseId))
-            .filter((exerciseId) => Number.isFinite(exerciseId))
+          .map((exerciseId) => Number(exerciseId))
+          .filter((exerciseId) => Number.isFinite(exerciseId))
         : [],
     ]),
   )
@@ -320,32 +321,32 @@ const buildWorkoutPlanFromProgram = (program) => {
 
   const mappedFromWorkoutPlan = Array.isArray(candidateWorkoutPlan)
     ? candidateWorkoutPlan
-        .map((entry) => {
-          const weekNumber = Number(entry?.week_number ?? entry?.week ?? entry?.weekNumber)
-          if (!Number.isFinite(weekNumber) || weekNumber < 1) return null
+      .map((entry) => {
+        const weekNumber = Number(entry?.week_number ?? entry?.week ?? entry?.weekNumber)
+        if (!Number.isFinite(weekNumber) || weekNumber < 1) return null
 
-          const explicitIds = extractExerciseIds(entry?.exercise_ids)
-          const fromExercises = extractExerciseIds(entry?.exercises)
-          return {
-            week_number: weekNumber,
-            exercise_ids: [...new Set([...explicitIds, ...fromExercises])],
-          }
-        })
-        .filter(Boolean)
+        const explicitIds = extractExerciseIds(entry?.exercise_ids)
+        const fromExercises = extractExerciseIds(entry?.exercises)
+        return {
+          week_number: weekNumber,
+          exercise_ids: [...new Set([...explicitIds, ...fromExercises])],
+        }
+      })
+      .filter(Boolean)
     : []
 
   const mappedFromExercises = Array.isArray(program.exercises)
     ? program.exercises.reduce((accumulator, entry) => {
-        const exerciseId = toExerciseId(entry?.id ?? entry?.exercise_id ?? entry)
-        if (!exerciseId) return accumulator
-        const weekNumber = Number(entry?.week_number ?? entry?.week ?? entry?.weekNumber)
-        const targetWeek = Number.isFinite(weekNumber) && weekNumber > 0 ? weekNumber : 1
-        if (!accumulator[targetWeek]) {
-          accumulator[targetWeek] = new Set()
-        }
-        accumulator[targetWeek].add(exerciseId)
-        return accumulator
-      }, {})
+      const exerciseId = toExerciseId(entry?.id ?? entry?.exercise_id ?? entry)
+      if (!exerciseId) return accumulator
+      const weekNumber = Number(entry?.week_number ?? entry?.week ?? entry?.weekNumber)
+      const targetWeek = Number.isFinite(weekNumber) && weekNumber > 0 ? weekNumber : 1
+      if (!accumulator[targetWeek]) {
+        accumulator[targetWeek] = new Set()
+      }
+      accumulator[targetWeek].add(exerciseId)
+      return accumulator
+    }, {})
     : {}
 
   const mappedFromExercisesList = Object.entries(mappedFromExercises).map(([week, ids]) => ({
@@ -442,6 +443,39 @@ const buildRequestConfig = (overrides = {}) => {
     ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}),
     ...overrides,
   }
+}
+
+const normalizeExerciseEntry = (entry) => {
+  if (!entry) return null
+  if (typeof entry === "object" && !Array.isArray(entry)) {
+    return {
+      id: entry.id ?? entry.exercise_id ?? entry.pk ?? null,
+      name: String(entry.name ?? entry.title ?? "").trim(),
+    }
+  }
+  return { id: null, name: String(entry ?? "").trim() }
+}
+
+const normalizeExercisesPayload = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeExerciseEntry(entry)).filter(Boolean)
+  }
+  if (value && typeof value === "object") {
+    const nestedCandidates = [
+      value.value,
+      value.target?.value,
+      value.exercise,
+      value.exercises,
+      value.exercise_ids,
+      value.exercise_values,
+      value.exercise_required,
+    ]
+      .filter((entry) => entry !== undefined && entry !== null)
+      .flatMap((entry) => normalizeExercisesPayload(entry))
+    return nestedCandidates
+  }
+
+  return normalizeExerciseEntry(value)
 }
 
 const normalizeProgramsPayload = (data) => {
@@ -689,11 +723,11 @@ const getStripePublishableKey = () => String(import.meta.env.VITE_STRIPE_PUBLISH
 const getProgramCheckoutTitle = (programDetails, programSummary, formValues) =>
   String(
     formValues?.title ||
-      programDetails?.title ||
-      programDetails?.name ||
-      programSummary?.title ||
-      programSummary?.name ||
-      "Program",
+    programDetails?.title ||
+    programDetails?.name ||
+    programSummary?.title ||
+    programSummary?.name ||
+    "Program",
   ).trim()
 
 const parseCheckoutSessionResponse = (responseData) => {
@@ -724,14 +758,21 @@ const getProgramImageUrl = (program) => {
 
   return String(
     program?.image ??
-      program?.program_image ??
-      program?.banner ??
-      program?.banner_image ??
-      program?.image_url ??
-      program?.imageUrl ??
-      "",
+    program?.program_image ??
+    program?.banner ??
+    program?.banner_image ??
+    program?.image_url ??
+    program?.imageUrl ??
+    "",
   ).trim()
 }
+
+function capitalizeFirstLetter(str) {
+    if (!str) return ''; // Handle empty strings safely
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+
 const normalizeEquipmentEntry = (value) => {
   const normalizeScalar = (entry) => {
     if (entry === null || entry === undefined) return ""
@@ -764,7 +805,7 @@ const normalizeEquipmentEntry = (value) => {
       value.label ??
       value.equipment_name ??
       value.equipmentName ??
-      value.equipment 
+      value.equipment
 
     if (candidate === null || candidate === undefined) return ""
     if (typeof candidate === "object") {
@@ -794,7 +835,7 @@ const normalizeEquipmentEntry = (value) => {
     return normalizeScalar(candidate)
   }
 
-   return normalizeScalar(value)
+  return normalizeScalar(value)
 }
 
 const normalizeEquipmentValues = (value) => {
@@ -802,7 +843,7 @@ const normalizeEquipmentValues = (value) => {
     return value
       .map((entry) => normalizeEquipmentEntry(entry))
       .filter(Boolean)
-  } 
+  }
   if (value && typeof value === "object") {
     const nestedCandidates = [
       value.value,
@@ -922,21 +963,21 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
 }
 
 function Programs({
-  handleFilterChange = () => {},
+  handleFilterChange = () => { },
   isChoicesLoading = false,
   exerciseLibraryState,
-  setExerciseLibraryState = () => {},
+  setExerciseLibraryState = () => { },
   filters,
-  setFilters = () => {},
+  setFilters = () => { },
   currentPage = 1,
-  setCurrentPage = () => {},
+  setCurrentPage = () => { },
   sortOrder = "asc",
-  goalChoices = [],
-  difficultyChoices = [],
-  categoryChoices = [],
-  equipmentChoices = [],
-  muscleChoices = [],
-  setIsChoicesLoading = () => {},
+  goalChoices,
+  difficultyChoices,
+  categoryChoices,
+  equipmentChoices,
+  muscleChoices,
+  setIsChoicesLoading = () => { },
 }) {
   const [searchName, setSearchName] = useState("")
   const [errorMessage, setErrorMessage] = useState("")
@@ -952,7 +993,9 @@ function Programs({
     exerciseLibraryError = "",
   } = resolvedExerciseLibraryState
   const [programs, setPrograms] = useState([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [programsErrorMessage, setProgramsErrorMessage] = useState("")
+  const [successMessage, setSuccessMessage] = useState("")
+  const [isProgramsLoading, setIsProgramsLoading] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [createFormValues, setCreateFormValues] = useState(EMPTY_PROGRAM_FORM_VALUES)
   const [createFieldErrors, setCreateFieldErrors] = useState({})
@@ -990,25 +1033,26 @@ function Programs({
   const [scheduleStartDate, setScheduleStartDate] = useState("")
   const [scheduleError, setScheduleError] = useState("")
   const [scheduleSuccess, setScheduleSuccess] = useState("")
+  const [visibleProgramsCount, setVisibleProgramsCount] = useState(PAGE_SIZE)
 
 
   const getAuthToken = () => {
-  try {
-    const rawValue = localStorage.getItem("wodtrackrUser")
-    const userData = rawValue ? JSON.parse(rawValue) : null
-    return userData?.authToken || ""
-  } catch {
-    return ""
+    try {
+      const rawValue = localStorage.getItem("wodtrackrUser")
+      const userData = rawValue ? JSON.parse(rawValue) : null
+      return userData?.authToken || ""
+    } catch {
+      return ""
+    }
   }
-}
 
-const buildRequestConfig = (overrides = {}) => {
-  const authToken = getAuthToken()
-  return {
-    ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}),
-    ...overrides,
+  const buildRequestConfig = (overrides = {}) => {
+    const authToken = getAuthToken()
+    return {
+      ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}),
+      ...overrides,
+    }
   }
-}
 
   useEffect(() => {
     const loadExerciseLibrary = async () => {
@@ -1018,17 +1062,14 @@ const buildRequestConfig = (overrides = {}) => {
         isExerciseLibraryLoading: true,
         exerciseLibraryError: '',
       }))
-      console.log('Loading exercise library...')
       try {
-        console.log("config:", config)
         const response = await axios.get(EXERCISES_API_URL, config)
-        console.log('Exercise library loaded:', response?.data.all_exercises || response?.data || [])
         const nextNode = response?.data?.next
         setExerciseLibraryState((prevState) => ({
           ...prevState,
           isExerciseLibraryLoading: false,
           exerciseLibraryError: '',
-          exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || [] ),
+          exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || []),
           hasMoreExercises: nextNode !== null,
         }))
       } catch (error) {
@@ -1047,12 +1088,11 @@ const buildRequestConfig = (overrides = {}) => {
 
   useEffect(() => {
     const loadPrograms = async () => {
-      setIsLoading(true)
+      setIsProgramsLoading(true)
       setErrorMessage("")
 
       try {
         const response = await axios.get(API_URL, buildRequestConfig())
-        console.log("Raw programs response:", response)
         setPrograms(normalizeProgramsPayload(response?.data))
       } catch (error) {
         if (error?.response?.status === 401 || error?.response?.status === 403) {
@@ -1063,7 +1103,7 @@ const buildRequestConfig = (overrides = {}) => {
         }
         setPrograms([])
       } finally {
-        setIsLoading(false)
+        setIsProgramsLoading(false)
       }
     }
 
@@ -1167,6 +1207,7 @@ const buildRequestConfig = (overrides = {}) => {
   const categoryFilterOptions = categories
 
   const goals = useMemo(() => {
+    console.log("goalChoices: ", goalChoices)
     if (goalChoices.length > 0) {
       const seen = new Map()
       for (const c of goalChoices) {
@@ -1177,6 +1218,7 @@ const buildRequestConfig = (overrides = {}) => {
     const fromPrograms = programs.map((p) => p?.goal).filter(Boolean)
     return [...new Set(fromPrograms)].sort().map((v) => ({ value: v, label: v }))
   }, [programs, goalChoices])
+  console.log("goals: ", goals)
 
   const equipments = useMemo(() => {
     if (equipmentChoices.length > 0) {
@@ -1219,7 +1261,7 @@ const buildRequestConfig = (overrides = {}) => {
   const filterEquipmentValues = Array.isArray(resolvedFilters.equipment) ? resolvedFilters.equipment : []
   const filterDifficultyValues = Array.isArray(resolvedFilters.difficulty) ? resolvedFilters.difficulty : []
 
-  const filteredAndSortedLibrary = useMemo(() => {
+  const filteredAndSortedProgramsLibrary = useMemo(() => {
     let result = [...programs]
 
     if (searchName.trim()) {
@@ -1254,14 +1296,25 @@ const buildRequestConfig = (overrides = {}) => {
 
     return result
   }, [programs, searchName, sortOrder, filterDifficultyValues, filterCategoryValues, filterEquipmentValues, equipmentChoices])
-  const filterEquipmentOptions = equipments
 
-  const totalPages = Math.max(1, Math.ceil(filteredAndSortedLibrary.length / PROGRAMS_PER_PAGE))
-  const safePage = Math.min(currentPage, totalPages)
-  const pagedPrograms = filteredAndSortedLibrary.slice(
-    (safePage - 1) * PROGRAMS_PER_PAGE,
-    safePage * PROGRAMS_PER_PAGE,
+  useEffect(() => {
+    setVisibleProgramsCount(PAGE_SIZE)
+  }, [filteredAndSortedProgramsLibrary.length, sortOrder, resolvedFilters.searchName, resolvedFilters.category, resolvedFilters.equipment, resolvedFilters.difficulty, resolvedFilters.target])
+
+  const visiblePrograms = useMemo(
+    () => filteredAndSortedProgramsLibrary.slice(0, visibleProgramsCount),
+    [filteredAndSortedProgramsLibrary, visibleProgramsCount],
   )
+
+  const hasMoreVisiblePrograms = visibleProgramsCount < filteredAndSortedProgramsLibrary.length
+
+  const handleLoadMorePrograms = () => {
+    setVisibleProgramsCount((previousCount) => previousCount + PAGE_SIZE)
+  }
+
+
+  const filterEquipmentOptions = equipments
+  const filterCategoryOptions = categories
   const selectedProgramDetails = selectedProgramId ? programDetailsById[selectedProgramId] : null
   const selectedProgramOwner =
     selectedProgramDetails?.created_by_username ||
@@ -1423,7 +1476,7 @@ const buildRequestConfig = (overrides = {}) => {
       const normalizedWorkoutPlan = buildWorkoutPlanForDuration(createFormValues.duration_weeks, workoutPlan)
       console.log("Normalized workout plan for submission:", normalizedWorkoutPlan)
       const selectedExerciseIds = [...new Set(normalizedWorkoutPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))]
-      console.log("Selected exercise IDs for submission:", selectedExerciseIds) 
+      console.log("Selected exercise IDs for submission:", selectedExerciseIds)
       const payload = {
         name: createFormValues.title.trim(),
         description: createFormValues.description.trim(),
@@ -1434,7 +1487,7 @@ const buildRequestConfig = (overrides = {}) => {
         items: buildProgramItemsFromWorkoutPlan(normalizedWorkoutPlan),
       }
       const response = await axios.post(API_URL, payload, buildRequestConfig())
-      
+
       const createdProgram = normalizeProgramDetailPayload(response?.data)
       if (createdProgram?.id) {
         const itemsPayload = buildProgramItemsFromWorkoutPlan(normalizedWorkoutPlan)
@@ -1448,20 +1501,20 @@ const buildRequestConfig = (overrides = {}) => {
       }
       const createdProgramWithPlan = createdProgram
         ? {
-            ...createdProgram,
-            workout_plan:
-              Array.isArray(createdProgram.workout_plan) && createdProgram.workout_plan.length > 0
-                ? createdProgram.workout_plan
-                : normalizedWorkoutPlan,
-            exercises:
-              Array.isArray(createdProgram.exercises) && createdProgram.exercises.length > 0
-                ? createdProgram.exercises
-                : selectedExerciseIds,
-            equipment:
-              canonicalizeEquipmentValues(getProgramEquipmentValues(createdProgram), equipmentChoices).length > 0
-                ? canonicalizeEquipmentValues(getProgramEquipmentValues(createdProgram), equipmentChoices)
-                : canonicalizeEquipmentValues(createFormValues.equipment, equipmentChoices),
-          }
+          ...createdProgram,
+          workout_plan:
+            Array.isArray(createdProgram.workout_plan) && createdProgram.workout_plan.length > 0
+              ? createdProgram.workout_plan
+              : normalizedWorkoutPlan,
+          exercises:
+            Array.isArray(createdProgram.exercises) && createdProgram.exercises.length > 0
+              ? createdProgram.exercises
+              : selectedExerciseIds,
+          equipment:
+            canonicalizeEquipmentValues(getProgramEquipmentValues(createdProgram), equipmentChoices).length > 0
+              ? canonicalizeEquipmentValues(getProgramEquipmentValues(createdProgram), equipmentChoices)
+              : canonicalizeEquipmentValues(createFormValues.equipment, equipmentChoices),
+        }
         : null
 
       if (createdProgramWithPlan && createdProgramWithPlan.id) {
@@ -1670,14 +1723,14 @@ const buildRequestConfig = (overrides = {}) => {
             : canonicalizeEquipmentValues(getProgramEquipmentValues(sourceProgramFromList), equipmentChoices),
         ...(itemsPlan.length > 0
           ? {
-              workout_plan: itemsPlan,
-              exercises: [...new Set(itemsPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))],
-            }
+            workout_plan: itemsPlan,
+            exercises: [...new Set(itemsPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))],
+          }
           : !detailHasPlan && sourceHasPlan
             ? {
-                workout_plan: sourceProgramFromList?.workout_plan ?? detail.workout_plan,
-                exercises: sourceProgramFromList?.exercises ?? detail.exercises,
-              }
+              workout_plan: sourceProgramFromList?.workout_plan ?? detail.workout_plan,
+              exercises: sourceProgramFromList?.exercises ?? detail.exercises,
+            }
             : {}),
       }
       setProgramDetailsById((prev) => ({ ...prev, [programId]: mergedDetail }))
@@ -1779,7 +1832,7 @@ const buildRequestConfig = (overrides = {}) => {
             })
             imageUploadResponse = await axios.patch(imageUploadUrl, fallbackFormData, imageRequestConfig)
           }
-          
+
           // Immediately update the cache with the image URL from the PATCH response
           // so the banner shows correctly when the details modal is re-opened.
           const patchedDetail = normalizeProgramDetailPayload(imageUploadResponse?.data)
@@ -1832,14 +1885,14 @@ const buildRequestConfig = (overrides = {}) => {
         prev.map((program) =>
           program.id === selectedProgramId
             ? {
-                ...program,
-                ...updatedProgram,
+              ...program,
+              ...updatedProgram,
 
-                equipment:
-                  canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices).length > 0
-                    ? canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices)
-                    : canonicalizeEquipmentValues(editFormValues.equipment, equipmentChoices),
-              }
+              equipment:
+                canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices).length > 0
+                  ? canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices)
+                  : canonicalizeEquipmentValues(editFormValues.equipment, equipmentChoices),
+            }
             : program,
         ),
       )
@@ -2041,7 +2094,7 @@ const buildRequestConfig = (overrides = {}) => {
       setScheduleError("Please select a start date.")
       return
     }
-  
+
 
     const program = programDetailsById[selectedProgramId] ?? selectedProgram
     if (!program) {
@@ -2235,88 +2288,92 @@ const buildRequestConfig = (overrides = {}) => {
 
 
           <p className="programs-results-count" aria-live="polite">
-            {filteredAndSortedLibrary.length} program{filteredAndSortedLibrary.length !== 1 ? "s" : ""} found
+            {filteredAndSortedProgramsLibrary.length} program{filteredAndSortedProgramsLibrary.length !== 1 ? "s" : ""} found
           </p>
         </aside>
 
         <section className="programs-main">
-          {isLoading ? (
-            <p className="programs-empty" role="status">
-              Loading programs...
-            </p>
-          ) : errorMessage ? (
-            <p className="programs-empty" role="alert">
-              {errorMessage}
-            </p>
-          ) : filteredAndSortedLibrary.length === 0 ? (
-            <p className="programs-empty" role="status">
-              No programs match your filters.
-            </p>
-          ) : (
-            <div className="programs-grid">
-              {filteredAndSortedLibrary.map((program) => (
-                <article key={program.id} className="programs-card">
-                  <div className="programs-card-header">
-                    <h3 className="programs-card-title">{program.name}</h3>
-                    <span className={getDifficultyClass(program.difficulty)}>{getDifficultyLabel(program.difficulty)}</span>
-                  </div>
-                  <p className="programs-card-description">{program.description}</p>
-                  <div className="programs-card-tags">
-                    <span className="programs-card-tag">{program.category}</span>
-                    <span className="programs-card-tag">{program.duration_weeks ?? "?"} weeks</span>
-                  </div>
-                  <p className="programs-card-goal"><strong>Goal:</strong> {program.goal || "N/A"}</p>
-                  <p className="programs-card-creator">By {program.created_by_username || program.created_by || "Unknown"}</p>
+          {isProgramsLoading ? (
+          <p className="exercise-loading-note" role="status">Still loading programs. Thanks for hanging tight.</p>
+        ) : null}
+        {programsErrorMessage ? <p className="exercise-error" role="alert">{programsErrorMessage}</p> : null}
+        {successMessage ? <p className="exercise-success" role="status">{successMessage}</p> : null}
 
-                  <div className="programs-card-actions">
-                    <button
-                      type="button"
-                      className="programs-card-action-btn"
-                      onClick={() => handleViewDetails(program.id)}
-                      disabled={detailLoadingId === program.id}
-                    >
-                      {detailLoadingId === program.id ? "Loading..." : "View Details"}
-                    </button>
+        <div
+          className="exercise-list"
+          role={!isProgramsLoading && filteredAndSortedProgramsLibrary.length > 0 ? "listbox" : undefined}
+          aria-label={!isProgramsLoading && filteredAndSortedProgramsLibrary.length > 0 ? "Programs" : undefined}
+          aria-busy={isProgramsLoading}
+        >
+          {isProgramsLoading ? (
+            Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (
+              <div className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`} aria-hidden="true">
+                <div className="exercise-skeleton exercise-skeleton-title" />
+                <div className="exercise-skeleton exercise-skeleton-line" />
+                <div className="exercise-skeleton exercise-skeleton-line exercise-skeleton-line-short" />
+                <div className="exercise-skeleton exercise-skeleton-line" />
+              </div>
+            ))
+          ) : filteredAndSortedProgramsLibrary.length === 0 ? (
+            <p className="exercise-empty" role="status">No programs found.</p>
+          ) : (
+            visiblePrograms.map((program, index) => {
+              console.log("Rendering program:", program)
+              const programImageUrl = String(getProgramImageUrl(program))
+              return (
+                <article
+                  className={`exercise-item ${(program.id ?? null) === selectedProgramId ? "exercise-item-selected" : ""}`}
+                  key={program.id ?? index}
+                  id={program.id ? `exercise-option-${program.id}` : undefined}
+                  role="option"
+                  aria-selected={(program.id ?? null) === selectedProgramId}
+                  tabIndex={(program.id ?? null) === selectedProgramId ? 0 : -1}
+                  onClick={() => handleOpenProgramDetailsModal(program.id ?? null)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault()
+                      handleOpenProgramDetailsModal(program.id ?? null)
+                    }
+                  }}
+                >
+                  {programImageUrl ? (
+                    <div className="exercise-card-image-wrap" aria-hidden="true">
+                      <img
+                        src={programImageUrl}
+                        alt=""
+                        loading="lazy"
+                        className="exercise-card-image"
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none"
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="exercise-item-content">
+                    <h3 className="exercise-header-title">{(program.title || program.name || "Program").toUpperCase()}</h3>
+                    <div className="exercise-header">
+                      <p className="exercise-meta"><strong>Visibility:</strong> {capitalizeFirstLetter(program.is_public ? "Public" : "Private")}</p>
+                      <p className="exercise-meta"><strong>Category:</strong> {capitalizeFirstLetter(program.category)}</p>
+                      <p className="exercise-meta">
+                        <strong>Primary Muscle:</strong> {capitalizeFirstLetter(program.primary_muscle_group)}
+                      </p>
+                      <p className="exercise-meta">
+                        <strong>Created by:</strong> {program.created_by_username || program.username || program.created_by || "Unknown"}
+                      </p>
+                    </div>
                   </div>
                 </article>
-              ))}
-            </div>
+              )
+            })
           )}
-
-          {totalPages > 1 ? (
-            <nav className="programs-pagination" aria-label="Program pages">
-              <button
-                type="button"
-                className="programs-page-btn"
-                onClick={() => setCurrentPage((p) => p - 1)}
-                disabled={safePage === 1}
-                aria-label="Previous page"
-              >
-                ‹
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <button
-                  key={page}
-                  type="button"
-                  className={`programs-page-btn${page === safePage ? " programs-page-btn-active" : ""}`}
-                  onClick={() => setCurrentPage(page)}
-                  aria-label={`Page ${page}`}
-                  aria-current={page === safePage ? "page" : undefined}
-                >
-                  {page}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="programs-page-btn"
-                onClick={() => setCurrentPage((p) => p + 1)}
-                disabled={safePage === totalPages}
-                aria-label="Next page"
-              >
-                ›
-              </button>
-            </nav>
-          ) : null}
+        </div>
+        {!isProgramsLoading && hasMoreVisiblePrograms ? (
+          <div className="exercise-search-actions">
+            <button type="button" className="exercise-secondary-btn" onClick={handleLoadMorePrograms}>
+              Load More
+            </button>
+          </div>
+        ) : null}
         </section>
       </div>
 
@@ -2332,7 +2389,7 @@ const buildRequestConfig = (overrides = {}) => {
             <header className="programs-modal-header">
               <button type="button" className="programs-btn-base programs-modal-close-btn" onClick={handleCloseCreateModal} aria-label="Close create program">
                 <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </button>
               <h2 className="programs-modal-title" id="create-new-program-header">Create New Program</h2>
@@ -2345,9 +2402,9 @@ const buildRequestConfig = (overrides = {}) => {
 
               <div className="programs-banner-upload">
                 {createProgramImageUrl ? (
-                <div className="programs-banner-preview">
-                  <img src={createProgramImageUrl} alt="Program banner" className="programs-banner-img" />
-                </div>
+                  <div className="programs-banner-preview">
+                    <img src={createProgramImageUrl} alt="Program banner" className="programs-banner-img" />
+                  </div>
                 ) : null}
                 <input
                   id="edit-banner-input"
@@ -2361,35 +2418,35 @@ const buildRequestConfig = (overrides = {}) => {
                   {editImagePreview ? "+ Upload" : "+ Upload"}
                 </label>
               </div>
-              <div className="programs-modal-field">  
-              <label id="program-title-label">
-                <span>Title</span>
-                <input
-                  type="text"
-                  name="title"
-                  value={createFormValues.title}
-                  onChange={handleCreateFieldChange}
-                  placeholder="Program name"
-                  required
-                />
-                {createFieldErrors.title ? <small className="programs-modal-error">{createFieldErrors.title}</small> : null}
-              </label>
+              <div className="programs-modal-field">
+                <label id="program-title-label">
+                  <span>Title</span>
+                  <input
+                    type="text"
+                    name="title"
+                    value={createFormValues.title}
+                    onChange={handleCreateFieldChange}
+                    placeholder="Program name"
+                    required
+                  />
+                  {createFieldErrors.title ? <small className="programs-modal-error">{createFieldErrors.title}</small> : null}
+                </label>
 
-              <label id="program-description-label">
-                <span>Description</span>
-                <textarea
-                  name="description"
-                  value={createFormValues.description}
-                  onChange={handleCreateFieldChange}
-                  placeholder="What this program is for"
-                  maxLength={500}
-                  rows={3}
-                  style={{ resize: "none", width: "500px", minHeight: "100px", boxSizing: "border-box" }}
-                  required
-                />
-              
-                {createFieldErrors.description ? <small className="programs-modal-error">{createFieldErrors.description}</small> : null}
-              </label>
+                <label id="program-description-label">
+                  <span>Description</span>
+                  <textarea
+                    name="description"
+                    value={createFormValues.description}
+                    onChange={handleCreateFieldChange}
+                    placeholder="What this program is for"
+                    maxLength={500}
+                    rows={3}
+                    style={{ resize: "none", width: "500px", minHeight: "100px", boxSizing: "border-box" }}
+                    required
+                  />
+
+                  {createFieldErrors.description ? <small className="programs-modal-error">{createFieldErrors.description}</small> : null}
+                </label>
               </div>
               <div className="programs-modal-grid">
                 <label>
@@ -2631,11 +2688,11 @@ const buildRequestConfig = (overrides = {}) => {
             <header className="programs-modal-header">
               <button type="button" className="programs-btn-base programs-modal-secondary-btn" onClick={handleCloseDetailsModal}>
                 <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </button>
-              {console.log("Selected Program Image URL", {selectedProgramImageUrl})}
-               {selectedProgramImageUrl ? (
+              {console.log("Selected Program Image URL", { selectedProgramImageUrl })}
+              {selectedProgramImageUrl ? (
                 <div className="programs-banner-preview">
                   <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
                 </div>
@@ -2815,6 +2872,14 @@ const buildRequestConfig = (overrides = {}) => {
                   </p>
                 </section>
               )}
+              {console.log("is loading: ", isProgramsLoading, "has more visible programs: ", hasMoreVisiblePrograms, "visible programs count: ", visibleProgramsCount)}
+              {!isProgramsLoading && hasMoreVisiblePrograms ? (
+                <div className="exercise-search-actions">
+                  <button type="button" className="exercise-secondary-btn" onClick={handleLoadMorePrograms}>
+                    Load More
+                  </button>
+                </div>
+              ) : null}
 
               {isDetailsEditMode || isWorkoutPlanUnlocked ? (
                 <section className="programs-plan-builder" aria-label="Workout plan by week">
@@ -2998,7 +3063,7 @@ const buildRequestConfig = (overrides = {}) => {
             <header className="programs-modal-header">
               <button type="button" className="programs-btn-base programs-modal-secondary-btn" onClick={handleCloseScheduleModal} aria-label="Close schedule modal">
                 <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </button>
               <h2 className="programs-modal-title">Schedule to Calendar</h2>
