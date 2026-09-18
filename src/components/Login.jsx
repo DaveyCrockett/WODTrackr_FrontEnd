@@ -6,9 +6,8 @@ import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
 
 const USERS_API_BASE_URL = String(import.meta.env.VITE_USERS_API_BASE_URL || "/api/users").replace(/\/+$/, "")
 const LOGIN_API_URL = `${USERS_API_BASE_URL}/auth/login/`
-const GUEST_LOGIN_API_URL = `${USERS_API_BASE_URL}/auth/guest/`
 
-function Login() {
+function Login({ setUserSession, userSession }) {
   const navigate = useNavigate()
   const [formValues, setFormValues] = useState({
     username: "",
@@ -16,7 +15,6 @@ function Login() {
     remember_me: false,
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isGuestSubmitting, setIsGuestSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
   const saveUserSession = saveUserSession => {
     const userData = saveUserSession?.user ?? saveUserSession ?? {}
@@ -24,7 +22,7 @@ function Login() {
 
     const refreshToken = saveUserSession?.refresh ?? userData?.refresh ?? ""
     const avatarUrl = userData?.avatar_url ?? userData?.avatarUrl ?? userData?.profile_image ?? userData?.profileImage ?? null
-    const username = userData?.username ?? userData?.name ?? "Guest user"
+    const username = userData?.username ?? userData?.name
 
     localStorage.setItem(
       "wodtrackrUser",
@@ -47,6 +45,12 @@ function Login() {
     } else {
       localStorage.removeItem("wodtrackrRefreshToken")
     }
+    console.log("Saved user session:", {
+      username,
+      avatarUrl,
+      authToken,
+      refreshToken,
+    })
   }
 
   
@@ -77,20 +81,25 @@ function Login() {
           loginPayload,
           { withCredentials: true },
         )
+        console.log("Primary login response:", response)
       } catch (primaryError) {
         if (!primaryError?.response) {
           response = await axios.post(
             LOGIN_API_URL,
             loginPayload,
           )
+          console.log("Fallback login response:", response)
         } else {
           throw primaryError
         }
       }
-
+      console.log("Final login response data:", response.data)
       saveUserSession(response.data, formValues.username)
+      const activeUser = JSON.parse(localStorage.getItem("wodtrackrUser"))
+      setUserSession(activeUser)
       navigate("/profile")
     } catch (error) {
+      console.error("Login error:", error)
       const message =
         error?.response?.data?.detail ||
         "Login failed. Please check your credentials and try again."
@@ -100,38 +109,7 @@ function Login() {
     }
   }
 
-  const handleGuestLogin = async () => {
-    setIsGuestSubmitting(true)
-    setErrorMessage("")
-
-    try {
-      let response
-      try {
-        response = await axios.post(
-          GUEST_LOGIN_API_URL,
-          {},
-          { withCredentials: true },
-        )
-      } catch (primaryError) {
-        if (!primaryError?.response) {
-          response = await axios.post(GUEST_LOGIN_API_URL)
-        } else {
-          throw primaryError
-        }
-      }
-
-      saveUserSession(response.data, "Guest user")
-      navigate("/exercises")
-    } catch (error) {
-      const message =
-        error?.response?.data?.detail ||
-        "Guest login failed. Please try again."
-      setErrorMessage(message)
-    } finally {
-      setIsGuestSubmitting(false)
-    }
-  }
-
+  
   return (
     <main className="auth-page">
       <section className="auth-card">
@@ -202,17 +180,6 @@ function Login() {
               </Link>
             </div>
           </form>
-          <div className="auth-footer">
-            <span>Don't have an account?</span>
-            <button
-              className="link-btn"
-              type="button"
-              onClick={handleGuestLogin}
-              disabled={isGuestSubmitting}
-            >
-              {isGuestSubmitting ? "Starting guest..." : "Guest Login"}
-            </button>
-          </div>
         </div>
       </section>
     </main>

@@ -16,19 +16,10 @@ const navItems = [
   { label: "Help", to: "/help", icon: helpIcon },
 ]
 
-const getStoredUser = () => {
-  try {
-    const rawValue = localStorage.getItem("wodtrackrUser")
-    return rawValue ? JSON.parse(rawValue) : null
-  } catch {
-    return null
-  }
-}
-
-function Navbar() {
+function Navbar({ userSession }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const user = getStoredUser()
+  const user = userSession
   const profileAvatar = user?.avatarUrl || DEFAULT_AVATAR
   const profileAlt = user?.username ? `${user.username} profile` : "Profile"
   const isProfileActive = location.pathname.startsWith("/profile")

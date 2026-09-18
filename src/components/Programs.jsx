@@ -992,10 +992,8 @@ function Programs({
     isExerciseLibraryLoading = false,
     exerciseLibraryError = "",
   } = resolvedExerciseLibraryState
-  const [programs, setPrograms] = useState([])
-  const [programsErrorMessage, setProgramsErrorMessage] = useState("")
+  
   const [successMessage, setSuccessMessage] = useState("")
-  const [isProgramsLoading, setIsProgramsLoading] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [createFormValues, setCreateFormValues] = useState(EMPTY_PROGRAM_FORM_VALUES)
   const [createFieldErrors, setCreateFieldErrors] = useState({})
@@ -1086,29 +1084,7 @@ function Programs({
   }, [searchName, sortOrder, filters])
 
 
-  useEffect(() => {
-    const loadPrograms = async () => {
-      setIsProgramsLoading(true)
-      setErrorMessage("")
 
-      try {
-        const response = await axios.get(API_URL, buildRequestConfig())
-        setPrograms(normalizeProgramsPayload(response?.data))
-      } catch (error) {
-        if (error?.response?.status === 401 || error?.response?.status === 403) {
-          setErrorMessage("Please log in to load training programs.")
-        } else {
-          const message = error?.response?.data?.detail || "Unable to load programs. Please try again."
-          setErrorMessage(message)
-        }
-        setPrograms([])
-      } finally {
-        setIsProgramsLoading(false)
-      }
-    }
-
-    loadPrograms()
-  }, [])
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search)
@@ -2546,72 +2522,6 @@ function Programs({
                 {exerciseLibraryError ? <p className="programs-modal-error">{exerciseLibraryError}</p> : null}
 
                 <div className="programs-plan-controls">
-                  <label className="programs-modal-field">
-                    <span>Week</span>
-                    <select
-                      name="plan_week"
-                      value={String(createPlanWeek)}
-                      onChange={(event) => setCreatePlanWeek(Number(event.target.value) || 1)}
-                      disabled={workoutPlan.length === 0}
-                    >
-                      {workoutPlan.length === 0 ? <option value="1">Set duration first</option> : null}
-                      {workoutPlan.map((weekEntry) => (
-                        <option key={weekEntry.week_number} value={weekEntry.week_number}>
-                          Week {weekEntry.week_number}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="programs-modal-field">
-                    <span>Saved Workout</span>
-                    <select
-                      name="plan_saved_workout"
-                      value={createPlanWorkoutId}
-                      onChange={(event) => setCreatePlanWorkoutId(event.target.value)}
-                      disabled={workouts.length === 0 || workoutPlan.length === 0}
-                    >
-                      <option value="">Select workout</option>
-                      {workouts.map((workout) => (
-                        <option key={workout.id} value={String(workout.id)}>
-                          {workout.title}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <button
-                    type="button"
-                    className="programs-modal-secondary-btn programs-plan-add-btn"
-                    onClick={handleAddSavedWorkoutToCreateWeek}
-                    disabled={!createPlanWorkoutId || workoutPlan.length === 0}
-                  >
-                    Add Saved Workout
-                  </button>
-
-                  <label className="programs-modal-field">
-                    <span>Workout Exercises</span>
-                    {exerciseOptions.map((exercise) => (
-                      <label key={exercise.id} className="exercise-label">
-                        <input
-                          key={exercise.id}
-                          type="checkbox"
-                          name={"plan_exercises"}
-                          value={String(exercise.id)}
-                          checked={createPlanExercise.includes(String(exercise.id))}
-                          onChange={(event) => {
-                            const selectedIds = event.target.checked
-                              ? [...createPlanExercise, String(exercise.id)]
-                              : createPlanExercise.filter((id) => id !== String(exercise.id))
-                            setCreatePlanExercise(selectedIds)
-                          }}
-                          disabled={exerciseOptions.length === 0 || workoutPlan.length === 0}
-                        />
-                        <div className="multiselect-option">{exercise.title || exercise.name}</div>
-                      </label>
-                    ))}
-                  </label>
-
                   <button
                     type="button"
                     className="programs-modal-secondary-btn programs-plan-add-btn"
@@ -2934,32 +2844,6 @@ function Programs({
                         disabled={!detailPlanWorkoutId || detailsWorkoutPlan.length === 0}
                       >
                         Add Saved Workout
-                      </button>
-
-                      <label className="programs-modal-field">
-                        <span>Exercise</span>
-                        <select
-                          name="details_plan_exercise"
-                          value={detailPlanExerciseId}
-                          onChange={(event) => setDetailPlanExerciseId(event.target.value)}
-                          disabled={exerciseOptions.length === 0 || detailsWorkoutPlan.length === 0}
-                        >
-                          <option value="">Select exercise</option>
-                          {exerciseOptions.map((exercise) => (
-                            <option key={exercise.id} value={String(exercise.id)}>
-                              {exercise.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-
-                      <button
-                        type="button"
-                        className="programs-modal-secondary-btn programs-plan-add-btn"
-                        onClick={handleAddExerciseToDetailWeek}
-                        disabled={!detailPlanExerciseId || detailsWorkoutPlan.length === 0}
-                      >
-                        Add Exercise
                       </button>
                     </div>
                   ) : null}

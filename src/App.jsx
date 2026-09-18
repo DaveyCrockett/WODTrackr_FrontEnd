@@ -122,24 +122,31 @@ function BillingReturnRedirect({ status }) {
 }
 
 function App() {
-
-  
+  // Read the saved string directly into state on startup
+  const [userSession, setUserSession] = useState(() => {
+    const saved = localStorage.getItem("wodtrackrUser");
+    try {
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [exerciseLibraryState, setExerciseLibraryState] = useState({
-      exerciseLibrary: [],
-      isExerciseLibraryLoading: false,
-      exerciseLibraryError: '',
-      hasMoreExercises: false,
-    })
-  const [filters, setFilters] = useState({ 
+    exerciseLibrary: [],
+    isExerciseLibraryLoading: false,
+    exerciseLibraryError: '',
+    hasMoreExercises: false,
+  })
+  const [filters, setFilters] = useState({
     searchName: "",
     difficulty: [],
-    category: [], 
+    category: [],
     equipment: [],
     muscle: [],
     bodyPart: [],
     target: [],
     goal: [],
-   })
+  })
   const [searchName, setSearchName] = useState("")
   const [choicesErrorMessage, setChoicesErrorMessage] = useState("")
   const [sortOrder, setSortOrder] = useState("asc")
@@ -152,6 +159,11 @@ function App() {
   const [bodyPartChoices, setBodyPartChoices] = useState([])
   const [targetChoices, setTargetChoices] = useState([])
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
+  const [newProgram, setNewProgram] = useState({name: "", exercises: [] })
+  const [programs, setPrograms] = useState([])
+  const [programsErrorMessage, setProgramsErrorMessage] = useState("")
+  const [isProgramsLoading, setIsProgramsLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
 
   const handleFilterChange = (filterName, selectedValues) => {
     setFilters((prev) => ({
@@ -164,10 +176,10 @@ function App() {
 
   const handleClearFilters = () => {
     setSortOrder("asc")
-    setFilters({ 
+    setFilters({
       searchName: "",
       difficulty: [],
-      category: [], 
+      category: [],
       equipment: [],
       muscle: [],
       bodyPart: [],
@@ -264,6 +276,29 @@ function App() {
 
     loadChoices()
   }, [])
+  useEffect(() => {
+    const loadPrograms = async () => {
+      setIsProgramsLoading(true)
+      setErrorMessage("")
+
+      try {
+        const response = await axios.get(API_URL, buildRequestConfig())
+        setPrograms(normalizeProgramsPayload(response?.data))
+      } catch (error) {
+        if (error?.response?.status === 401 || error?.response?.status === 403) {
+          setErrorMessage("Please log in to load training programs.")
+        } else {
+          const message = error?.response?.data?.detail || "Unable to load programs. Please try again."
+          setErrorMessage(message)
+        }
+        setPrograms([])
+      } finally {
+        setIsProgramsLoading(false)
+      }
+    }
+
+    loadPrograms()
+  }, [])
   console.log("Goal Choices: ", goalChoices)
   console.log("Difficulty Choices: ", difficultyChoices)
   console.log("Category Choices: ", categoryChoices)
@@ -274,12 +309,15 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route index path="/login" element={<Login saveUserSession={saveUserSession} />} />
+        {/* Public Routes */}
+        <Route index path="/login" element={<Login setUserSession={setUserSession} />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/" element={<Layout />}>
+        {/* Private/Protected Routes Wrapper */}
+        <Route path="/" element={<Layout userSession={userSession} />}>
           <Route path="profile" element={<Profile />} />
-          <Route path="exercises" element={<Exercises 
-            exerciseLibraryState={exerciseLibraryState} 
+          <Route path="exercises" element={<Exercises
+            newProgram={newProgram}
+            exerciseLibraryState={exerciseLibraryState}
             setExerciseLibraryState={setExerciseLibraryState}
             handleClearFilters={handleClearFilters}
             sortOrder={sortOrder}
@@ -296,8 +334,9 @@ function App() {
             handleFilterChange={handleFilterChange}
           />} />
           <Route path="calendar" element={<Calendar />} />
-          <Route path="programs" element={<Programs 
-            exerciseLibraryState={exerciseLibraryState} 
+          <Route path="programs" element={<Programs
+            newProgram={newProgram}
+            exerciseLibraryState={exerciseLibraryState}
             setExerciseLibraryState={setExerciseLibraryState}
             sortOrder={sortOrder}
             setSortOrder={setSortOrder}
@@ -319,8 +358,8 @@ function App() {
           <Route path="billing/success" element={<BillingReturnRedirect status="success" />} />
           <Route path="billing/cancel" element={<BillingReturnRedirect status="cancel" />} />
           <Route path="settings" element={<Settings />} />
-          <Route path="help" element={<Help />} />
         </Route>
+        <Route path="help" element={<Help />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
