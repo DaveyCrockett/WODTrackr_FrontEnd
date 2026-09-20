@@ -11,9 +11,11 @@ import Profile from './components/Profile'
 import Programs from './components/Programs'
 import Register from './components/Register'
 import Settings from './components/Settings'
+import { buildRequestConfig } from './utils/exerciseUtils'
 
 const CHOICES_API_URL = "/api/wodtrackr/exercises/choices/"
 const PROGRAM_CHOICES_API_URL = "/api/wodtrackr/exercise-programs/choices/"
+const PROGRAM_API_URL = "/api/wodtrackr/exercise-programs/"
 const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
 const CHOICES_CACHE_VERSION = 2
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
@@ -25,7 +27,6 @@ const canonicalizeEquipmentValue = (value) => {
 }
 
 const normalizeChoiceArray = (choices) => {
-  console.log("Normalizing choices array: ", choices)
   if (!Array.isArray(choices)) return []
 
   const seen = new Set()
@@ -121,6 +122,22 @@ function BillingReturnRedirect({ status }) {
   return <Navigate to={`/programs${nextQuery ? `?${nextQuery}` : ''}`} replace />
 }
 
+const normalizeProgramsPayload = (data) => {
+  if (Array.isArray(data?.data)) {
+    return data.data
+  }
+
+  if (Array.isArray(data?.results)) {
+    return data.results
+  }
+
+  if (Array.isArray(data)) {
+    return data
+  }
+
+  return []
+}
+
 function App() {
   // Read the saved string directly into state on startup
   const [userSession, setUserSession] = useState(() => {
@@ -165,6 +182,9 @@ function App() {
   const [isProgramsLoading, setIsProgramsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
 
+  console.log("App Rendered! Current programs state count:", programs.length);
+
+
   const handleFilterChange = (filterName, selectedValues) => {
     setFilters((prev) => ({
       ...prev,
@@ -198,7 +218,6 @@ function App() {
         const cachedRawValue = localStorage.getItem(CHOICES_CACHE_KEY)
         if (cachedRawValue) {
           const parsedCache = JSON.parse(cachedRawValue)
-          console.log("Loaded choices from cache: ", parsedCache)
           const isCacheFresh = Date.now() - (parsedCache?.cachedAt || 0) < CHOICES_CACHE_TTL_MS
 
           const isCacheCompatible = parsedCache?.version === CHOICES_CACHE_VERSION
@@ -234,12 +253,10 @@ function App() {
           : Array.isArray(exerciseChoicesData?.primary_muscle_group)
             ? normalizeChoiceArray(exerciseChoicesData.primary_muscle_group)
             : []
-        console.log("ProgramChoicesData: ", programChoicesData)
         const nextBodyPartChoices = normalizeChoiceArray(exerciseChoicesData?.body_part)
         const nextTargetChoices = normalizeChoiceArray(exerciseChoicesData?.target)
         const nextGoalChoices = normalizeChoiceArray(programChoicesData?.goals)
         const nextDifficultyChoices = normalizeChoiceArray(programChoicesData?.difficulty)
-        console.log("Next Goal Choices: ", nextGoalChoices)
         setCategoryChoices(nextCategoryChoices)
         setEquipmentChoices(nextEquipmentChoices)
         setMuscleChoices(nextMuscleChoices)
@@ -276,13 +293,19 @@ function App() {
 
     loadChoices()
   }, [])
+
   useEffect(() => {
+     if(!userSession?.authToken) {
+    setPrograms([])
+    return;
+  }
+
     const loadPrograms = async () => {
       setIsProgramsLoading(true)
       setErrorMessage("")
 
       try {
-        const response = await axios.get(API_URL, buildRequestConfig())
+        const response = await axios.get(PROGRAM_API_URL, buildRequestConfig())
         setPrograms(normalizeProgramsPayload(response?.data))
       } catch (error) {
         if (error?.response?.status === 401 || error?.response?.status === 403) {
@@ -298,14 +321,7 @@ function App() {
     }
 
     loadPrograms()
-  }, [])
-  console.log("Goal Choices: ", goalChoices)
-  console.log("Difficulty Choices: ", difficultyChoices)
-  console.log("Category Choices: ", categoryChoices)
-  console.log("Equipment Choices: ", equipmentChoices)
-  console.log("Muscle Choices: ", muscleChoices)
-  console.log("Body Part Choices: ", bodyPartChoices)
-  console.log("Target Choices: ", targetChoices)
+  }, [userSession])
   return (
     <BrowserRouter>
       <Routes>
@@ -335,7 +351,9 @@ function App() {
           />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="programs" element={<Programs
-            newProgram={newProgram}
+            isProgramsLoading={isProgramsLoading}
+            programs={programs}
+            programsErrorMessage={programsErrorMessage}
             exerciseLibraryState={exerciseLibraryState}
             setExerciseLibraryState={setExerciseLibraryState}
             sortOrder={sortOrder}

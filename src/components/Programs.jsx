@@ -3,6 +3,7 @@ import "../CSS/multiselect.css"
 import axios from "axios"
 import { useEffect, useMemo, useRef, useState } from "react"
 import MultiSelect from "./MultiSelect"
+import { buildRequestConfig } from "../utils/exerciseUtils"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
@@ -90,6 +91,8 @@ const areProgramItemsEquivalent = (left, right) =>
   Number(left?.week) === Number(right?.week) &&
   Number(left?.day ?? 1) === Number(right?.day ?? 1) &&
   Number(left?.position) === Number(right?.position)
+
+
 
 const syncProgramItemsByItemUrl = async (programId, existingItems, nextItems) => {
   const endpoint = buildProgramItemsApiUrl(programId)
@@ -409,42 +412,6 @@ const buildProgramFormValues = (program) => ({
   program_default_image_url: String(program?.image ?? ""),
 })
 
-const getAuthToken = () => {
-  const directToken = localStorage.getItem("wodtrackrAuthToken")
-  if (directToken) {
-    return directToken
-  }
-
-  try {
-    const rawValue = localStorage.getItem("wodtrackrUser")
-    const userData = rawValue ? JSON.parse(rawValue) : null
-    return userData?.authToken || ""
-  } catch {
-    return ""
-  }
-}
-
-const getStoredUserInfo = () => {
-  try {
-    const rawValue = localStorage.getItem("wodtrackrUser")
-    const userData = rawValue ? JSON.parse(rawValue) : null
-    return {
-      username: String(userData?.username ?? "").trim(),
-      userId: userData?.id ?? userData?.user_id ?? userData?.userId ?? null,
-    }
-  } catch {
-    return { username: "", userId: null }
-  }
-}
-
-const buildRequestConfig = (overrides = {}) => {
-  const authToken = getAuthToken()
-  return {
-    ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}),
-    ...overrides,
-  }
-}
-
 const normalizeExerciseEntry = (entry) => {
   if (!entry) return null
   if (typeof entry === "object" && !Array.isArray(entry)) {
@@ -476,22 +443,6 @@ const normalizeExercisesPayload = (value) => {
   }
 
   return normalizeExerciseEntry(value)
-}
-
-const normalizeProgramsPayload = (data) => {
-  if (Array.isArray(data?.data)) {
-    return data.data
-  }
-
-  if (Array.isArray(data?.results)) {
-    return data.results
-  }
-
-  if (Array.isArray(data)) {
-    return data
-  }
-
-  return []
 }
 
 const normalizeProgramDetailPayload = (data) => {
@@ -768,9 +719,9 @@ const getProgramImageUrl = (program) => {
 }
 
 function capitalizeFirstLetter(str) {
-    if (!str) return ''; // Handle empty strings safely
-    return str.charAt(0).toUpperCase() + str.slice(1);
-  }
+  if (!str) return ''; // Handle empty strings safely
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
 
 
 const normalizeEquipmentEntry = (value) => {
@@ -963,6 +914,8 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
 }
 
 function Programs({
+  programs,
+  userSession,
   handleFilterChange = () => { },
   isChoicesLoading = false,
   exerciseLibraryState,
@@ -978,7 +931,11 @@ function Programs({
   equipmentChoices,
   muscleChoices,
   setIsChoicesLoading = () => { },
+  isProgramsLoading,
+  programsErrorMessage,
 }) {
+  const currentUsername = userSession?.username ?? ""
+  const currentUserId = userSession?.userId ?? null
   const [searchName, setSearchName] = useState("")
   const [errorMessage, setErrorMessage] = useState("")
   const resolvedFilters = filters ?? { difficulty: [], category: [], equipment: [] }
@@ -992,7 +949,7 @@ function Programs({
     isExerciseLibraryLoading = false,
     exerciseLibraryError = "",
   } = resolvedExerciseLibraryState
-  
+
   const [successMessage, setSuccessMessage] = useState("")
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [createFormValues, setCreateFormValues] = useState(EMPTY_PROGRAM_FORM_VALUES)
@@ -1033,24 +990,6 @@ function Programs({
   const [scheduleSuccess, setScheduleSuccess] = useState("")
   const [visibleProgramsCount, setVisibleProgramsCount] = useState(PAGE_SIZE)
 
-
-  const getAuthToken = () => {
-    try {
-      const rawValue = localStorage.getItem("wodtrackrUser")
-      const userData = rawValue ? JSON.parse(rawValue) : null
-      return userData?.authToken || ""
-    } catch {
-      return ""
-    }
-  }
-
-  const buildRequestConfig = (overrides = {}) => {
-    const authToken = getAuthToken()
-    return {
-      ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}),
-      ...overrides,
-    }
-  }
 
   useEffect(() => {
     const loadExerciseLibrary = async () => {
@@ -1239,6 +1178,7 @@ function Programs({
 
   const filteredAndSortedProgramsLibrary = useMemo(() => {
     let result = [...programs]
+    console.log("result", result)
 
     if (searchName.trim()) {
       const query = searchName.trim().toLowerCase()
@@ -1300,7 +1240,6 @@ function Programs({
     selectedProgram?.username ||
     selectedProgram?.created_by ||
     ""
-  const { username: currentUsername, userId: currentUserId } = getStoredUserInfo()
   const selectedProgramOwnerId =
     selectedProgramDetails?.created_by_id ??
     selectedProgramDetails?.created_by_user_id ??
@@ -2270,86 +2209,87 @@ function Programs({
 
         <section className="programs-main">
           {isProgramsLoading ? (
-          <p className="exercise-loading-note" role="status">Still loading programs. Thanks for hanging tight.</p>
-        ) : null}
-        {programsErrorMessage ? <p className="exercise-error" role="alert">{programsErrorMessage}</p> : null}
-        {successMessage ? <p className="exercise-success" role="status">{successMessage}</p> : null}
+            <p className="exercise-loading-note" role="status">Still loading programs. Thanks for hanging tight.</p>
+          ) : null}
+          {programsErrorMessage ? <p className="exercise-error" role="alert">{programsErrorMessage}</p> : null}
+          {successMessage ? <p className="exercise-success" role="status">{successMessage}</p> : null}
 
-        <div
-          className="exercise-list"
-          role={!isProgramsLoading && filteredAndSortedProgramsLibrary.length > 0 ? "listbox" : undefined}
-          aria-label={!isProgramsLoading && filteredAndSortedProgramsLibrary.length > 0 ? "Programs" : undefined}
-          aria-busy={isProgramsLoading}
-        >
-          {isProgramsLoading ? (
-            Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (
-              <div className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`} aria-hidden="true">
-                <div className="exercise-skeleton exercise-skeleton-title" />
-                <div className="exercise-skeleton exercise-skeleton-line" />
-                <div className="exercise-skeleton exercise-skeleton-line exercise-skeleton-line-short" />
-                <div className="exercise-skeleton exercise-skeleton-line" />
-              </div>
-            ))
-          ) : filteredAndSortedProgramsLibrary.length === 0 ? (
-            <p className="exercise-empty" role="status">No programs found.</p>
-          ) : (
-            visiblePrograms.map((program, index) => {
-              console.log("Rendering program:", program)
-              const programImageUrl = String(getProgramImageUrl(program))
-              return (
-                <article
-                  className={`exercise-item ${(program.id ?? null) === selectedProgramId ? "exercise-item-selected" : ""}`}
-                  key={program.id ?? index}
-                  id={program.id ? `exercise-option-${program.id}` : undefined}
-                  role="option"
-                  aria-selected={(program.id ?? null) === selectedProgramId}
-                  tabIndex={(program.id ?? null) === selectedProgramId ? 0 : -1}
-                  onClick={() => handleOpenProgramDetailsModal(program.id ?? null)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault()
-                      handleOpenProgramDetailsModal(program.id ?? null)
-                    }
-                  }}
-                >
-                  {programImageUrl ? (
-                    <div className="exercise-card-image-wrap" aria-hidden="true">
-                      <img
-                        src={programImageUrl}
-                        alt=""
-                        loading="lazy"
-                        className="exercise-card-image"
-                        onError={(event) => {
-                          event.currentTarget.style.display = "none"
-                        }}
-                      />
+          <div
+            className="exercise-list"
+            role={!isProgramsLoading && filteredAndSortedProgramsLibrary.length > 0 ? "listbox" : undefined}
+            aria-label={!isProgramsLoading && filteredAndSortedProgramsLibrary.length > 0 ? "Programs" : undefined}
+            aria-busy={isProgramsLoading}
+          >
+            {console.log("isProgramsLoading:", isProgramsLoading, "filteredAndSortedProgramsLibrary.length:", filteredAndSortedProgramsLibrary.length)}
+            {isProgramsLoading ? (
+              Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (
+                <div className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`} aria-hidden="true">
+                  <div className="exercise-skeleton exercise-skeleton-title" />
+                  <div className="exercise-skeleton exercise-skeleton-line" />
+                  <div className="exercise-skeleton exercise-skeleton-line exercise-skeleton-line-short" />
+                  <div className="exercise-skeleton exercise-skeleton-line" />
+                </div>
+              ))
+            ) : filteredAndSortedProgramsLibrary.length === 0 ? (
+              <p className="exercise-empty" role="status">No programs found.</p>
+            ) : (
+              visiblePrograms.map((program, index) => {
+                console.log("Rendering program:", program)
+                const programImageUrl = String(getProgramImageUrl(program))
+                return (
+                  <article
+                    className={`exercise-item ${(program.id ?? null) === selectedProgramId ? "exercise-item-selected" : ""}`}
+                    key={program.id ?? index}
+                    id={program.id ? `exercise-option-${program.id}` : undefined}
+                    role="option"
+                    aria-selected={(program.id ?? null) === selectedProgramId}
+                    tabIndex={(program.id ?? null) === selectedProgramId ? 0 : -1}
+                    onClick={() => handleOpenProgramDetailsModal(program.id ?? null)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        handleOpenProgramDetailsModal(program.id ?? null)
+                      }
+                    }}
+                  >
+                    {programImageUrl ? (
+                      <div className="exercise-card-image-wrap" aria-hidden="true">
+                        <img
+                          src={programImageUrl}
+                          alt=""
+                          loading="lazy"
+                          className="exercise-card-image"
+                          onError={(event) => {
+                            event.currentTarget.style.display = "none"
+                          }}
+                        />
+                      </div>
+                    ) : null}
+                    <div className="exercise-item-content">
+                      <h3 className="exercise-header-title">{(program.title || program.name || "Program").toUpperCase()}</h3>
+                      <div className="exercise-header">
+                        <p className="exercise-meta"><strong>Visibility:</strong> {capitalizeFirstLetter(program.is_public ? "Public" : "Private")}</p>
+                        <p className="exercise-meta"><strong>Category:</strong> {capitalizeFirstLetter(program.category)}</p>
+                        <p className="exercise-meta">
+                          <strong>Primary Muscle:</strong> {capitalizeFirstLetter(program.primary_muscle_group)}
+                        </p>
+                        <p className="exercise-meta">
+                          <strong>Created by:</strong> {program.created_by_username || program.username || program.created_by || "Unknown"}
+                        </p>
+                      </div>
                     </div>
-                  ) : null}
-                  <div className="exercise-item-content">
-                    <h3 className="exercise-header-title">{(program.title || program.name || "Program").toUpperCase()}</h3>
-                    <div className="exercise-header">
-                      <p className="exercise-meta"><strong>Visibility:</strong> {capitalizeFirstLetter(program.is_public ? "Public" : "Private")}</p>
-                      <p className="exercise-meta"><strong>Category:</strong> {capitalizeFirstLetter(program.category)}</p>
-                      <p className="exercise-meta">
-                        <strong>Primary Muscle:</strong> {capitalizeFirstLetter(program.primary_muscle_group)}
-                      </p>
-                      <p className="exercise-meta">
-                        <strong>Created by:</strong> {program.created_by_username || program.username || program.created_by || "Unknown"}
-                      </p>
-                    </div>
-                  </div>
-                </article>
-              )
-            })
-          )}
-        </div>
-        {!isProgramsLoading && hasMoreVisiblePrograms ? (
-          <div className="exercise-search-actions">
-            <button type="button" className="exercise-secondary-btn" onClick={handleLoadMorePrograms}>
-              Load More
-            </button>
+                  </article>
+                )
+              })
+            )}
           </div>
-        ) : null}
+          {!isProgramsLoading && hasMoreVisiblePrograms ? (
+            <div className="exercise-search-actions">
+              <button type="button" className="exercise-secondary-btn" onClick={handleLoadMorePrograms}>
+                Load More
+              </button>
+            </div>
+          ) : null}
         </section>
       </div>
 
