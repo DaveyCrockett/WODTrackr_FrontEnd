@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 import './CSS/app.css'
+import { ProgramFormProvider } from './components/contexts/ProgramFormContext'
 import Calendar from './components/Calendar'
 import Exercises from './components/Exercises'
 import Help from './components/Help'
@@ -329,9 +330,12 @@ function App() {
         <Route index path="/login" element={<Login setUserSession={setUserSession} />} />
         <Route path="/register" element={<Register />} />
         {/* Private/Protected Routes Wrapper */}
+        <Route element={<ProgramFormProvider />}>
         <Route path="/" element={<Layout userSession={userSession} />}>
           <Route path="profile" element={<Profile />} />
+          {console.log('Current user session in App.jsx:', userSession)}
           <Route path="exercises" element={<Exercises
+            userSession={userSession}
             newProgram={newProgram}
             exerciseLibraryState={exerciseLibraryState}
             setExerciseLibraryState={setExerciseLibraryState}
@@ -351,6 +355,7 @@ function App() {
           />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="programs" element={<Programs
+            userSession={userSession}
             isProgramsLoading={isProgramsLoading}
             programs={programs}
             programsErrorMessage={programsErrorMessage}
@@ -376,6 +381,7 @@ function App() {
           <Route path="billing/success" element={<BillingReturnRedirect status="success" />} />
           <Route path="billing/cancel" element={<BillingReturnRedirect status="cancel" />} />
           <Route path="settings" element={<Settings />} />
+        </Route>
         </Route>
         <Route path="help" element={<Help />} />
         <Route path="*" element={<Navigate to="/login" replace />} />

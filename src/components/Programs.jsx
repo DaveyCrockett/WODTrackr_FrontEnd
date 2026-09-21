@@ -2,6 +2,8 @@ import "../CSS/programs.css"
 import "../CSS/multiselect.css"
 import axios from "axios"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { Link, useSearchParams } from 'react-router-dom'
+import { useProgramForm } from "./contexts/ProgramFormContext"
 import MultiSelect from "./MultiSelect"
 import { buildRequestConfig } from "../utils/exerciseUtils"
 
@@ -950,8 +952,9 @@ function Programs({
     exerciseLibraryError = "",
   } = resolvedExerciseLibraryState
 
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { programDraft, clearDraft } = useProgramForm()
   const [successMessage, setSuccessMessage] = useState("")
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [createFormValues, setCreateFormValues] = useState(EMPTY_PROGRAM_FORM_VALUES)
   const [createFieldErrors, setCreateFieldErrors] = useState({})
   const [createErrorMessage, setCreateErrorMessage] = useState("")
@@ -989,7 +992,14 @@ function Programs({
   const [scheduleError, setScheduleError] = useState("")
   const [scheduleSuccess, setScheduleSuccess] = useState("")
   const [visibleProgramsCount, setVisibleProgramsCount] = useState(PAGE_SIZE)
+  const isCreateModalOpen = searchParams.get("newProgram") === "true"
+  
+  const openCreateModal = () => setSearchParams({ newProgram: "true" })
 
+  const closeCreateModal = () => {
+    setSearchParams({})
+    clearDraft()
+  }
 
   useEffect(() => {
     const loadExerciseLibrary = async () => {
@@ -1290,7 +1300,7 @@ function Programs({
     if (editImageInputRef.current) {
       editImageInputRef.current.value = ""
     }
-    setIsCreateModalOpen(true)
+    openCreateModal()
   }
 
 
@@ -1300,7 +1310,7 @@ function Programs({
     if (editImageInputRef.current) {
       editImageInputRef.current.value = ""
     }
-    setIsCreateModalOpen(false)
+    closeCreateModal()
   }
 
   const handleCreateFieldChange = (event) => {
@@ -2462,15 +2472,16 @@ function Programs({
                 {exerciseLibraryError ? <p className="programs-modal-error">{exerciseLibraryError}</p> : null}
 
                 <div className="programs-plan-controls">
-                  <button
-                    type="button"
+                  <Link
+                    to="/exercises"
                     className="programs-modal-secondary-btn programs-plan-add-btn"
-                    onClick={() => handleAddWorkoutToPlanWeek(Number(createPlanWeek), createPlanExercise.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry)))}
-                    disabled={createPlanExercise.length === 0 || workoutPlan.length === 0}
+                    isOpen={isCreateModalOpen}
+                    onClose={closeCreateModal}
+                    draft={programDraft}
                   >
-                    {console.log("Rendering Add Workout button", { createPlanExercise, workoutPlan })}
-                    Add Workout
-                  </button>
+                    {console.log("Rendering Add Exercise button")}
+                    Add Exercise
+                  </Link>
                 </div>
 
                 <div className="programs-plan-weeks">

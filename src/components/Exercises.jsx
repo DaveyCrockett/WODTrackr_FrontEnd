@@ -39,16 +39,6 @@ const getDefaultExerciseFormValues = (username = "") => ({
 })
 
 
-
-const getStoredUsername = () => {
-  try {
-    const rawValue = localStorage.getItem("wodtrackrUser")
-    const userData = rawValue ? JSON.parse(rawValue) : null
-    return userData?.username || ""
-  } catch {
-    return ""
-  }
-}
 const getAuthToken = () => {
   const directToken = localStorage.getItem("wodtrackrAuthToken")
   if (directToken) {
@@ -351,6 +341,7 @@ function Exercises({
   filters,
   setFilters = () => { },
   setIsChoicesLoading = () => { },
+  userSession,
 }) {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -365,7 +356,7 @@ function Exercises({
   const [editFieldErrors, setEditFieldErrors] = useState({})
   const [isEditSubmitting, setIsEditSubmitting] = useState(false)
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false)
-  const [formValues, setFormValues] = useState(() => getDefaultExerciseFormValues(getStoredUsername()))
+  const [formValues, setFormValues] = useState(() => getDefaultExerciseFormValues(userSession.username))
   const [editFormValues, setEditFormValues] = useState(EMPTY_EXERCISE_FORM_VALUES)
   const [exercisesErrorMessage, setExercisesErrorMessage] = useState("")
   const [visibleExerciseCount, setVisibleExerciseCount] = useState(PAGE_SIZE)
@@ -804,19 +795,24 @@ function Exercises({
     return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
+  console.log('Current user session:', userSession)
+  const currentUsername = userSession?.username || ""
+  console.log('Current username:', currentUsername)
   const selectedExercise = exerciseLibrary.find((exercise) => (exercise.id ?? null) === selectedExerciseId) || null
-  const currentUsername = getStoredUsername()
   const selectedExerciseOwner =
     selectedExercise?.created_by_username ||
     selectedExercise?.username ||
     selectedExercise?.created_by ||
     ""
+  console.log('Selected exercise owner:', selectedExerciseOwner, 'Current username:', currentUsername, 'Selected exercise:', selectedExercise)
   const canEditSelectedExercise = Boolean(
+    (console.log('Selected exercise owner:', selectedExerciseOwner, 'Current username:', currentUsername, 'Selected exercise:', selectedExercise),
     selectedExercise &&
     currentUsername &&
     selectedExerciseOwner &&
-    currentUsername === selectedExerciseOwner,
+    currentUsername === selectedExerciseOwner),
   )
+  console.log('Can edit selected exercise:', canEditSelectedExercise)
   const canDeleteSelectedExercise = canEditSelectedExercise
 
   useEffect(() => {

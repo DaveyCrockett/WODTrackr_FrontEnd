@@ -8,6 +8,7 @@ const USERS_API_BASE_URL = String(import.meta.env.VITE_USERS_API_BASE_URL || "/a
 const LOGIN_API_URL = `${USERS_API_BASE_URL}/auth/login/`
 
 function Login({ setUserSession, userSession }) {
+  console.log("Current user session on Login component mount:", userSession)
   const navigate = useNavigate()
   const [formValues, setFormValues] = useState({
     username: "",
@@ -18,6 +19,7 @@ function Login({ setUserSession, userSession }) {
   const [errorMessage, setErrorMessage] = useState("")
   const saveUserSession = saveUserSession => {
     const userData = saveUserSession?.user ?? saveUserSession ?? {}
+    console.log("Raw saveUserSession input:", saveUserSession)
     const authToken = saveUserSession?.access ?? saveUserSession?.token ?? saveUserSession?.key ?? saveUserSession?.auth_token ?? userData?.access ?? userData?.token ?? userData?.key ?? userData?.auth_token ?? ""
 
     const refreshToken = saveUserSession?.refresh ?? userData?.refresh ?? ""
@@ -73,6 +75,7 @@ function Login({ setUserSession, userSession }) {
         password: formValues.password,
         remember_me: formValues.remember_me,
       }
+      console.log('Login payload:', loginPayload)
 
       let response
       try {
@@ -93,7 +96,7 @@ function Login({ setUserSession, userSession }) {
           throw primaryError
         }
       }
-      console.log("Final login response data:", response.data)
+      console.log("Final login response data:", response.config.data)
       saveUserSession(response.data, formValues.username)
       const activeUser = JSON.parse(localStorage.getItem("wodtrackrUser"))
       setUserSession(activeUser)
