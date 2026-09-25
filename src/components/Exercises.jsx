@@ -1239,6 +1239,10 @@ function Exercises({
             </div>
             <div className="exercise-modal-title-wrapper">
               <h2 className="exercise-modal-title">{toSubTitleCase(selectedExercise?.name)}</h2>
+              
+            </div>
+            <div className="exercise-action-buttons">
+              <button className="exercise-primary-btn" type="button" onClick={() => addExerciseToProgram(selectedExerciseId)} disabled={!selectedExerciseId}><img src="src/assets/add-icon.png" alt="Add to Programs" />Programs</button>
             </div>
           </header>
           <div className="exercise-modal-content-container">
@@ -1295,16 +1299,7 @@ function Exercises({
                 </div>
 
               </div>
-              {canDeleteSelectedExercise ? (
-                <button
-                  type="button"
-                  className="exercise-danger-btn"
-                  onClick={handleDeleteExercise}
-                  disabled={isDeleteSubmitting}
-                >
-                  {isDeleteSubmitting ? "Deleting..." : "Delete"}
-                </button>
-              ) : null}
+              <div className="exercise-action-buttons">
               {canEditSelectedExercise ? (
                 <button
                   type="button"
@@ -1315,7 +1310,17 @@ function Exercises({
                   Edit
                 </button>
               ) : null}
-              <button className="exercise-primary-btn" type="button" onClick={() => addExerciseToProgram(selectedExerciseId)} disabled={!selectedExerciseId}>Add to Programs</button>
+              {canDeleteSelectedExercise ? (
+                <button
+                  type="button"
+                  className="exercise-danger-btn"
+                  onClick={handleDeleteExercise}
+                  disabled={isDeleteSubmitting}
+                >
+                  {isDeleteSubmitting ? "Deleting..." : "Delete"}
+                </button>
+              ) : null}
+              </div>
             </section>
           </div>
         </aside>

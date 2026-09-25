@@ -335,10 +335,16 @@
   text-align: center;
 }
 
+.exercise-action-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+}
+
 .exercise-secondary-btn {
   border: none;
   border-radius: 10px;
-  padding: 0.5rem 0.75rem;
+  padding: 0.5rem 1rem;
   background: #307cec;
   color: #ffffff;
   font-weight: 600;
@@ -594,6 +600,13 @@
   cursor: pointer;
 }
 
+.exercise-primary-btn img {
+  width: 15px;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  margin-bottom: 0.10rem;
+}
+
 .exercise-primary-btn:hover {
   background: #2767c9;
 }
@@ -604,11 +617,10 @@
 }
 
 .exercise-danger-btn {
-  width: 100%;
   margin-top: 0.6rem;
   border: none;
   border-radius: 10px;
-  padding: 0.85rem 1rem;
+  padding: 0.5rem;
   background: #b91c1c;
   color: #ffffff;
   font-weight: 700;
