@@ -935,6 +935,7 @@ function Programs({
   setIsChoicesLoading = () => { },
   isProgramsLoading,
   programsErrorMessage,
+  programExercises,
 }) {
   const currentUsername = userSession?.username ?? ""
   const currentUserId = userSession?.userId ?? null

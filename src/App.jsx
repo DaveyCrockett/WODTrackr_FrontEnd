@@ -63,52 +63,6 @@ const normalizeChoiceArray = (choices) => {
 }
 
 
-const saveUserSession = (data, fallbackUsername) => {
-  const userData = data?.user ?? data ?? {}
-  const authToken =
-    data?.access ??
-    data?.token ??
-    data?.key ??
-    data?.auth_token ??
-    userData?.access ??
-    userData?.token ??
-    userData?.key ??
-    userData?.auth_token ??
-    ""
-
-  const refreshToken = data?.refresh ?? userData?.refresh ?? ""
-  const avatarUrl =
-    userData?.avatar_url ??
-    userData?.avatarUrl ??
-    userData?.profile_image ??
-    userData?.profileImage ??
-    null
-
-  const username =
-    userData?.username ?? userData?.name ?? fallbackUsername ?? "Guest user"
-
-  localStorage.setItem(
-    "wodtrackrUser",
-    JSON.stringify({
-      username,
-      avatarUrl,
-      authToken,
-      refreshToken,
-    })
-  )
-
-  if (authToken) {
-    localStorage.setItem("wodtrackrAuthToken", authToken)
-  } else {
-    localStorage.removeItem("wodtrackrAuthToken")
-  }
-
-  if (refreshToken) {
-    localStorage.setItem("wodtrackrRefreshToken", refreshToken)
-  } else {
-    localStorage.removeItem("wodtrackrRefreshToken")
-  }
-}
 
 
 function BillingReturnRedirect({ status }) {
@@ -179,11 +133,16 @@ function App() {
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
   const [newProgram, setNewProgram] = useState({name: "", exercises: [] })
   const [programs, setPrograms] = useState([])
+  const [programExercises, setProgramExercises] = useState([])
   const [programsErrorMessage, setProgramsErrorMessage] = useState("")
   const [isProgramsLoading, setIsProgramsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
 
   console.log("App Rendered! Current programs state count:", programs.length);
+
+  const addExerciseToProgram = (exerciseName) => {
+    setProgramExercises((prevExercises) => [...prevExercises, exerciseName]);
+  };
 
 
   const handleFilterChange = (filterName, selectedValues) => {
@@ -327,7 +286,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* Public Routes */}
-        <Route index path="/login" element={<Login setUserSession={setUserSession} />} />
+        <Route index path="/login" element={<Login setUserSession={setUserSession} userSession={userSession} />} />
         <Route path="/register" element={<Register />} />
         {/* Private/Protected Routes Wrapper */}
         <Route element={<ProgramFormProvider />}>
@@ -335,6 +294,7 @@ function App() {
           <Route path="profile" element={<Profile />} />
           {console.log('Current user session in App.jsx:', userSession)}
           <Route path="exercises" element={<Exercises
+            addExerciseToProgram={addExerciseToProgram}
             userSession={userSession}
             newProgram={newProgram}
             exerciseLibraryState={exerciseLibraryState}
@@ -355,6 +315,7 @@ function App() {
           />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="programs" element={<Programs
+            programExercises={programExercises}
             userSession={userSession}
             isProgramsLoading={isProgramsLoading}
             programs={programs}

@@ -342,6 +342,7 @@ function Exercises({
   setFilters = () => { },
   setIsChoicesLoading = () => { },
   userSession,
+  addExerciseToProgram,
 }) {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -1238,16 +1239,6 @@ function Exercises({
             </div>
             <div className="exercise-modal-title-wrapper">
               <h2 className="exercise-modal-title">{toSubTitleCase(selectedExercise?.name)}</h2>
-              {canEditSelectedExercise ? (
-                <button
-                  type="button"
-                  className="exercise-secondary-btn"
-                  onClick={handleOpenEditModal}
-                  ref={editModalTriggerRef}
-                >
-                  Edit Exercise
-                </button>
-              ) : null}
             </div>
           </header>
           <div className="exercise-modal-content-container">
@@ -1311,9 +1302,20 @@ function Exercises({
                   onClick={handleDeleteExercise}
                   disabled={isDeleteSubmitting}
                 >
-                  {isDeleteSubmitting ? "Deleting..." : "Delete Exercise"}
+                  {isDeleteSubmitting ? "Deleting..." : "Delete"}
                 </button>
               ) : null}
+              {canEditSelectedExercise ? (
+                <button
+                  type="button"
+                  className="exercise-secondary-btn"
+                  onClick={handleOpenEditModal}
+                  ref={editModalTriggerRef}
+                >
+                  Edit
+                </button>
+              ) : null}
+              <button className="exercise-primary-btn" type="button" onClick={() => addExerciseToProgram(selectedExerciseId)} disabled={!selectedExerciseId}>Add to Programs</button>
             </section>
           </div>
         </aside>

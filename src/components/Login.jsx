@@ -17,24 +17,36 @@ function Login({ setUserSession, userSession }) {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
-  const saveUserSession = saveUserSession => {
-    const userData = saveUserSession?.user ?? saveUserSession ?? {}
-    console.log("Raw saveUserSession input:", saveUserSession)
-    const authToken = saveUserSession?.access ?? saveUserSession?.token ?? saveUserSession?.key ?? saveUserSession?.auth_token ?? userData?.access ?? userData?.token ?? userData?.key ?? userData?.auth_token ?? ""
+const saveUserSession = userSession => {
+    const userData = userSession?.user ?? userSession ?? {}
+    console.log("User data extracted from saveUserSession input:", userData)
+    console.log("Raw saveUserSession input:", userSession)
+    
+    const authToken = userSession?.data?.access ?? userSession?.token ?? userSession?.key ?? userSession?.auth_token ?? userData?.data?.access ?? userData?.token ?? userData?.key ?? userData?.auth_token ?? ""
+    const refreshToken = userSession?.data?.refresh ?? userData?.data?.refresh ?? ""
+    const avatarUrl = userData?.data?.avatar_url ?? userData?.data?.avatarUrl ?? userData?.data?.profile_image ?? userData?.data?.profileImage ?? null
 
-    const refreshToken = saveUserSession?.refresh ?? userData?.refresh ?? ""
-    const avatarUrl = userData?.avatar_url ?? userData?.avatarUrl ?? userData?.profile_image ?? userData?.profileImage ?? null
-    const username = userData?.username ?? userData?.name
+    let configData = userSession?.config?.data ?? userData?.config?.data;
+    if (typeof configData === 'string') {
+      try {
+        configData = JSON.parse(configData);
+      } catch (e) {
+        configData = null;
+      }
+    }
+    
+    const username = configData?.username ?? 
+                     userSession?.data?.username ?? 
+                     userData?.data?.username ?? 
+                     userData?.username ?? 
+                     userData?.name ?? "";
 
-    localStorage.setItem(
-      "wodtrackrUser",
-      JSON.stringify({
-        username,
-        avatarUrl,
-        authToken,
-        refreshToken,
-      })
-    )
+    console.log("Canonicalized user session values:", {
+      username,
+      avatarUrl,
+      authToken,
+      refreshToken,
+    })
 
     if (authToken) {
       localStorage.setItem("wodtrackrAuthToken", authToken)
@@ -47,15 +59,33 @@ function Login({ setUserSession, userSession }) {
     } else {
       localStorage.removeItem("wodtrackrRefreshToken")
     }
+    
+    if (username) {
+      localStorage.setItem("wodtrackrUsername", username)
+    } else {
+      localStorage.removeItem("wodtrackrUsername")
+    }
+    
     console.log("Saved user session:", {
       username,
       avatarUrl,
       authToken,
       refreshToken,
     })
-  }
 
-  
+    localStorage.setItem(
+      "wodtrackrUser",
+      JSON.stringify({
+        username,
+        avatarUrl,
+        authToken,
+        refreshToken,
+      })
+    )
+}
+
+
+
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target
     setFormValues((prev) => ({
@@ -97,7 +127,13 @@ function Login({ setUserSession, userSession }) {
         }
       }
       console.log("Final login response data:", response.config.data)
-      saveUserSession(response.data, formValues.username)
+      saveUserSession(response)
+      console.log("User session saved.", {
+        username: response.config.data?.username,
+        avatarUrl: response.data?.user?.avatar_url ?? null,
+        authToken: response.data?.access ?? response.data?.token ?? response.data?.key ?? response.data?.auth_token ?? "",
+        refreshToken: response.data?.refresh ?? "",
+      })
       const activeUser = JSON.parse(localStorage.getItem("wodtrackrUser"))
       setUserSession(activeUser)
       navigate("/profile")
@@ -112,7 +148,7 @@ function Login({ setUserSession, userSession }) {
     }
   }
 
-  
+
   return (
     <main className="auth-page">
       <section className="auth-card">
