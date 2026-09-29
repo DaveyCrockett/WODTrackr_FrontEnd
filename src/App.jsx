@@ -295,6 +295,7 @@ function App() {
           <Route path="profile" element={<Profile />} />
           {console.log('Current user session in App.jsx:', userSession)}
           <Route path="exercises" element={<Exercises
+            programExercises={programExercises}
             addExerciseToProgram={addExerciseToProgram}
             userSession={userSession}
             newProgram={newProgram}

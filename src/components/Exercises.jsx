@@ -6,6 +6,7 @@ import FilterIcon from "../assets/filter.png"
 import MultiSelect from "./MultiSelect"
 import ExerciseSteps from "./ExerciseSteps"
 import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
+import CheckMarkIcon from "../assets/checkMark_Icon.png"
 
 const API_URL = "/api/wodtrackr/exercises/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
@@ -284,6 +285,8 @@ const getExerciseImageUrl = (exercise) => {
   return normalizeMediaUrlForFrontend(imageValue)
 }
 
+
+
 const canonicalizeEquipmentValue = (value) => {
   const normalized = String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ")
   if (normalized === "bodyweight") return "body weight"
@@ -343,6 +346,7 @@ function Exercises({
   setIsChoicesLoading = () => { },
   userSession,
   addExerciseToProgram,
+  programExercises,
 }) {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -808,10 +812,10 @@ function Exercises({
   console.log('Selected exercise owner:', selectedExerciseOwner, 'Current username:', currentUsername, 'Selected exercise:', selectedExercise)
   const canEditSelectedExercise = Boolean(
     (console.log('Selected exercise owner:', selectedExerciseOwner, 'Current username:', currentUsername, 'Selected exercise:', selectedExercise),
-    selectedExercise &&
-    currentUsername &&
-    selectedExerciseOwner &&
-    currentUsername === selectedExerciseOwner),
+      selectedExercise &&
+      currentUsername &&
+      selectedExerciseOwner &&
+      currentUsername === selectedExerciseOwner),
   )
   console.log('Can edit selected exercise:', canEditSelectedExercise)
   const canDeleteSelectedExercise = canEditSelectedExercise
@@ -899,19 +903,20 @@ function Exercises({
             visibleExercises.map((exercise, index) => {
               console.log("Rendering exercise:", exercise)
               const exerciseImageUrl = String(getExerciseImageUrl(exercise))
+              const currentExerciseId = exercise.id ?? null
               return (
                 <article
-                  className={`exercise-item ${(exercise.id ?? null) === selectedExerciseId ? "exercise-item-selected" : ""}`}
+                  className={`exercise-item ${currentExerciseId === selectedExerciseId ? "exercise-item-selected" : ""}`}
                   key={exercise.id ?? index}
                   id={exercise.id ? `exercise-option-${exercise.id}` : undefined}
                   role="option"
-                  aria-selected={(exercise.id ?? null) === selectedExerciseId}
-                  tabIndex={(exercise.id ?? null) === selectedExerciseId ? 0 : -1}
-                  onClick={() => handleOpenExerciseDetailsModal(exercise.id ?? null)}
+                  aria-selected={currentExerciseId === selectedExerciseId}
+                  tabIndex={currentExerciseId === selectedExerciseId ? 0 : -1}
+                  onClick={() => handleOpenExerciseDetailsModal(currentExerciseId)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault()
-                      handleOpenExerciseDetailsModal(exercise.id ?? null)
+                      handleOpenExerciseDetailsModal(currentExerciseId)
                     }
                   }}
                 >
@@ -930,7 +935,10 @@ function Exercises({
                   ) : null}
                   <div className="exercise-item-content">
                     <h3 className="exercise-header-title">{(exercise.title || exercise.name || "Exercise").toUpperCase()}</h3>
-                    <input type="checkbox" className="exercise-modal-checkbox" checked={programExercises.includes(selectedExerciseId) || false} onChange={() => addExerciseToProgram(selectedExerciseId)} />
+                    <button className="exercise-primary-btn" type="button" onClick={() => addExerciseToProgram(currentExerciseId)} disabled={!currentExerciseId}><img src="src/assets/add-icon.png" alt="Add to Programs" />Programs</button>
+                    {/* {programExercises.includes(currentExerciseId) && (
+                      <img src={CheckMarkIcon} alt="Added to Programs" className="exercise-added-icon" />
+                    )} */}
                     <div className="exercise-header">
                       <p className="exercise-meta"><strong>Visibility:</strong> {capitalizeFirstLetter(exercise.is_public ? "Public" : "Private")}</p>
                       <p className="exercise-meta"><strong>Category:</strong> {capitalizeFirstLetter(exercise.category)}</p>
@@ -1241,9 +1249,6 @@ function Exercises({
             <div className="exercise-modal-title-wrapper">
               <h2 className="exercise-modal-title">{toSubTitleCase(selectedExercise?.name)}</h2>
             </div>
-            <div className="exercise-action-buttons">
-              <button className="exercise-primary-btn" type="button" onClick={() => addExerciseToProgram(selectedExerciseId)} disabled={!selectedExerciseId}><img src="src/assets/add-icon.png" alt="Add to Programs" />Programs</button>
-            </div>
           </header>
           <div className="exercise-modal-content-container">
             <section className="exercise-details-image-wrap">
@@ -1300,26 +1305,26 @@ function Exercises({
 
               </div>
               <div className="exercise-action-buttons">
-              {canEditSelectedExercise ? (
-                <button
-                  type="button"
-                  className="exercise-secondary-btn"
-                  onClick={handleOpenEditModal}
-                  ref={editModalTriggerRef}
-                >
-                  Edit
-                </button>
-              ) : null}
-              {canDeleteSelectedExercise ? (
-                <button
-                  type="button"
-                  className="exercise-danger-btn"
-                  onClick={handleDeleteExercise}
-                  disabled={isDeleteSubmitting}
-                >
-                  {isDeleteSubmitting ? "Deleting..." : "Delete"}
-                </button>
-              ) : null}
+                {canEditSelectedExercise ? (
+                  <button
+                    type="button"
+                    className="exercise-secondary-btn"
+                    onClick={handleOpenEditModal}
+                    ref={editModalTriggerRef}
+                  >
+                    Edit
+                  </button>
+                ) : null}
+                {canDeleteSelectedExercise ? (
+                  <button
+                    type="button"
+                    className="exercise-danger-btn"
+                    onClick={handleDeleteExercise}
+                    disabled={isDeleteSubmitting}
+                  >
+                    {isDeleteSubmitting ? "Deleting..." : "Delete"}
+                  </button>
+                ) : null}
               </div>
             </section>
           </div>
