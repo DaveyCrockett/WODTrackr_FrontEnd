@@ -5,6 +5,9 @@ import { Link, useNavigate } from "react-router-dom"
 import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
 import WhiteLeftArrowIcon from "../assets/WhiteLeftArrowIcon.png"
 
+const USERS_API_BASE_URL = String(import.meta.env.VITE_USERS_API_BASE_URL || "/api/users").replace(/\/+$/, "")
+const REGISTER_API_URL = `${USERS_API_BASE_URL}/auth/register/`
+
 function Register() {
   const navigate = useNavigate()
   const [formValues, setFormValues] = useState({
@@ -30,7 +33,7 @@ function Register() {
     setErrorMessage("")
 
     try {
-      await axios.post("http://127.0.0.1:8000/api/users/auth/register/", {
+      await axios.post(REGISTER_API_URL, {
         username: formValues.username,
         email: formValues.email,
         password: formValues.password,

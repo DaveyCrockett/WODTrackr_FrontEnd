@@ -5,8 +5,8 @@ import calendarIcon from "../assets/CalendarIconWhite.png"
 import programsIcon from "../assets/ProgramsIconWhite.png"
 import settingsIcon from "../assets/SettingsIcon.png"
 import helpIcon from "../assets/HelpIcon.png"
-import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
-import DEFAULT_AVATAR from "../assets/WLogo.png"
+import WODTrackrIcon from "../assets/WLogo.png"
+import DEFAULT_AVATAR from "../assets/DefaultAvatar.png"
 const navItems = [
   { label: "Home", to: "/", icon: homeIcon },
   { label: "Exercise", to: "/exercises", icon: exerciseIcon },
@@ -16,19 +16,10 @@ const navItems = [
   { label: "Help", to: "/help", icon: helpIcon },
 ]
 
-const getStoredUser = () => {
-  try {
-    const rawValue = localStorage.getItem("wodtrackrUser")
-    return rawValue ? JSON.parse(rawValue) : null
-  } catch {
-    return null
-  }
-}
-
-function Navbar() {
+function Navbar({ userSession }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const user = getStoredUser()
+  const user = userSession
   const profileAvatar = user?.avatarUrl || DEFAULT_AVATAR
   const profileAlt = user?.username ? `${user.username} profile` : "Profile"
   const isProfileActive = location.pathname.startsWith("/profile")
@@ -43,7 +34,9 @@ function Navbar() {
   return (
     <nav className="nav-rail">
       <div className="nav-logo">
-        <img src={WODTrackrLogo} alt="WODTrackr logo" />
+        <NavLink to="/">
+          <img src={WODTrackrIcon} alt="WODTrackr logo" />
+        </NavLink>
       </div>
       <div className="nav-links">
         <div className="nav-profile-menu">

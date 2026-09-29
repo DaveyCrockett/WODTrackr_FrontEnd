@@ -2,10 +2,12 @@ import "../CSS/programs.css"
 import "../CSS/multiselect.css"
 import axios from "axios"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { Link, useSearchParams } from 'react-router-dom'
+import { useProgramForm } from "./contexts/ProgramFormContext"
 import MultiSelect from "./MultiSelect"
+import { buildRequestConfig } from "../utils/exerciseUtils"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
-const EQUIPMENT_API_URL = "/api/wodtrackr/equipment/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 const STRIPE_CHECKOUT_API_URL = String(
   import.meta.env.VITE_CHECKOUT_SESSION_API_URL || "/api/users/billing/stripe/checkout-session/",
@@ -13,7 +15,8 @@ const STRIPE_CHECKOUT_API_URL = String(
 const WORKOUTS_STORAGE_KEY = "wodtrackrWorkouts"
 const PURCHASED_PROGRAMS_STORAGE_KEY = "wodtrackrPurchasedProgramIds"
 const PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY = "wodtrackrPendingCheckoutProgramId"
-const PROGRAMS_PER_PAGE = 10
+const PAGE_SIZE = 18
+const SKELETON_CARD_COUNT = 6
 const DEFAULT_DIFFICULTIES = ["All Levels", "Beginner", "Intermediate", "Advanced"]
 const DEFAULT_DURATION_MIN = 1
 const DEFAULT_DURATION_MAX = 12
@@ -90,6 +93,8 @@ const areProgramItemsEquivalent = (left, right) =>
   Number(left?.week) === Number(right?.week) &&
   Number(left?.day ?? 1) === Number(right?.day ?? 1) &&
   Number(left?.position) === Number(right?.position)
+
+
 
 const syncProgramItemsByItemUrl = async (programId, existingItems, nextItems) => {
   const endpoint = buildProgramItemsApiUrl(programId)
@@ -197,8 +202,8 @@ const buildWorkoutPlanForDuration = (durationValue, previousPlan = []) => {
       Number(entry?.week_number),
       Array.isArray(entry?.exercise_ids)
         ? entry.exercise_ids
-            .map((exerciseId) => Number(exerciseId))
-            .filter((exerciseId) => Number.isFinite(exerciseId))
+          .map((exerciseId) => Number(exerciseId))
+          .filter((exerciseId) => Number.isFinite(exerciseId))
         : [],
     ]),
   )
@@ -253,6 +258,42 @@ const areWorkoutPlansEqual = (leftPlan, rightPlan) => {
   })
 }
 
+const addExerciseIdsToWeekPlan = (durationValue, currentPlan, weekNumber, exerciseIdsToAdd) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedIds = (Array.isArray(exerciseIdsToAdd) ? exerciseIdsToAdd : [])
+    .map((exerciseId) => Number(exerciseId))
+    .filter((exerciseId) => Number.isFinite(exerciseId))
+
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || normalizedIds.length === 0) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    return {
+      ...weekEntry,
+      exercise_ids: [...new Set([...weekEntry.exercise_ids, ...normalizedIds])],
+    }
+  })
+}
+
+const removeExerciseIdFromWeekPlan = (durationValue, currentPlan, weekNumber, exerciseIdToRemove) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedExerciseId = Number(exerciseIdToRemove)
+
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !Number.isFinite(normalizedExerciseId)) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    return {
+      ...weekEntry,
+      exercise_ids: weekEntry.exercise_ids.filter((candidateId) => candidateId !== normalizedExerciseId),
+    }
+  })
+}
+
 const clearFormFieldError = (previousErrors, fieldName, clearWorkoutPlan = false) => ({
   ...previousErrors,
   [fieldName]: "",
@@ -285,32 +326,32 @@ const buildWorkoutPlanFromProgram = (program) => {
 
   const mappedFromWorkoutPlan = Array.isArray(candidateWorkoutPlan)
     ? candidateWorkoutPlan
-        .map((entry) => {
-          const weekNumber = Number(entry?.week_number ?? entry?.week ?? entry?.weekNumber)
-          if (!Number.isFinite(weekNumber) || weekNumber < 1) return null
+      .map((entry) => {
+        const weekNumber = Number(entry?.week_number ?? entry?.week ?? entry?.weekNumber)
+        if (!Number.isFinite(weekNumber) || weekNumber < 1) return null
 
-          const explicitIds = extractExerciseIds(entry?.exercise_ids)
-          const fromExercises = extractExerciseIds(entry?.exercises)
-          return {
-            week_number: weekNumber,
-            exercise_ids: [...new Set([...explicitIds, ...fromExercises])],
-          }
-        })
-        .filter(Boolean)
+        const explicitIds = extractExerciseIds(entry?.exercise_ids)
+        const fromExercises = extractExerciseIds(entry?.exercises)
+        return {
+          week_number: weekNumber,
+          exercise_ids: [...new Set([...explicitIds, ...fromExercises])],
+        }
+      })
+      .filter(Boolean)
     : []
 
   const mappedFromExercises = Array.isArray(program.exercises)
     ? program.exercises.reduce((accumulator, entry) => {
-        const exerciseId = toExerciseId(entry?.id ?? entry?.exercise_id ?? entry)
-        if (!exerciseId) return accumulator
-        const weekNumber = Number(entry?.week_number ?? entry?.week ?? entry?.weekNumber)
-        const targetWeek = Number.isFinite(weekNumber) && weekNumber > 0 ? weekNumber : 1
-        if (!accumulator[targetWeek]) {
-          accumulator[targetWeek] = new Set()
-        }
-        accumulator[targetWeek].add(exerciseId)
-        return accumulator
-      }, {})
+      const exerciseId = toExerciseId(entry?.id ?? entry?.exercise_id ?? entry)
+      if (!exerciseId) return accumulator
+      const weekNumber = Number(entry?.week_number ?? entry?.week ?? entry?.weekNumber)
+      const targetWeek = Number.isFinite(weekNumber) && weekNumber > 0 ? weekNumber : 1
+      if (!accumulator[targetWeek]) {
+        accumulator[targetWeek] = new Set()
+      }
+      accumulator[targetWeek].add(exerciseId)
+      return accumulator
+    }, {})
     : {}
 
   const mappedFromExercisesList = Object.entries(mappedFromExercises).map(([week, ids]) => ({
@@ -359,7 +400,7 @@ const EMPTY_PROGRAM_FORM_VALUES = {
 }
 
 const buildProgramFormValues = (program) => ({
-  title: String(program?.title ?? ""),
+  title: String(program?.title ?? program?.name ?? ""),
   description: String(program?.description ?? ""),
   difficulty: program?.difficulty ?? "",
   duration_weeks:
@@ -373,56 +414,37 @@ const buildProgramFormValues = (program) => ({
   program_default_image_url: String(program?.image ?? ""),
 })
 
-const getAuthToken = () => {
-  const directToken = localStorage.getItem("wodtrackrAuthToken")
-  if (directToken) {
-    return directToken
-  }
-
-  try {
-    const rawValue = localStorage.getItem("wodtrackrUser")
-    const userData = rawValue ? JSON.parse(rawValue) : null
-    return userData?.authToken || ""
-  } catch {
-    return ""
-  }
-}
-
-const getStoredUserInfo = () => {
-  try {
-    const rawValue = localStorage.getItem("wodtrackrUser")
-    const userData = rawValue ? JSON.parse(rawValue) : null
+const normalizeExerciseEntry = (entry) => {
+  if (!entry) return null
+  if (typeof entry === "object" && !Array.isArray(entry)) {
     return {
-      username: String(userData?.username ?? "").trim(),
-      userId: userData?.id ?? userData?.user_id ?? userData?.userId ?? null,
+      id: entry.id ?? entry.exercise_id ?? entry.pk ?? null,
+      name: String(entry.name ?? entry.title ?? "").trim(),
     }
-  } catch {
-    return { username: "", userId: null }
   }
+  return { id: null, name: String(entry ?? "").trim() }
 }
 
-const buildRequestConfig = (overrides = {}) => {
-  const authToken = getAuthToken()
-  return {
-    ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}),
-    ...overrides,
+const normalizeExercisesPayload = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeExerciseEntry(entry)).filter(Boolean)
   }
-}
-
-const normalizeProgramsPayload = (data) => {
-  if (Array.isArray(data?.data)) {
-    return data.data
-  }
-
-  if (Array.isArray(data?.results)) {
-    return data.results
-  }
-
-  if (Array.isArray(data)) {
-    return data
+  if (value && typeof value === "object") {
+    const nestedCandidates = [
+      value.value,
+      value.target?.value,
+      value.exercise,
+      value.exercises,
+      value.exercise_ids,
+      value.exercise_values,
+      value.exercise_required,
+    ]
+      .filter((entry) => entry !== undefined && entry !== null)
+      .flatMap((entry) => normalizeExercisesPayload(entry))
+    return nestedCandidates
   }
 
-  return []
+  return normalizeExerciseEntry(value)
 }
 
 const normalizeProgramDetailPayload = (data) => {
@@ -654,11 +676,11 @@ const getStripePublishableKey = () => String(import.meta.env.VITE_STRIPE_PUBLISH
 const getProgramCheckoutTitle = (programDetails, programSummary, formValues) =>
   String(
     formValues?.title ||
-      programDetails?.title ||
-      programDetails?.name ||
-      programSummary?.title ||
-      programSummary?.name ||
-      "Program",
+    programDetails?.title ||
+    programDetails?.name ||
+    programSummary?.title ||
+    programSummary?.name ||
+    "Program",
   ).trim()
 
 const parseCheckoutSessionResponse = (responseData) => {
@@ -689,14 +711,21 @@ const getProgramImageUrl = (program) => {
 
   return String(
     program?.image ??
-      program?.program_image ??
-      program?.banner ??
-      program?.banner_image ??
-      program?.image_url ??
-      program?.imageUrl ??
-      "",
+    program?.program_image ??
+    program?.banner ??
+    program?.banner_image ??
+    program?.image_url ??
+    program?.imageUrl ??
+    "",
   ).trim()
 }
+
+function capitalizeFirstLetter(str) {
+  if (!str) return ''; // Handle empty strings safely
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+
 const normalizeEquipmentEntry = (value) => {
   const normalizeScalar = (entry) => {
     if (entry === null || entry === undefined) return ""
@@ -729,7 +758,7 @@ const normalizeEquipmentEntry = (value) => {
       value.label ??
       value.equipment_name ??
       value.equipmentName ??
-      value.equipment 
+      value.equipment
 
     if (candidate === null || candidate === undefined) return ""
     if (typeof candidate === "object") {
@@ -759,7 +788,7 @@ const normalizeEquipmentEntry = (value) => {
     return normalizeScalar(candidate)
   }
 
-   return normalizeScalar(value)
+  return normalizeScalar(value)
 }
 
 const normalizeEquipmentValues = (value) => {
@@ -767,7 +796,7 @@ const normalizeEquipmentValues = (value) => {
     return value
       .map((entry) => normalizeEquipmentEntry(entry))
       .filter(Boolean)
-  } 
+  }
   if (value && typeof value === "object") {
     const nestedCandidates = [
       value.value,
@@ -886,10 +915,47 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
   return [...new Set(mappedValues)]
 }
 
-function Programs({ handleFilterChange, isChoicesLoading, exerciseLibraryState, setExerciseLibraryState, filteredAndSortedLibrary, filters, setFilters, currentPage, setCurrentPage, searchName, sortOrder, goalChoices, difficultyChoices, categoryChoices, equipmentChoices, muscleChoices, errorMessage, setIsChoicesLoading }) {
-  const [programs, setPrograms] = useState([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+function Programs({
+  programs,
+  userSession,
+  handleFilterChange = () => { },
+  isChoicesLoading = false,
+  exerciseLibraryState,
+  setExerciseLibraryState = () => { },
+  filters,
+  setFilters = () => { },
+  currentPage = 1,
+  setCurrentPage = () => { },
+  sortOrder = "asc",
+  goalChoices,
+  difficultyChoices,
+  categoryChoices,
+  equipmentChoices,
+  muscleChoices,
+  setIsChoicesLoading = () => { },
+  isProgramsLoading,
+  programsErrorMessage,
+  programExercises,
+}) {
+  const currentUsername = userSession?.username ?? ""
+  const currentUserId = userSession?.userId ?? null
+  const [searchName, setSearchName] = useState("")
+  const [errorMessage, setErrorMessage] = useState("")
+  const resolvedFilters = filters ?? { difficulty: [], category: [], equipment: [] }
+  const resolvedExerciseLibraryState = exerciseLibraryState ?? {
+    exerciseLibrary: [],
+    isExerciseLibraryLoading: false,
+    exerciseLibraryError: "",
+  }
+  const {
+    exerciseLibrary = [],
+    isExerciseLibraryLoading = false,
+    exerciseLibraryError = "",
+  } = resolvedExerciseLibraryState
+
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { programDraft, clearDraft } = useProgramForm()
+  const [successMessage, setSuccessMessage] = useState("")
   const [createFormValues, setCreateFormValues] = useState(EMPTY_PROGRAM_FORM_VALUES)
   const [createFieldErrors, setCreateFieldErrors] = useState({})
   const [createErrorMessage, setCreateErrorMessage] = useState("")
@@ -926,25 +992,15 @@ function Programs({ handleFilterChange, isChoicesLoading, exerciseLibraryState, 
   const [scheduleStartDate, setScheduleStartDate] = useState("")
   const [scheduleError, setScheduleError] = useState("")
   const [scheduleSuccess, setScheduleSuccess] = useState("")
+  const [visibleProgramsCount, setVisibleProgramsCount] = useState(PAGE_SIZE)
+  const isCreateModalOpen = searchParams.get("newProgram") === "true"
+  
+  const openCreateModal = () => setSearchParams({ newProgram: "true" })
 
-
-  const getAuthToken = () => {
-  try {
-    const rawValue = localStorage.getItem("wodtrackrUser")
-    const userData = rawValue ? JSON.parse(rawValue) : null
-    return userData?.authToken || ""
-  } catch {
-    return ""
+  const closeCreateModal = () => {
+    setSearchParams({})
+    clearDraft()
   }
-}
-
-const buildRequestConfig = (overrides = {}) => {
-  const authToken = getAuthToken()
-  return {
-    ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}),
-    ...overrides,
-  }
-}
 
   useEffect(() => {
     const loadExerciseLibrary = async () => {
@@ -954,17 +1010,14 @@ const buildRequestConfig = (overrides = {}) => {
         isExerciseLibraryLoading: true,
         exerciseLibraryError: '',
       }))
-      console.log('Loading exercise library...')
       try {
-        console.log("config:", config)
         const response = await axios.get(EXERCISES_API_URL, config)
-        console.log('Exercise library loaded:', response?.data.all_exercises || response?.data || [])
         const nextNode = response?.data?.next
         setExerciseLibraryState((prevState) => ({
           ...prevState,
           isExerciseLibraryLoading: false,
           exerciseLibraryError: '',
-          exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || [] ),
+          exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || []),
           hasMoreExercises: nextNode !== null,
         }))
       } catch (error) {
@@ -981,30 +1034,7 @@ const buildRequestConfig = (overrides = {}) => {
   }, [searchName, sortOrder, filters])
 
 
-  useEffect(() => {
-    const loadPrograms = async () => {
-      setIsLoading(true)
-      setErrorMessage("")
 
-      try {
-        const response = await axios.get(API_URL, buildRequestConfig())
-        console.log("Raw programs response:", response)
-        setPrograms(normalizeProgramsPayload(response?.data))
-      } catch (error) {
-        if (error?.response?.status === 401 || error?.response?.status === 403) {
-          setErrorMessage("Please log in to load training programs.")
-        } else {
-          const message = error?.response?.data?.detail || "Unable to load programs. Please try again."
-          setErrorMessage(message)
-        }
-        setPrograms([])
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadPrograms()
-  }, [])
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search)
@@ -1103,6 +1133,7 @@ const buildRequestConfig = (overrides = {}) => {
   const categoryFilterOptions = categories
 
   const goals = useMemo(() => {
+    console.log("goalChoices: ", goalChoices)
     if (goalChoices.length > 0) {
       const seen = new Map()
       for (const c of goalChoices) {
@@ -1113,7 +1144,7 @@ const buildRequestConfig = (overrides = {}) => {
     const fromPrograms = programs.map((p) => p?.goal).filter(Boolean)
     return [...new Set(fromPrograms)].sort().map((v) => ({ value: v, label: v }))
   }, [programs, goalChoices])
-  const goalFilterOptions = goals
+  console.log("goals: ", goals)
 
   const equipments = useMemo(() => {
     if (equipmentChoices.length > 0) {
@@ -1152,16 +1183,65 @@ const buildRequestConfig = (overrides = {}) => {
   const editEquipmentSelection = Array.isArray(editFormValues.equipment) ? editFormValues.equipment : []
   const createEquipmentValues = normalizeEquipmentValues(createFormValues.equipment)
   const editEquipmentValues = normalizeEquipmentValues(editFormValues.equipment)
-  const filterCategoryValues = Array.isArray(filters.category) ? filters.category : []
-  const filterGoalValues = Array.isArray(filters.goal) ? filters.goal : []
-  const filterEquipmentValues = Array.isArray(filters.equipment) ? filters.equipment : []
+  const filterCategoryValues = Array.isArray(resolvedFilters.category) ? resolvedFilters.category : []
+  const filterEquipmentValues = Array.isArray(resolvedFilters.equipment) ? resolvedFilters.equipment : []
+  const filterDifficultyValues = Array.isArray(resolvedFilters.difficulty) ? resolvedFilters.difficulty : []
 
-  const totalPages = Math.max(1, Math.ceil(filteredAndSortedLibrary.length / PROGRAMS_PER_PAGE))
-  const safePage = Math.min(currentPage, totalPages)
-  const pagedPrograms = filteredAndSortedLibrary.slice(
-    (safePage - 1) * PROGRAMS_PER_PAGE,
-    safePage * PROGRAMS_PER_PAGE,
+  const filteredAndSortedProgramsLibrary = useMemo(() => {
+    let result = [...programs]
+    console.log("result", result)
+
+    if (searchName.trim()) {
+      const query = searchName.trim().toLowerCase()
+      result = result.filter((program) => {
+        const name = String(program?.name ?? program?.title ?? "").toLowerCase()
+        const description = String(program?.description ?? "").toLowerCase()
+        return name.includes(query) || description.includes(query)
+      })
+    }
+
+    if (filterDifficultyValues.length > 0) {
+      result = result.filter((program) => filterDifficultyValues.includes(program?.difficulty))
+    }
+
+    if (filterCategoryValues.length > 0) {
+      result = result.filter((program) => filterCategoryValues.includes(program?.category))
+    }
+
+    if (filterEquipmentValues.length > 0) {
+      result = result.filter((program) => {
+        const values = canonicalizeEquipmentValues(getProgramEquipmentValues(program), equipmentChoices)
+        return filterEquipmentValues.some((equipmentValue) => values.includes(equipmentValue))
+      })
+    }
+
+    result.sort((left, right) => {
+      const leftName = String(left?.name ?? left?.title ?? "").toLowerCase()
+      const rightName = String(right?.name ?? right?.title ?? "").toLowerCase()
+      return sortOrder === "desc" ? rightName.localeCompare(leftName) : leftName.localeCompare(rightName)
+    })
+
+    return result
+  }, [programs, searchName, sortOrder, filterDifficultyValues, filterCategoryValues, filterEquipmentValues, equipmentChoices])
+
+  useEffect(() => {
+    setVisibleProgramsCount(PAGE_SIZE)
+  }, [filteredAndSortedProgramsLibrary.length, sortOrder, resolvedFilters.searchName, resolvedFilters.category, resolvedFilters.equipment, resolvedFilters.difficulty, resolvedFilters.target])
+
+  const visiblePrograms = useMemo(
+    () => filteredAndSortedProgramsLibrary.slice(0, visibleProgramsCount),
+    [filteredAndSortedProgramsLibrary, visibleProgramsCount],
   )
+
+  const hasMoreVisiblePrograms = visibleProgramsCount < filteredAndSortedProgramsLibrary.length
+
+  const handleLoadMorePrograms = () => {
+    setVisibleProgramsCount((previousCount) => previousCount + PAGE_SIZE)
+  }
+
+
+  const filterEquipmentOptions = equipments
+  const filterCategoryOptions = categories
   const selectedProgramDetails = selectedProgramId ? programDetailsById[selectedProgramId] : null
   const selectedProgramOwner =
     selectedProgramDetails?.created_by_username ||
@@ -1171,7 +1251,6 @@ const buildRequestConfig = (overrides = {}) => {
     selectedProgram?.username ||
     selectedProgram?.created_by ||
     ""
-  const { username: currentUsername, userId: currentUserId } = getStoredUserInfo()
   const selectedProgramOwnerId =
     selectedProgramDetails?.created_by_id ??
     selectedProgramDetails?.created_by_user_id ??
@@ -1206,7 +1285,7 @@ const buildRequestConfig = (overrides = {}) => {
   const handleClearFilters = () => {
     setSearchName("")
     setSortOrder("asc")
-    setFilters({ difficulty: [], category: [], goal: [], equipment: [] })
+    setFilters({ difficulty: [], category: [], equipment: [] })
     setCurrentPage(1)
   }
 
@@ -1222,7 +1301,7 @@ const buildRequestConfig = (overrides = {}) => {
     if (editImageInputRef.current) {
       editImageInputRef.current.value = ""
     }
-    setIsCreateModalOpen(true)
+    openCreateModal()
   }
 
 
@@ -1232,7 +1311,7 @@ const buildRequestConfig = (overrides = {}) => {
     if (editImageInputRef.current) {
       editImageInputRef.current.value = ""
     }
-    setIsCreateModalOpen(false)
+    closeCreateModal()
   }
 
   const handleCreateFieldChange = (event) => {
@@ -1251,19 +1330,8 @@ const buildRequestConfig = (overrides = {}) => {
   }
 
   const handleAddWorkoutToPlanWeek = (weekNumber, selectedExerciseIds) => {
-    // TODO: Refactor exercise-list in excise component -- create a 
-    // reusable function maybe in its own function  also for programs 
-    // exercise list. see Line 964 in Exercises component.
     setCreateFormValues((prev) => {
-      const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        const nextExerciseIds = [...new Set([...weekEntry.exercise_ids, ...selectedExerciseIds])]
-        if (nextExerciseIds.length === weekEntry.exercise_ids.length) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: nextExerciseIds,
-        }
-      })
+      const nextPlan = addExerciseIdsToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, selectedExerciseIds)
       return { ...prev, workout_plan: nextPlan }
     })
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
@@ -1279,13 +1347,7 @@ const buildRequestConfig = (overrides = {}) => {
     if (!Number.isFinite(weekNumber) || workoutExerciseIds.length === 0) return
 
     setCreateFormValues((prev) => {
-      const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: [...new Set([...weekEntry.exercise_ids, ...workoutExerciseIds])],
-        }
-      })
+      const nextPlan = addExerciseIdsToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, workoutExerciseIds)
       return { ...prev, workout_plan: nextPlan }
     })
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
@@ -1294,13 +1356,7 @@ const buildRequestConfig = (overrides = {}) => {
 
   const handleRemoveExerciseFromWorkoutWeek = (weekNumber, exerciseId) => {
     setCreateFormValues((prev) => {
-      const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: weekEntry.exercise_ids.filter((candidateId) => candidateId !== exerciseId),
-        }
-      })
+      const nextPlan = removeExerciseIdFromWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, exerciseId)
       return { ...prev, workout_plan: nextPlan }
     })
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
@@ -1318,16 +1374,6 @@ const buildRequestConfig = (overrides = {}) => {
     if (!createFormValues.difficulty) {
       nextErrors.difficulty = "Difficulty is required."
     }
-    if (!createFormValues.category.trim()) {
-      nextErrors.category = "Category is required."
-    }
-    if (!createFormValues.goal.trim()) {
-      nextErrors.goal = "Goal is required."
-    }
-    if (!Array.isArray(createFormValues.equipment) || createFormValues.equipment.length === 0) {
-      nextErrors.equipment = "Equipment is required."
-    }
-
     const durationValue = Number(createFormValues.duration_weeks)
     if (!Number.isFinite(durationValue) || durationValue < durationRange.min || durationValue > durationRange.max) {
       nextErrors.duration_weeks = `Duration must be between ${durationRange.min} and ${durationRange.max} weeks.`
@@ -1356,22 +1402,18 @@ const buildRequestConfig = (overrides = {}) => {
       const normalizedWorkoutPlan = buildWorkoutPlanForDuration(createFormValues.duration_weeks, workoutPlan)
       console.log("Normalized workout plan for submission:", normalizedWorkoutPlan)
       const selectedExerciseIds = [...new Set(normalizedWorkoutPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))]
-      console.log("Selected exercise IDs for submission:", selectedExerciseIds) 
+      console.log("Selected exercise IDs for submission:", selectedExerciseIds)
       const payload = {
-        title: createFormValues.title.trim(),
+        name: createFormValues.title.trim(),
         description: createFormValues.description.trim(),
         difficulty: createFormValues.difficulty,
         duration_weeks: Number(createFormValues.duration_weeks),
-        category: createFormValues.category.trim(),
-        goal: createFormValues.goal.trim(),
-        equipment: canonicalizeEquipmentValues(createFormValues.equipment, equipmentChoices),
         is_public: Boolean(createFormValues.is_public),
         exercises: selectedExerciseIds,
-        workout_plan: normalizedWorkoutPlan,
-        program_image: createFormValues.program_image,
+        items: buildProgramItemsFromWorkoutPlan(normalizedWorkoutPlan),
       }
       const response = await axios.post(API_URL, payload, buildRequestConfig())
-      
+
       const createdProgram = normalizeProgramDetailPayload(response?.data)
       if (createdProgram?.id) {
         const itemsPayload = buildProgramItemsFromWorkoutPlan(normalizedWorkoutPlan)
@@ -1385,20 +1427,20 @@ const buildRequestConfig = (overrides = {}) => {
       }
       const createdProgramWithPlan = createdProgram
         ? {
-            ...createdProgram,
-            workout_plan:
-              Array.isArray(createdProgram.workout_plan) && createdProgram.workout_plan.length > 0
-                ? createdProgram.workout_plan
-                : normalizedWorkoutPlan,
-            exercises:
-              Array.isArray(createdProgram.exercises) && createdProgram.exercises.length > 0
-                ? createdProgram.exercises
-                : selectedExerciseIds,
-            equipment:
-              canonicalizeEquipmentValues(getProgramEquipmentValues(createdProgram), equipmentChoices).length > 0
-                ? canonicalizeEquipmentValues(getProgramEquipmentValues(createdProgram), equipmentChoices)
-                : payload.equipment,
-          }
+          ...createdProgram,
+          workout_plan:
+            Array.isArray(createdProgram.workout_plan) && createdProgram.workout_plan.length > 0
+              ? createdProgram.workout_plan
+              : normalizedWorkoutPlan,
+          exercises:
+            Array.isArray(createdProgram.exercises) && createdProgram.exercises.length > 0
+              ? createdProgram.exercises
+              : selectedExerciseIds,
+          equipment:
+            canonicalizeEquipmentValues(getProgramEquipmentValues(createdProgram), equipmentChoices).length > 0
+              ? canonicalizeEquipmentValues(getProgramEquipmentValues(createdProgram), equipmentChoices)
+              : canonicalizeEquipmentValues(createFormValues.equipment, equipmentChoices),
+        }
         : null
 
       if (createdProgramWithPlan && createdProgramWithPlan.id) {
@@ -1416,14 +1458,12 @@ const buildRequestConfig = (overrides = {}) => {
       const responseData = error?.response?.data
       if (responseData && typeof responseData === "object") {
         const knownFields = [
-          "title",
+          "name",
           "description",
           "difficulty",
           "duration_weeks",
-          "category",
-          "goal",
-          "equipment",
           "is_public",
+          "items",
         ]
         for (const fieldName of knownFields) {
           const rawValue = responseData[fieldName]
@@ -1473,16 +1513,6 @@ const buildRequestConfig = (overrides = {}) => {
     if (!editFormValues.difficulty) {
       nextErrors.difficulty = "Difficulty is required."
     }
-    if (!editFormValues.category.trim()) {
-      nextErrors.category = "Category is required."
-    }
-    if (!editFormValues.goal.trim()) {
-      nextErrors.goal = "Goal is required."
-    }
-    if (!Array.isArray(editFormValues.equipment) || editFormValues.equipment.length === 0) {
-      nextErrors.equipment = "Equipment is required."
-    }
-
     const durationValue = Number(editFormValues.duration_weeks)
     if (!Number.isFinite(durationValue) || durationValue < durationRange.min || durationValue > durationRange.max) {
       nextErrors.duration_weeks = `Duration must be between ${durationRange.min} and ${durationRange.max} weeks.`
@@ -1619,14 +1649,14 @@ const buildRequestConfig = (overrides = {}) => {
             : canonicalizeEquipmentValues(getProgramEquipmentValues(sourceProgramFromList), equipmentChoices),
         ...(itemsPlan.length > 0
           ? {
-              workout_plan: itemsPlan,
-              exercises: [...new Set(itemsPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))],
-            }
+            workout_plan: itemsPlan,
+            exercises: [...new Set(itemsPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))],
+          }
           : !detailHasPlan && sourceHasPlan
             ? {
-                workout_plan: sourceProgramFromList?.workout_plan ?? detail.workout_plan,
-                exercises: sourceProgramFromList?.exercises ?? detail.exercises,
-              }
+              workout_plan: sourceProgramFromList?.workout_plan ?? detail.workout_plan,
+              exercises: sourceProgramFromList?.exercises ?? detail.exercises,
+            }
             : {}),
       }
       setProgramDetailsById((prev) => ({ ...prev, [programId]: mergedDetail }))
@@ -1672,17 +1702,13 @@ const buildRequestConfig = (overrides = {}) => {
       }
       const existingWorkoutPlan = buildWorkoutPlanFromProgram(currentProgram)
       const payload = {
-        title: editFormValues.title.trim(),
+        name: editFormValues.title.trim(),
         description: editFormValues.description.trim(),
         difficulty: editFormValues.difficulty,
         duration_weeks: Number(editFormValues.duration_weeks),
-        category: editFormValues.category.trim(),
-        goal: editFormValues.goal.trim(),
-        equipment: canonicalizeEquipmentValues(editFormValues.equipment, equipmentChoices),
         is_public: Boolean(editFormValues.is_public),
         exercises: selectedExerciseIds,
-        workout_plan: normalizedDetailWorkoutPlan,
-        program_image: editFormValues.program_image,
+        items: buildProgramItemsFromWorkoutPlan(normalizedDetailWorkoutPlan),
       }
       const response = await axios.put(`${API_URL}${selectedProgramId}/`, payload, buildRequestConfig())
       if (!areWorkoutPlansEqual(normalizedDetailWorkoutPlan, existingWorkoutPlan)) {
@@ -1732,7 +1758,7 @@ const buildRequestConfig = (overrides = {}) => {
             })
             imageUploadResponse = await axios.patch(imageUploadUrl, fallbackFormData, imageRequestConfig)
           }
-          
+
           // Immediately update the cache with the image URL from the PATCH response
           // so the banner shows correctly when the details modal is re-opened.
           const patchedDetail = normalizeProgramDetailPayload(imageUploadResponse?.data)
@@ -1785,14 +1811,14 @@ const buildRequestConfig = (overrides = {}) => {
         prev.map((program) =>
           program.id === selectedProgramId
             ? {
-                ...program,
-                ...updatedProgram,
+              ...program,
+              ...updatedProgram,
 
-                equipment:
-                  canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices).length > 0
-                    ? canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices)
-                    : payload.equipment,
-              }
+              equipment:
+                canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices).length > 0
+                  ? canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices)
+                  : canonicalizeEquipmentValues(editFormValues.equipment, equipmentChoices),
+            }
             : program,
         ),
       )
@@ -1806,7 +1832,7 @@ const buildRequestConfig = (overrides = {}) => {
           equipment:
             canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices).length > 0
               ? canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices)
-              : payload.equipment,
+              : canonicalizeEquipmentValues(editFormValues.equipment, equipmentChoices),
         },
       }))
       handleCloseDetailsModal()
@@ -1815,14 +1841,12 @@ const buildRequestConfig = (overrides = {}) => {
       const responseData = error?.response?.data
       if (responseData && typeof responseData === "object") {
         const knownFields = [
-          "title",
+          "name",
           "description",
           "difficulty",
           "duration_weeks",
-          "category",
-          "goal",
-          "equipment",
           "is_public",
+          "items",
         ]
         for (const fieldName of knownFields) {
           const rawValue = responseData[fieldName]
@@ -1930,15 +1954,8 @@ const buildRequestConfig = (overrides = {}) => {
 
     const totalWeeks = normalizeDurationWeeks(editFormValues.duration_weeks)
     setDetailWorkoutPlan((prev) => {
-      const basePlan = totalWeeks > 0 ? buildWorkoutPlanForDuration(totalWeeks, prev) : [...prev]
-      return basePlan.map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        if (weekEntry.exercise_ids.includes(exerciseId)) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: [...weekEntry.exercise_ids, exerciseId],
-        }
-      })
+      const durationValue = totalWeeks > 0 ? totalWeeks : prev.length
+      return addExerciseIdsToWeekPlan(durationValue, prev, weekNumber, [exerciseId])
     })
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
     setDetailPlanExerciseId("")
@@ -1956,14 +1973,8 @@ const buildRequestConfig = (overrides = {}) => {
 
     const totalWeeks = normalizeDurationWeeks(editFormValues.duration_weeks)
     setDetailWorkoutPlan((prev) => {
-      const basePlan = totalWeeks > 0 ? buildWorkoutPlanForDuration(totalWeeks, prev) : [...prev]
-      return basePlan.map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: [...new Set([...weekEntry.exercise_ids, ...workoutExerciseIds])],
-        }
-      })
+      const durationValue = totalWeeks > 0 ? totalWeeks : prev.length
+      return addExerciseIdsToWeekPlan(durationValue, prev, weekNumber, workoutExerciseIds)
     })
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
     setDetailPlanWorkoutId("")
@@ -1972,15 +1983,7 @@ const buildRequestConfig = (overrides = {}) => {
   const handleRemoveExerciseFromDetailWeek = (weekNumber, exerciseId) => {
     if (!isDetailsEditMode || !canEditSelectedProgram) return
 
-    setDetailWorkoutPlan((prev) =>
-      prev.map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: weekEntry.exercise_ids.filter((candidateId) => candidateId !== exerciseId),
-        }
-      }),
-    )
+    setDetailWorkoutPlan((prev) => removeExerciseIdFromWeekPlan(editFormValues.duration_weeks, prev, weekNumber, exerciseId))
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
@@ -2017,7 +2020,7 @@ const buildRequestConfig = (overrides = {}) => {
       setScheduleError("Please select a start date.")
       return
     }
-  
+
 
     const program = programDetailsById[selectedProgramId] ?? selectedProgram
     if (!program) {
@@ -2173,12 +2176,12 @@ const buildRequestConfig = (overrides = {}) => {
                   <input
                     type="checkbox"
                     value={d.value}
-                    checked={filters.difficulty.includes(d.value)}
+                    checked={filterDifficultyValues.includes(d.value)}
                     onChange={(e) => {
                       const next = e.target.checked
-                        ? [...filters.difficulty, d.value]
-                        : filters.difficulty.filter((v) => v !== d.value)
-                      filteredAndSortedLibrary("difficulty", next)
+                        ? [...filterDifficultyValues, d.value]
+                        : filterDifficultyValues.filter((v) => v !== d.value)
+                      handleFilterChange("difficulty", next)
                     }}
                   />
                   {d.label}
@@ -2192,18 +2195,8 @@ const buildRequestConfig = (overrides = {}) => {
             <MultiSelect
               options={filterCategoryOptions}
               value={filterCategoryValues}
-              onChange={(selected) => filteredAndSortedLibrary("category", selected)}
+              onChange={(selected) => handleFilterChange("category", selected)}
               name="filter-category"
-            />
-          </div>
-
-          <div className="programs-filter-group">
-            <span className="programs-filter-label">Goal</span>
-            <MultiSelect
-              options={filterGoalOptions}
-              value={filterGoalValues}
-              onChange={(selected) => filteredAndSortedLibrary("goal", selected)}
-              name="filter-goal"
             />
           </div>
 
@@ -2212,7 +2205,7 @@ const buildRequestConfig = (overrides = {}) => {
             <MultiSelect
               options={filterEquipmentOptions}
               value={filterEquipmentValues}
-              onChange={(selected) => filteredAndSortedLibrary("equipment", selected)}
+              onChange={(selected) => handleFilterChange("equipment", selected)}
               name="filter-equipment"
               emitOptionObjects
             />
@@ -2221,87 +2214,92 @@ const buildRequestConfig = (overrides = {}) => {
 
 
           <p className="programs-results-count" aria-live="polite">
-            {filteredAndSortedLibrary.length} program{filteredAndSortedLibrary.length !== 1 ? "s" : ""} found
+            {filteredAndSortedProgramsLibrary.length} program{filteredAndSortedProgramsLibrary.length !== 1 ? "s" : ""} found
           </p>
         </aside>
 
         <section className="programs-main">
-          {isLoading ? (
-            <p className="programs-empty" role="status">
-              Loading programs...
-            </p>
-          ) : errorMessage ? (
-            <p className="programs-empty" role="alert">
-              {errorMessage}
-            </p>
-          ) : filteredAndSortedLibrary.length === 0 ? (
-            <p className="programs-empty" role="status">
-              No programs match your filters.
-            </p>
-          ) : (
-            <div className="programs-grid">
-              {filteredAndSortedLibrary.map((program) => (
-                <article key={program.id} className="programs-card">
-                  <div className="programs-card-header">
-                    <h3 className="programs-card-title">{program.name}</h3>
-                    <span className={getDifficultyClass(program.difficulty)}>{getDifficultyLabel(program.difficulty)}</span>
-                  </div>
-                  <p className="programs-card-description">{program.description}</p>
-                  <div className="programs-card-tags">
-                    <span className="programs-card-tag">{program.category}</span>
-                    <span className="programs-card-tag">{program.duration_weeks ?? "?"} weeks</span>
-                  </div>
-                  <p className="programs-card-goal"><strong>Goal:</strong> {program.goal || "N/A"}</p>
-                  <p className="programs-card-creator">By {program.created_by_username || program.created_by || "Unknown"}</p>
+          {isProgramsLoading ? (
+            <p className="exercise-loading-note" role="status">Still loading programs. Thanks for hanging tight.</p>
+          ) : null}
+          {programsErrorMessage ? <p className="exercise-error" role="alert">{programsErrorMessage}</p> : null}
+          {successMessage ? <p className="exercise-success" role="status">{successMessage}</p> : null}
 
-                  <div className="programs-card-actions">
-                    <button
-                      type="button"
-                      className="programs-card-action-btn"
-                      onClick={() => handleViewDetails(program.id)}
-                      disabled={detailLoadingId === program.id}
-                    >
-                      {detailLoadingId === program.id ? "Loading..." : "View Details"}
-                    </button>
-                  </div>
-                </article>
-              ))}
+          <div
+            className="exercise-list"
+            role={!isProgramsLoading && filteredAndSortedProgramsLibrary.length > 0 ? "listbox" : undefined}
+            aria-label={!isProgramsLoading && filteredAndSortedProgramsLibrary.length > 0 ? "Programs" : undefined}
+            aria-busy={isProgramsLoading}
+          >
+            {console.log("isProgramsLoading:", isProgramsLoading, "filteredAndSortedProgramsLibrary.length:", filteredAndSortedProgramsLibrary.length)}
+            {isProgramsLoading ? (
+              Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (
+                <div className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`} aria-hidden="true">
+                  <div className="exercise-skeleton exercise-skeleton-title" />
+                  <div className="exercise-skeleton exercise-skeleton-line" />
+                  <div className="exercise-skeleton exercise-skeleton-line exercise-skeleton-line-short" />
+                  <div className="exercise-skeleton exercise-skeleton-line" />
+                </div>
+              ))
+            ) : filteredAndSortedProgramsLibrary.length === 0 ? (
+              <p className="exercise-empty" role="status">No programs found.</p>
+            ) : (
+              visiblePrograms.map((program, index) => {
+                console.log("Rendering program:", program)
+                const programImageUrl = String(getProgramImageUrl(program))
+                return (
+                  <article
+                    className={`exercise-item ${(program.id ?? null) === selectedProgramId ? "exercise-item-selected" : ""}`}
+                    key={program.id ?? index}
+                    id={program.id ? `exercise-option-${program.id}` : undefined}
+                    role="option"
+                    aria-selected={(program.id ?? null) === selectedProgramId}
+                    tabIndex={(program.id ?? null) === selectedProgramId ? 0 : -1}
+                    onClick={() => handleOpenProgramDetailsModal(program.id ?? null)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        handleOpenProgramDetailsModal(program.id ?? null)
+                      }
+                    }}
+                  >
+                    {programImageUrl ? (
+                      <div className="exercise-card-image-wrap" aria-hidden="true">
+                        <img
+                          src={programImageUrl}
+                          alt=""
+                          loading="lazy"
+                          className="exercise-card-image"
+                          onError={(event) => {
+                            event.currentTarget.style.display = "none"
+                          }}
+                        />
+                      </div>
+                    ) : null}
+                    <div className="exercise-item-content">
+                      <h3 className="exercise-header-title">{(program.title || program.name || "Program").toUpperCase()}</h3>
+                      <div className="exercise-header">
+                        <p className="exercise-meta"><strong>Visibility:</strong> {capitalizeFirstLetter(program.is_public ? "Public" : "Private")}</p>
+                        <p className="exercise-meta"><strong>Category:</strong> {capitalizeFirstLetter(program.category)}</p>
+                        <p className="exercise-meta">
+                          <strong>Primary Muscle:</strong> {capitalizeFirstLetter(program.primary_muscle_group)}
+                        </p>
+                        <p className="exercise-meta">
+                          <strong>Created by:</strong> {program.created_by_username || program.username || program.created_by || "Unknown"}
+                        </p>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })
+            )}
+          </div>
+          {!isProgramsLoading && hasMoreVisiblePrograms ? (
+            <div className="exercise-search-actions">
+              <button type="button" className="exercise-secondary-btn" onClick={handleLoadMorePrograms}>
+                Load More
+              </button>
             </div>
-          )}
-
-          {totalPages > 1 ? (
-            <nav className="programs-pagination" aria-label="Program pages">
-              <button
-                type="button"
-                className="programs-page-btn"
-                onClick={() => setCurrentPage((p) => p - 1)}
-                disabled={safePage === 1}
-                aria-label="Previous page"
-              >
-                ‹
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <button
-                  key={page}
-                  type="button"
-                  className={`programs-page-btn${page === safePage ? " programs-page-btn-active" : ""}`}
-                  onClick={() => setCurrentPage(page)}
-                  aria-label={`Page ${page}`}
-                  aria-current={page === safePage ? "page" : undefined}
-                >
-                  {page}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="programs-page-btn"
-                onClick={() => setCurrentPage((p) => p + 1)}
-                disabled={safePage === totalPages}
-                aria-label="Next page"
-              >
-                ›
-              </button>
-            </nav>
           ) : null}
         </section>
       </div>
@@ -2318,7 +2316,7 @@ const buildRequestConfig = (overrides = {}) => {
             <header className="programs-modal-header">
               <button type="button" className="programs-btn-base programs-modal-close-btn" onClick={handleCloseCreateModal} aria-label="Close create program">
                 <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </button>
               <h2 className="programs-modal-title" id="create-new-program-header">Create New Program</h2>
@@ -2331,9 +2329,9 @@ const buildRequestConfig = (overrides = {}) => {
 
               <div className="programs-banner-upload">
                 {createProgramImageUrl ? (
-                <div className="programs-banner-preview">
-                  <img src={createProgramImageUrl} alt="Program banner" className="programs-banner-img" />
-                </div>
+                  <div className="programs-banner-preview">
+                    <img src={createProgramImageUrl} alt="Program banner" className="programs-banner-img" />
+                  </div>
                 ) : null}
                 <input
                   id="edit-banner-input"
@@ -2347,35 +2345,35 @@ const buildRequestConfig = (overrides = {}) => {
                   {editImagePreview ? "+ Upload" : "+ Upload"}
                 </label>
               </div>
-              <div className="programs-modal-field">  
-              <label id="program-title-label">
-                <span>Title</span>
-                <input
-                  type="text"
-                  name="title"
-                  value={createFormValues.title}
-                  onChange={handleCreateFieldChange}
-                  placeholder="Program name"
-                  required
-                />
-                {createFieldErrors.title ? <small className="programs-modal-error">{createFieldErrors.title}</small> : null}
-              </label>
+              <div className="programs-modal-field">
+                <label id="program-title-label">
+                  <span>Title</span>
+                  <input
+                    type="text"
+                    name="title"
+                    value={createFormValues.title}
+                    onChange={handleCreateFieldChange}
+                    placeholder="Program name"
+                    required
+                  />
+                  {createFieldErrors.title ? <small className="programs-modal-error">{createFieldErrors.title}</small> : null}
+                </label>
 
-              <label id="program-description-label">
-                <span>Description</span>
-                <textarea
-                  name="description"
-                  value={createFormValues.description}
-                  onChange={handleCreateFieldChange}
-                  placeholder="What this program is for"
-                  maxLength={500}
-                  rows={3}
-                  style={{ resize: "none", width: "500px", minHeight: "100px", boxSizing: "border-box" }}
-                  required
-                />
-              
-                {createFieldErrors.description ? <small className="programs-modal-error">{createFieldErrors.description}</small> : null}
-              </label>
+                <label id="program-description-label">
+                  <span>Description</span>
+                  <textarea
+                    name="description"
+                    value={createFormValues.description}
+                    onChange={handleCreateFieldChange}
+                    placeholder="What this program is for"
+                    maxLength={500}
+                    rows={3}
+                    style={{ resize: "none", width: "500px", minHeight: "100px", boxSizing: "border-box" }}
+                    required
+                  />
+
+                  {createFieldErrors.description ? <small className="programs-modal-error">{createFieldErrors.description}</small> : null}
+                </label>
               </div>
               <div className="programs-modal-grid">
                 <label>
@@ -2475,81 +2473,16 @@ const buildRequestConfig = (overrides = {}) => {
                 {exerciseLibraryError ? <p className="programs-modal-error">{exerciseLibraryError}</p> : null}
 
                 <div className="programs-plan-controls">
-                  <label className="programs-modal-field">
-                    <span>Week</span>
-                    <select
-                      name="plan_week"
-                      value={String(createPlanWeek)}
-                      onChange={(event) => setCreatePlanWeek(Number(event.target.value) || 1)}
-                      disabled={workoutPlan.length === 0}
-                    >
-                      {workoutPlan.length === 0 ? <option value="1">Set duration first</option> : null}
-                      {workoutPlan.map((weekEntry) => (
-                        <option key={weekEntry.week_number} value={weekEntry.week_number}>
-                          Week {weekEntry.week_number}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="programs-modal-field">
-                    <span>Saved Workout</span>
-                    <select
-                      name="plan_saved_workout"
-                      value={createPlanWorkoutId}
-                      onChange={(event) => setCreatePlanWorkoutId(event.target.value)}
-                      disabled={workouts.length === 0 || workoutPlan.length === 0}
-                    >
-                      <option value="">Select workout</option>
-                      {workouts.map((workout) => (
-                        <option key={workout.id} value={String(workout.id)}>
-                          {workout.title}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <button
-                    type="button"
+                  <Link
+                    to="/exercises"
                     className="programs-modal-secondary-btn programs-plan-add-btn"
-                    onClick={handleAddSavedWorkoutToCreateWeek}
-                    disabled={!createPlanWorkoutId || workoutPlan.length === 0}
+                    isOpen={isCreateModalOpen}
+                    onClose={closeCreateModal}
+                    draft={programDraft}
                   >
-                    Add Saved Workout
-                  </button>
-
-                  <label className="programs-modal-field">
-                    <span>Workout Exercises</span>
-                    {exerciseOptions.map((exercise) => (
-                      <label key={exercise.id} className="exercise-label">
-                        <input
-                          key={exercise.id}
-                          type="checkbox"
-                          name={"plan_exercises"}
-                          value={exercise.title}
-                          checked={createPlanExercise.includes(exercise.title)}
-                          onChange={(event) => {
-                            const selectedIds = event.target.checked
-                              ? [...createPlanExercise, String(exercise.title)]
-                              : createPlanExercise.filter((id) => id !== String(exercise.title))
-                            setCreatePlanExercise(selectedIds)
-                          }}
-                          disabled={exerciseOptions.length === 0 || workoutPlan.length === 0}
-                        />
-                        <div className="multiselect-option">{exercise.title}</div>
-                      </label>
-                    ))}
-                  </label>
-
-                  <button
-                    type="button"
-                    className="programs-modal-secondary-btn programs-plan-add-btn"
-                    onClick={() => handleAddWorkoutToPlanWeek(weekEntry.week_number, weekEntry.exercise_ids)}
-                    disabled={createPlanExercise.length === 0 || workoutPlan.length === 0}
-                  >
-                    {console.log("Rendering Add Workout button", { createPlanExercise, workoutPlan })}
-                    Add Workout
-                  </button>
+                    {console.log("Rendering Add Exercise button")}
+                    Add Exercise
+                  </Link>
                 </div>
 
                 <div className="programs-plan-weeks">
@@ -2617,11 +2550,11 @@ const buildRequestConfig = (overrides = {}) => {
             <header className="programs-modal-header">
               <button type="button" className="programs-btn-base programs-modal-secondary-btn" onClick={handleCloseDetailsModal}>
                 <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </button>
-              {console.log("Selected Program Image URL", {selectedProgramImageUrl})}
-               {selectedProgramImageUrl ? (
+              {console.log("Selected Program Image URL", { selectedProgramImageUrl })}
+              {selectedProgramImageUrl ? (
                 <div className="programs-banner-preview">
                   <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
                 </div>
@@ -2801,6 +2734,14 @@ const buildRequestConfig = (overrides = {}) => {
                   </p>
                 </section>
               )}
+              {console.log("is loading: ", isProgramsLoading, "has more visible programs: ", hasMoreVisiblePrograms, "visible programs count: ", visibleProgramsCount)}
+              {!isProgramsLoading && hasMoreVisiblePrograms ? (
+                <div className="exercise-search-actions">
+                  <button type="button" className="exercise-secondary-btn" onClick={handleLoadMorePrograms}>
+                    Load More
+                  </button>
+                </div>
+              ) : null}
 
               {isDetailsEditMode || isWorkoutPlanUnlocked ? (
                 <section className="programs-plan-builder" aria-label="Workout plan by week">
@@ -2855,32 +2796,6 @@ const buildRequestConfig = (overrides = {}) => {
                         disabled={!detailPlanWorkoutId || detailsWorkoutPlan.length === 0}
                       >
                         Add Saved Workout
-                      </button>
-
-                      <label className="programs-modal-field">
-                        <span>Exercise</span>
-                        <select
-                          name="details_plan_exercise"
-                          value={detailPlanExerciseId}
-                          onChange={(event) => setDetailPlanExerciseId(event.target.value)}
-                          disabled={exerciseOptions.length === 0 || detailsWorkoutPlan.length === 0}
-                        >
-                          <option value="">Select exercise</option>
-                          {exerciseOptions.map((exercise) => (
-                            <option key={exercise.id} value={String(exercise.id)}>
-                              {exercise.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-
-                      <button
-                        type="button"
-                        className="programs-modal-secondary-btn programs-plan-add-btn"
-                        onClick={handleAddExerciseToDetailWeek}
-                        disabled={!detailPlanExerciseId || detailsWorkoutPlan.length === 0}
-                      >
-                        Add Exercise
                       </button>
                     </div>
                   ) : null}
@@ -2984,7 +2899,7 @@ const buildRequestConfig = (overrides = {}) => {
             <header className="programs-modal-header">
               <button type="button" className="programs-btn-base programs-modal-secondary-btn" onClick={handleCloseScheduleModal} aria-label="Close schedule modal">
                 <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </button>
               <h2 className="programs-modal-title">Schedule to Calendar</h2>

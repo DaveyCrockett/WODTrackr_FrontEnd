@@ -56,9 +56,9 @@
 <!--
 ## Execution Guidelines
 PROGRESS TRACKING:
-- If any tools are available to manage the above todo list, use it to track progress through this checklist.
+- If any tools are available to manage the above checklist, use it to track progress through this checklist.
 - After completing each step, mark it complete and add a summary.
-- Read current todo list status before starting each new step.
+- Read current checklist status before starting each new step.
 
 COMMUNICATION RULES:
 - Avoid verbose explanations or printing full command outputs.

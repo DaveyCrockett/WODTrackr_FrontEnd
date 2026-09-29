@@ -223,6 +223,10 @@ function Calendar() {
   const [isExerciseLibraryLoading, setIsExerciseLibraryLoading] = useState(false)
   const [exerciseLibraryError, setExerciseLibraryError] = useState("")
   const [, setWorkouts] = useState(() => readWorkoutsFromStorage())
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
+  const [isProgramModalOpen, setIsProgramModalOpen] = useState(false)
 
   // Program event detail modal
   const [programModalEntry, setProgramModalEntry] = useState(null)
@@ -347,6 +351,7 @@ function Calendar() {
     setFormError("")
   }, [selectedDateKey])
 
+
   const monthLabel = currentMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" })
 
   const weekLabel = useMemo(() => {
@@ -456,11 +461,19 @@ function Calendar() {
     setAddFormValues(EMPTY_WORKOUT_FORM)
     setFormError("")
     setPanelMode("add")
+    setIsAddModalOpen(true)
   }
+
+  const handleCloseAddForm = () => {
+    setIsAddModalOpen(false)
+  }
+
+
 
   const handleCancelAdd = () => {
     setPanelMode("detail")
     setFormError("")
+    setIsAddModalOpen(false)
   }
 
   const handleAddFormChange = (e) => {
@@ -492,8 +505,8 @@ function Calendar() {
     const title = String(addFormValues.title || "").trim()
     const exerciseIds = Array.isArray(addFormValues.exercise_ids)
       ? addFormValues.exercise_ids
-          .map((value) => normalizeWorkoutExerciseId(value))
-          .filter((value) => value !== null)
+        .map((value) => normalizeWorkoutExerciseId(value))
+        .filter((value) => value !== null)
       : []
     const wod = String(addFormValues.wod || "").trim()
 
@@ -563,11 +576,13 @@ function Calendar() {
     setFormError("")
     setSelectedEntryId(entry.id)
     setPanelMode("edit")
+    setIsEditModalOpen(true)
   }
 
   const handleCancelEdit = () => {
     setPanelMode("detail")
     setFormError("")
+    setIsEditModalOpen(false)
   }
 
   const handleEditFormChange = (e) => {
@@ -613,9 +628,11 @@ function Calendar() {
   // ── Program event modal ────────────────────────────────────
   const handleOpenProgramModal = (entry) => {
     setProgramModalEntry(entry)
+    setIsProgramModalOpen(true)
   }
   const handleCloseProgramModal = () => {
     setProgramModalEntry(null)
+    setIsProgramModalOpen(false)
   }
 
   // ── Helpers ────────────────────────────────────────────────
@@ -659,6 +676,9 @@ function Calendar() {
             Today
           </button>
         </div>
+         <button type="button" className="calendar-add-btn" onClick={handleOpenAddForm}>
+              + Add
+            </button>
       </header>
 
       {syncNotice ? (
@@ -706,6 +726,7 @@ function Calendar() {
               })}
             </div>
           </section>
+
         ) : (
           /* ── Week view ── */
           <section className="calendar-board" aria-label="Weekly calendar">
@@ -773,19 +794,9 @@ function Calendar() {
           </section>
         )}
 
-        {/* ── Aside panel ── */}
-        <aside className="calendar-editor" aria-label="Selected date details">
-          <div className="calendar-editor-heading">
-            <h2>{selectedDateLabel}</h2>
-            {panelMode === "detail" ? (
-              <button type="button" className="calendar-add-btn" onClick={handleOpenAddForm}>
-                + Add
-              </button>
-            ) : null}
-          </div>
-
-          {/* Detail panel */}
-          {panelMode === "detail" ? (
+        {/* Detail panel */}
+        {panelMode === "detail" && isDetailModalOpen ? (
+          <div className="calendar-modal-backdrop">
             <>
               <section className="calendar-selected-details" aria-label="Selected event details">
                 <h3>Event Details</h3>
@@ -882,341 +893,161 @@ function Calendar() {
                 )}
               </div>
             </>
-          ) : null}
+          </div>
+        ) : null}
 
-          {/* Add form */}
-          {panelMode === "add" ? (
-            <form className="calendar-form" onSubmit={handleSubmitAdd} aria-label="Add new workout">
-              <h3>New Workout</h3>
-              {formError ? <p className="calendar-form-error">{formError}</p> : null}
+        {/* Add form */}
+          {/* Modal content goes here */}
+          {panelMode === "add" && isAddModalOpen ? (
+            <div className="calendar-modal-backdrop">
+              <aside className="calendar-modal" role="dialog" aria-modal="true" aria-labelledby="calendar-event-modal-title" onClick={(event) => event.stopPropagation()}>
+              <form className="calendar-form" onSubmit={handleSubmitAdd} aria-label="Add new workout">
+                <h3>Workout Event</h3>
+                <h2>{selectedDateLabel}</h2>
+                {formError ? <p className="calendar-form-error">{formError}</p> : null}
 
-              <label htmlFor="add-title">Workout Name</label>
-              <input
-                id="add-title"
-                type="text"
-                name="title"
-                value={addFormValues.title}
-                onChange={handleAddFormChange}
-                placeholder="Monday Strength Session"
-                autoFocus
-                required
-              />
-
-              <label htmlFor="add-time">Time (optional)</label>
-              <input
-                id="add-time"
-                type="time"
-                name="time"
-                value={addFormValues.time}
-                onChange={handleAddFormChange}
-              />
-
-              <label htmlFor="add-workout-type">Workout Type</label>
-              <select
-                id="add-workout-type"
-                name="workout_type"
-                value={addFormValues.workout_type}
-                onChange={handleAddFormChange}
-              >
-                {WORKOUT_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-
-              <label htmlFor="add-score-type">Score Type</label>
-              <select
-                id="add-score-type"
-                name="score_type"
-                value={addFormValues.score_type}
-                onChange={handleAddFormChange}
-              >
-                {SCORE_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-
-              <label htmlFor="add-time-cap">Time Cap (minutes)</label>
-              <input
-                id="add-time-cap"
-                type="number"
-                name="time_cap_minutes"
-                value={addFormValues.time_cap_minutes}
-                min="0"
-                step="1"
-                onChange={handleAddFormChange}
-                placeholder="18"
-              />
-
-              <label htmlFor="add-rx-track">Track</label>
-              <select id="add-rx-track" name="rx_track" value={addFormValues.rx_track} onChange={handleAddFormChange}>
-                <option value="scaled">Scaled</option>
-                <option value="rx">RX</option>
-                <option value="rx_plus">RX+</option>
-              </select>
-
-              <label className="calendar-checkbox" htmlFor="add-partner-workout">
-                <input
-                  id="add-partner-workout"
-                  type="checkbox"
-                  name="is_partner_workout"
-                  checked={Boolean(addFormValues.is_partner_workout)}
-                  onChange={handleAddFormChange}
-                />
-                Partner workout
-              </label>
-
-              <label htmlFor="add-format-details">Format Details</label>
-              <input
-                id="add-format-details"
-                type="text"
-                name="format_details"
-                value={addFormValues.format_details}
-                onChange={handleAddFormChange}
-                placeholder="5 rounds: 400m run + 12 power cleans (95/65)"
-              />
-
-              <label htmlFor="add-warm-up">Warm-up</label>
-              <textarea
-                id="add-warm-up"
-                name="warm_up"
-                value={addFormValues.warm_up}
-                onChange={handleAddFormChange}
-                placeholder="2 rounds: 8 PVC pass-throughs, 10 air squats"
-                rows={2}
-              />
-
-              <label htmlFor="add-strength-piece">Strength / Skill</label>
-              <textarea
-                id="add-strength-piece"
-                name="strength_piece"
-                value={addFormValues.strength_piece}
-                onChange={handleAddFormChange}
-                placeholder="Back Squat 5x3 @ 80-85%"
-                rows={2}
-              />
-
-              <label htmlFor="add-buy-in">Buy-in</label>
-              <input
-                id="add-buy-in"
-                type="text"
-                name="buy_in"
-                value={addFormValues.buy_in}
-                onChange={handleAddFormChange}
-                placeholder="800m run"
-              />
-
-              <label htmlFor="add-wod">WOD</label>
-              <textarea
-                id="add-wod"
-                name="wod"
-                value={addFormValues.wod}
-                onChange={handleAddFormChange}
-                placeholder="For time: 21-15-9 Thrusters (95/65) and Pull-ups"
-                rows={3}
-                required
-              />
-
-              <label htmlFor="add-cash-out">Cash-out</label>
-              <input
-                id="add-cash-out"
-                type="text"
-                name="cash_out"
-                value={addFormValues.cash_out}
-                onChange={handleAddFormChange}
-                placeholder="3 x 1 min plank"
-              />
-
-              <label htmlFor="add-cooldown">Cool-down</label>
-              <textarea
-                id="add-cooldown"
-                name="cooldown"
-                value={addFormValues.cooldown}
-                onChange={handleAddFormChange}
-                placeholder="5 min bike + hip/lat stretch"
-                rows={2}
-              />
-
-              <label htmlFor="add-notes">Workout Notes</label>
-              <textarea
-                id="add-notes"
-                name="notes"
-                value={addFormValues.notes}
-                onChange={handleAddFormChange}
-                placeholder="Target effort, pacing, or cues"
-                rows={3}
-              />
-
-              <label htmlFor="add-exercises">Exercises</label>
-              <div id="add-exercises" className="calendar-exercise-picker" role="group" aria-label="Workout Exercises">
-                {workoutExerciseOptions.map(({ id, label }) => {
-                  const optionId = String(id)
-                  const isSelected = (Array.isArray(addFormValues.exercise_ids) ? addFormValues.exercise_ids : [])
-                    .some((value) => String(value) === optionId)
-
-                  return (
-                    <label key={optionId} className="calendar-exercise-option">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleAddWorkoutExerciseToggle(id)}
-                        disabled={workoutExerciseOptions.length === 0}
-                      />
-                      <span>{label || `Exercise #${id}`}</span>
-                    </label>
-                  )
-                })}
-              </div>
-
-              {isExerciseLibraryLoading ? (
-                <p className="calendar-entry-meta">Loading exercise library...</p>
-              ) : null}
-              {!isExerciseLibraryLoading && exerciseLibraryError ? (
-                <p className="calendar-form-error">{exerciseLibraryError}</p>
-              ) : null}
-              {!isExerciseLibraryLoading && !exerciseLibraryError && workoutExerciseOptions.length === 0 ? (
-                <p className="calendar-entry-meta">Add exercises in the Exercise Library before creating workouts.</p>
-              ) : null}
-
-              <div className="calendar-form-actions">
-                <button type="submit" disabled={workoutExerciseOptions.length === 0}>Save Workout</button>
-                <button type="button" className="calendar-btn-secondary" onClick={handleCancelAdd}>
-                  Cancel
-                </button>
-              </div>
-            </form>
-          ) : null}
-
-          {/* Edit form */}
-          {panelMode === "edit" ? (
-            <form className="calendar-form" onSubmit={handleSubmitEdit} aria-label="Edit entry">
-              <h3>Edit Entry</h3>
-              {formError ? <p className="calendar-form-error">{formError}</p> : null}
-
-              <label htmlFor="edit-title">Title</label>
-              <input
-                id="edit-title"
-                type="text"
-                name="title"
-                value={editFormValues.title}
-                onChange={handleEditFormChange}
-                placeholder="Workout title"
-                autoFocus
-                required
-              />
-
-              <label htmlFor="edit-time">Time (optional)</label>
-              <input
-                id="edit-time"
-                type="time"
-                name="time"
-                value={editFormValues.time}
-                onChange={handleEditFormChange}
-              />
-
-              <label htmlFor="edit-notes">Notes (optional)</label>
-              <textarea
-                id="edit-notes"
-                name="notes"
-                value={editFormValues.notes}
-                onChange={handleEditFormChange}
-                placeholder="Any notes for this workout..."
-                rows={3}
-              />
-
-              <div className="calendar-form-actions">
-                <button type="submit">Save Changes</button>
-                <button type="button" className="calendar-btn-secondary" onClick={handleCancelEdit}>
-                  Cancel
-                </button>
-              </div>
-            </form>
-          ) : null}
-        </aside>
-      </div>
-
-      {/* ── Program event detail modal ── */}
-      {programModalEntry ? (
-        <div
-          className="calendar-modal-backdrop"
-          role="presentation"
-          onClick={handleCloseProgramModal}
-        >
-          <div
-            className="calendar-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Program event details"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="calendar-modal-header">
-              <h2>{programModalEntry.title}</h2>
-              <button
-                type="button"
-                className="calendar-modal-close-btn"
-                onClick={handleCloseProgramModal}
-                aria-label="Close program details"
-              >
-                ✕
-              </button>
-            </header>
-
-            <div className="calendar-modal-body">
-              <p className="calendar-entry-program-badge">
-                {programModalEntry.programName || "Scheduled Program"}
-              </p>
-
-              {programModalEntry.weekNumber ? (
-                <p className="calendar-modal-detail">
-                  <strong>Week:</strong> {programModalEntry.weekNumber}
-                </p>
-              ) : null}
-
-              {programModalEntry.time ? (
-                <p className="calendar-modal-detail">
-                  <strong>Time:</strong> {programModalEntry.time}
-                </p>
-              ) : null}
-
-              {programModalEntry.notes ? (
-                <p className="calendar-modal-detail">
-                  <strong>Notes:</strong> {programModalEntry.notes}
-                </p>
-              ) : null}
-
-              {Array.isArray(programModalEntry.exerciseIds) && programModalEntry.exerciseIds.length > 0 ? (
-                <div className="calendar-modal-exercises">
-                  <h3>Exercises This Week</h3>
-                  <ul>
-                    {programModalEntry.exerciseIds.map((exId) => (
-                      <li key={exId}>
-                        {programModalEntry.exerciseNames?.[exId] || `Exercise #${exId}`}
-                      </li>
-                    ))}
-                  </ul>
+                <div className="calendar-form-actions">
+                  <button type="submit" disabled={workoutExerciseOptions.length === 0}>Save Workout</button>
+                  <button type="button" className="calendar-btn-secondary" onClick={handleCancelAdd}>
+                    Cancel
+                  </button>
                 </div>
-              ) : null}
+              </form>
+              </aside>
+            </div>
+          ) : null}
 
-              <div className="calendar-modal-actions">
+
+        {/* Edit form */}
+        
+          {panelMode === "edit" && isEditModalOpen ? (
+            <div className="calendar-modal-backdrop">
+              <aside className="calendar-modal" role="dialog" aria-modal="true" aria-labelledby="calendar-event-modal-title" onClick={(event) => event.stopPropagation()}>
+              <form className="calendar-form" onSubmit={handleSubmitEdit} aria-label="Edit entry">
+                <h3>Edit Entry</h3>
+                {formError ? <p className="calendar-form-error">{formError}</p> : null}
+
+                <label htmlFor="edit-title">Title</label>
+                <input
+                  id="edit-title"
+                  type="text"
+                  name="title"
+                  value={editFormValues.title}
+                  onChange={handleEditFormChange}
+                  placeholder="Workout title"
+                  autoFocus
+                  required
+                />
+
+                <label htmlFor="edit-time">Time (optional)</label>
+                <input
+                  id="edit-time"
+                  type="time"
+                  name="time"
+                  value={editFormValues.time}
+                  onChange={handleEditFormChange}
+                />
+
+                <label htmlFor="edit-notes">Notes (optional)</label>
+                <textarea
+                  id="edit-notes"
+                  name="notes"
+                  value={editFormValues.notes}
+                  onChange={handleEditFormChange}
+                  placeholder="Any notes for this workout..."
+                  rows={3}
+                />
+
+                <div className="calendar-form-actions">
+                  <button type="submit">Save Changes</button>
+                  <button type="button" className="calendar-btn-secondary" onClick={handleCancelEdit}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+              </aside>
+            </div>
+          ) : null}
+
+        {/* ── Program event detail modal ── */}
+        {programModalEntry && isProgramModalOpen ? (
+          <div className="calendar-modal-backdrop">
+            <div
+              className="calendar-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Program event details"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <header className="calendar-modal-header">
+                <h2>{programModalEntry.title}</h2>
                 <button
                   type="button"
-                  className="calendar-btn-delete"
-                  onClick={() => {
-                    handleDeleteEntry(programModalEntry.id)
-                    handleCloseProgramModal()
-                  }}
+                  className="calendar-modal-close-btn"
+                  onClick={handleCloseProgramModal}
+                  aria-label="Close program details"
                 >
-                  Remove from Calendar
+                  ✕
                 </button>
-                <button type="button" onClick={handleCloseProgramModal}>
-                  Close
-                </button>
+              </header>
+
+              <div className="calendar-modal-body">
+                <p className="calendar-entry-program-badge">
+                  {programModalEntry.programName || "Scheduled Program"}
+                </p>
+
+                {programModalEntry.weekNumber ? (
+                  <p className="calendar-modal-detail">
+                    <strong>Week:</strong> {programModalEntry.weekNumber}
+                  </p>
+                ) : null}
+
+                {programModalEntry.time ? (
+                  <p className="calendar-modal-detail">
+                    <strong>Time:</strong> {programModalEntry.time}
+                  </p>
+                ) : null}
+
+                {programModalEntry.notes ? (
+                  <p className="calendar-modal-detail">
+                    <strong>Notes:</strong> {programModalEntry.notes}
+                  </p>
+                ) : null}
+
+                {Array.isArray(programModalEntry.exerciseIds) && programModalEntry.exerciseIds.length > 0 ? (
+                  <div className="calendar-modal-exercises">
+                    <h3>Exercises This Week</h3>
+                    <ul>
+                      {programModalEntry.exerciseIds.map((exId) => (
+                        <li key={exId}>
+                          {programModalEntry.exerciseNames?.[exId] || `Exercise #${exId}`}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                <div className="calendar-modal-actions">
+                  <button
+                    type="button"
+                    className="calendar-btn-delete"
+                    onClick={() => {
+                      handleDeleteEntry(programModalEntry.id)
+                      handleCloseProgramModal()
+                    }}
+                  >
+                    Remove from Calendar
+                  </button>
+                  <button type="button" onClick={handleCloseProgramModal}>
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </section>
   )
 }
-
 export default Calendar

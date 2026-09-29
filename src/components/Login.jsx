@@ -4,7 +4,11 @@ import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
 
-function Login() {
+const USERS_API_BASE_URL = String(import.meta.env.VITE_USERS_API_BASE_URL || "/api/users").replace(/\/+$/, "")
+const LOGIN_API_URL = `${USERS_API_BASE_URL}/auth/login/`
+
+function Login({ setUserSession, userSession }) {
+  console.log("Current user session on Login component mount:", userSession)
   const navigate = useNavigate()
   const [formValues, setFormValues] = useState({
     username: "",
@@ -12,25 +16,37 @@ function Login() {
     remember_me: false,
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isGuestSubmitting, setIsGuestSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
-  const saveUserSession = saveUserSession => {
-    const userData = saveUserSession?.user ?? saveUserSession ?? {}
-    const authToken = saveUserSession?.access ?? saveUserSession?.token ?? saveUserSession?.key ?? saveUserSession?.auth_token ?? userData?.access ?? userData?.token ?? userData?.key ?? userData?.auth_token ?? ""
+const saveUserSession = userSession => {
+    const userData = userSession?.user ?? userSession ?? {}
+    console.log("User data extracted from saveUserSession input:", userData)
+    console.log("Raw saveUserSession input:", userSession)
+    
+    const authToken = userSession?.data?.access ?? userSession?.token ?? userSession?.key ?? userSession?.auth_token ?? userData?.data?.access ?? userData?.token ?? userData?.key ?? userData?.auth_token ?? ""
+    const refreshToken = userSession?.data?.refresh ?? userData?.data?.refresh ?? ""
+    const avatarUrl = userData?.data?.avatar_url ?? userData?.data?.avatarUrl ?? userData?.data?.profile_image ?? userData?.data?.profileImage ?? null
 
-    const refreshToken = saveUserSession?.refresh ?? userData?.refresh ?? ""
-    const avatarUrl = userData?.avatar_url ?? userData?.avatarUrl ?? userData?.profile_image ?? userData?.profileImage ?? null
-    const username = userData?.username ?? userData?.name ?? "Guest user"
+    let configData = userSession?.config?.data ?? userData?.config?.data;
+    if (typeof configData === 'string') {
+      try {
+        configData = JSON.parse(configData);
+      } catch (e) {
+        configData = null;
+      }
+    }
+    
+    const username = configData?.username ?? 
+                     userSession?.data?.username ?? 
+                     userData?.data?.username ?? 
+                     userData?.username ?? 
+                     userData?.name ?? "";
 
-    localStorage.setItem(
-      "wodtrackrUser",
-      JSON.stringify({
-        username,
-        avatarUrl,
-        authToken,
-        refreshToken,
-      })
-    )
+    console.log("Canonicalized user session values:", {
+      username,
+      avatarUrl,
+      authToken,
+      refreshToken,
+    })
 
     if (authToken) {
       localStorage.setItem("wodtrackrAuthToken", authToken)
@@ -43,9 +59,33 @@ function Login() {
     } else {
       localStorage.removeItem("wodtrackrRefreshToken")
     }
-  }
+    
+    if (username) {
+      localStorage.setItem("wodtrackrUsername", username)
+    } else {
+      localStorage.removeItem("wodtrackrUsername")
+    }
+    
+    console.log("Saved user session:", {
+      username,
+      avatarUrl,
+      authToken,
+      refreshToken,
+    })
 
-  
+    localStorage.setItem(
+      "wodtrackrUser",
+      JSON.stringify({
+        username,
+        avatarUrl,
+        authToken,
+        refreshToken,
+      })
+    )
+}
+
+
+
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target
     setFormValues((prev) => ({
@@ -65,28 +105,40 @@ function Login() {
         password: formValues.password,
         remember_me: formValues.remember_me,
       }
+      console.log('Login payload:', loginPayload)
 
       let response
       try {
         response = await axios.post(
-          "/api/users/auth/login/",
+          LOGIN_API_URL,
           loginPayload,
           { withCredentials: true },
         )
+        console.log("Primary login response:", response)
       } catch (primaryError) {
         if (!primaryError?.response) {
           response = await axios.post(
-            "/api/users/auth/login/",
+            LOGIN_API_URL,
             loginPayload,
           )
+          console.log("Fallback login response:", response)
         } else {
           throw primaryError
         }
       }
-
-      saveUserSession(response.data, formValues.username)
+      console.log("Final login response data:", response.config.data)
+      saveUserSession(response)
+      console.log("User session saved.", {
+        username: response.config.data?.username,
+        avatarUrl: response.data?.user?.avatar_url ?? null,
+        authToken: response.data?.access ?? response.data?.token ?? response.data?.key ?? response.data?.auth_token ?? "",
+        refreshToken: response.data?.refresh ?? "",
+      })
+      const activeUser = JSON.parse(localStorage.getItem("wodtrackrUser"))
+      setUserSession(activeUser)
       navigate("/profile")
     } catch (error) {
+      console.error("Login error:", error)
       const message =
         error?.response?.data?.detail ||
         "Login failed. Please check your credentials and try again."
@@ -96,37 +148,6 @@ function Login() {
     }
   }
 
-  const handleGuestLogin = async () => {
-    setIsGuestSubmitting(true)
-    setErrorMessage("")
-
-    try {
-      let response
-      try {
-        response = await axios.post(
-          "/api/users/auth/guest/",
-          {},
-          { withCredentials: true },
-        )
-      } catch (primaryError) {
-        if (!primaryError?.response) {
-          response = await axios.post("/api/users/auth/guest/")
-        } else {
-          throw primaryError
-        }
-      }
-
-      saveUserSession(response.data, "Guest user")
-      navigate("/exercises")
-    } catch (error) {
-      const message =
-        error?.response?.data?.detail ||
-        "Guest login failed. Please try again."
-      setErrorMessage(message)
-    } finally {
-      setIsGuestSubmitting(false)
-    }
-  }
 
   return (
     <main className="auth-page">
@@ -198,17 +219,6 @@ function Login() {
               </Link>
             </div>
           </form>
-          <div className="auth-footer">
-            <span>Don't have an account?</span>
-            <button
-              className="link-btn"
-              type="button"
-              onClick={handleGuestLogin}
-              disabled={isGuestSubmitting}
-            >
-              {isGuestSubmitting ? "Starting guest..." : "Guest Login"}
-            </button>
-          </div>
         </div>
       </section>
     </main>
