@@ -590,11 +590,32 @@
   font-size: 0.9rem;
 }
 
+.exercise-add-btn {
+  border: none;
+  border-radius: 25%;
+  cursor: pointer;
+  position: relative;
+  top: 2px;
+  left: 0;
+  vertical-align: middle;
+}
+
+.exercise-add-btn img {
+  width: 30px;
+  margin-top: 2px;
+}
+
+.exercise-add-btn:hover {
+  background: #111b45;
+}
+
+.exercise-add-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .exercise-primary-btn {
   border: none;
-  border-radius: 50%;
-  background: #307cec;
-  color: #ffffff;
   font-weight: 700;
   cursor: pointer;
   position: relative;
@@ -603,14 +624,19 @@
   vertical-align: middle;
 }
 
-.exercise-primary-btn img {
-  width: 15px;
+.add-exercise-to-program {
+  width: 25px;
+  height: 25px;
   margin-top: 2px;
-
+  background-image: url('../assets/add-exercise.png');
+  background-size: cover;
+  transition: background 0.3s ease-in-out;
 }
 
-.exercise-primary-btn:hover {
-  background: #2767c9;
+.add-exercise-to-program:hover {
+  background-image: url('../assets/add-exercise-hover.png');
+  transform: rotate(225deg);
+  transition: transform 0.3s ease-in-out;
 }
 
 .exercise-primary-btn:disabled {

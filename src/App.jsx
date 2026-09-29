@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 import './CSS/app.css'
@@ -286,7 +286,6 @@ function App() {
     loadPrograms()
   }, [userSession])
   return (
-    <BrowserRouter>
       <Routes>
         {/* Public Routes */}
         <Route index path="/login" element={<Login setUserSession={setUserSession} userSession={userSession} />} />
@@ -355,7 +354,6 @@ function App() {
         <Route path="help" element={<Help />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
-    </BrowserRouter>
   )
 }
 

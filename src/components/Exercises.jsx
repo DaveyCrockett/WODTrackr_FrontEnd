@@ -7,6 +7,8 @@ import MultiSelect from "./MultiSelect"
 import ExerciseSteps from "./ExerciseSteps"
 import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
 import CheckMarkIcon from "../assets/checkMark_Icon.png"
+import AddIcon from "../assets/add-icon.png"
+import AddExercise from "../assets/add-exercise.png"
 
 const API_URL = "/api/wodtrackr/exercises/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
@@ -872,8 +874,8 @@ function Exercises({
             <div className="exercise-counts" aria-live="polite" aria-atomic="true">
               <span>{filteredAndSortedLibrary ? filteredAndSortedLibrary.length : exerciseLibrary.length} total</span>
             </div>
-            <button className="exercise-primary-btn" type="submit" disabled={isAddModalOpen} onClick={() => handleAddExercise()}>
-              Add Exercise
+            <button className="exercise-add-btn" type="submit" disabled={isAddModalOpen} onClick={() => handleAddExercise()}>
+              <img src={AddIcon} alt="Add Exercise" />
             </button>
           </div>
         </header>
@@ -923,7 +925,7 @@ function Exercises({
                 >
                   {exerciseImageUrl ? (
                     <div className="exercise-card-image-wrap" aria-hidden="true">
-                      <button className="exercise-primary-btn" type="button" onClick={() => addExerciseToProgram(currentExerciseId)} disabled={!currentExerciseId}><img className="exercise-add-icon" src="src/assets/add-icon.png" alt="Add to Programs" /></button>
+                      <div className="add-exercise-to-program" onClick={() => addExerciseToProgram(currentExerciseId)} disabled={!currentExerciseId}></div>
                     {/* {programExercises.includes(currentExerciseId) && (
                       <img src={CheckMarkIcon} alt="Added to Programs" className="exercise-added-icon" />
                     )} */}
