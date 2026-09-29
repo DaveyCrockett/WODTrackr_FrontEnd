@@ -140,8 +140,9 @@ function App() {
 
   console.log("App Rendered! Current programs state count:", programs.length);
 
-  const addExerciseToProgram = (exerciseName) => {
-    setProgramExercises((prevExercises) => [...prevExercises, exerciseName]);
+
+  const addExerciseToProgram = (exerciseId) => {
+    setProgramExercises((prevExercises) => [...prevExercises, exerciseId]);
   };
 
 

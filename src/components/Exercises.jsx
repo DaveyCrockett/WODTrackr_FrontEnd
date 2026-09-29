@@ -930,6 +930,7 @@ function Exercises({
                   ) : null}
                   <div className="exercise-item-content">
                     <h3 className="exercise-header-title">{(exercise.title || exercise.name || "Exercise").toUpperCase()}</h3>
+                    <input type="checkbox" className="exercise-modal-checkbox" checked={programExercises.includes(selectedExerciseId) || false} onChange={() => addExerciseToProgram(selectedExerciseId)} />
                     <div className="exercise-header">
                       <p className="exercise-meta"><strong>Visibility:</strong> {capitalizeFirstLetter(exercise.is_public ? "Public" : "Private")}</p>
                       <p className="exercise-meta"><strong>Category:</strong> {capitalizeFirstLetter(exercise.category)}</p>
@@ -1239,7 +1240,6 @@ function Exercises({
             </div>
             <div className="exercise-modal-title-wrapper">
               <h2 className="exercise-modal-title">{toSubTitleCase(selectedExercise?.name)}</h2>
-              
             </div>
             <div className="exercise-action-buttons">
               <button className="exercise-primary-btn" type="button" onClick={() => addExerciseToProgram(selectedExerciseId)} disabled={!selectedExerciseId}><img src="src/assets/add-icon.png" alt="Add to Programs" />Programs</button>
