@@ -936,6 +936,8 @@ function Programs({
   isProgramsLoading,
   programsErrorMessage,
   programExercises,
+  isCreateModalOpen,
+  searchParams,
 }) {
   const currentUsername = userSession?.username ?? ""
   const currentUserId = userSession?.userId ?? null
@@ -953,7 +955,6 @@ function Programs({
     exerciseLibraryError = "",
   } = resolvedExerciseLibraryState
 
-  const [searchParams, setSearchParams] = useSearchParams()
   const { programDraft, clearDraft } = useProgramForm()
   const [successMessage, setSuccessMessage] = useState("")
   const [createFormValues, setCreateFormValues] = useState(EMPTY_PROGRAM_FORM_VALUES)
@@ -993,7 +994,7 @@ function Programs({
   const [scheduleError, setScheduleError] = useState("")
   const [scheduleSuccess, setScheduleSuccess] = useState("")
   const [visibleProgramsCount, setVisibleProgramsCount] = useState(PAGE_SIZE)
-  const isCreateModalOpen = searchParams.get("newProgram") === "true"
+  
   
   const openCreateModal = () => setSearchParams({ newProgram: "true" })
 

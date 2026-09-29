@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 import './CSS/app.css'
@@ -119,6 +119,7 @@ function App() {
     target: [],
     goal: [],
   })
+  const [searchParams, setSearchParams] = useSearchParams()
   const [searchName, setSearchName] = useState("")
   const [choicesErrorMessage, setChoicesErrorMessage] = useState("")
   const [sortOrder, setSortOrder] = useState("asc")
@@ -137,6 +138,7 @@ function App() {
   const [programsErrorMessage, setProgramsErrorMessage] = useState("")
   const [isProgramsLoading, setIsProgramsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
+  const isCreateModalOpen = searchParams.get("newProgram") === "true"
 
   console.log("App Rendered! Current programs state count:", programs.length);
 
@@ -295,6 +297,8 @@ function App() {
           <Route path="profile" element={<Profile />} />
           {console.log('Current user session in App.jsx:', userSession)}
           <Route path="exercises" element={<Exercises
+            searchParams={searchParams}
+            isCreateModalOpen={isCreateModalOpen}
             programExercises={programExercises}
             addExerciseToProgram={addExerciseToProgram}
             userSession={userSession}
@@ -317,6 +321,8 @@ function App() {
           />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="programs" element={<Programs
+            searchParams={searchParams}
+            isCreateModalOpen={isCreateModalOpen}
             programExercises={programExercises}
             userSession={userSession}
             isProgramsLoading={isProgramsLoading}

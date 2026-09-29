@@ -367,6 +367,11 @@
   box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.35);
 }
 
+.exercise-primary-btn:hover .exercise-add-icon {
+  transform: rotate(135deg);
+  transition: transform 0.3s ease-in-out;
+}
+
 .exercise-item {
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -390,17 +395,12 @@
   border-radius: 10px;
   overflow: hidden;
   background: linear-gradient(160deg, #e2e8f0 0%, #f8fafc 100%);
-  margin-bottom: 0.75rem;
-  display: flex;
-  justify-content: center;
   align-items: center;
 }
 
 .exercise-card-image {
   width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
+  height: 80%;
 }
 
 .exercise-item-skeleton {
@@ -592,19 +592,21 @@
 
 .exercise-primary-btn {
   border: none;
-  border-radius: 10px;
-  padding: 0.7rem 0.9rem;
+  border-radius: 50%;
   background: #307cec;
   color: #ffffff;
   font-weight: 700;
   cursor: pointer;
+  position: relative;
+  top: 2px;
+  left: 0;
+  vertical-align: middle;
 }
 
 .exercise-primary-btn img {
   width: 15px;
-  margin-right: 0.5rem;
-  vertical-align: middle;
-  margin-bottom: 0.10rem;
+  margin-top: 2px;
+
 }
 
 .exercise-primary-btn:hover {

@@ -347,6 +347,7 @@ function Exercises({
   userSession,
   addExerciseToProgram,
   programExercises,
+  isCreateModalOpen,
 }) {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -922,6 +923,10 @@ function Exercises({
                 >
                   {exerciseImageUrl ? (
                     <div className="exercise-card-image-wrap" aria-hidden="true">
+                      <button className="exercise-primary-btn" type="button" onClick={() => addExerciseToProgram(currentExerciseId)} disabled={!currentExerciseId}><img className="exercise-add-icon" src="src/assets/add-icon.png" alt="Add to Programs" /></button>
+                    {/* {programExercises.includes(currentExerciseId) && (
+                      <img src={CheckMarkIcon} alt="Added to Programs" className="exercise-added-icon" />
+                    )} */}
                       <img
                         src={exerciseImageUrl}
                         alt=""
@@ -935,10 +940,6 @@ function Exercises({
                   ) : null}
                   <div className="exercise-item-content">
                     <h3 className="exercise-header-title">{(exercise.title || exercise.name || "Exercise").toUpperCase()}</h3>
-                    <button className="exercise-primary-btn" type="button" onClick={() => addExerciseToProgram(currentExerciseId)} disabled={!currentExerciseId}><img src="src/assets/add-icon.png" alt="Add to Programs" />Programs</button>
-                    {/* {programExercises.includes(currentExerciseId) && (
-                      <img src={CheckMarkIcon} alt="Added to Programs" className="exercise-added-icon" />
-                    )} */}
                     <div className="exercise-header">
                       <p className="exercise-meta"><strong>Visibility:</strong> {capitalizeFirstLetter(exercise.is_public ? "Public" : "Private")}</p>
                       <p className="exercise-meta"><strong>Category:</strong> {capitalizeFirstLetter(exercise.category)}</p>
