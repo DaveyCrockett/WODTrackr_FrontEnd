@@ -938,6 +938,7 @@ function Programs({
   programExercises,
   isCreateModalOpen,
   searchParams,
+  setSearchParams,
 }) {
   const currentUsername = userSession?.username ?? ""
   const currentUserId = userSession?.userId ?? null

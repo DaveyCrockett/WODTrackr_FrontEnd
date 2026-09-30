@@ -1,5 +1,6 @@
 import "../CSS/exercises.css"
 import axios from "axios"
+import AddToProgram from "./AddToProgram"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { validateExerciseForm } from "../utils/exerciseUtils"
 import FilterIcon from "../assets/filter.png"
@@ -329,6 +330,7 @@ const getExerciseFormValues = (exercise) => ({
 
 
 function Exercises({
+  removeExerciseFromProgram,
   handleFilterChange = () => { },
   isChoicesLoading = false,
   categoryChoices = [],
@@ -518,7 +520,6 @@ function Exercises({
     setFieldErrors({})
 
     try {
-      console.log("Form values before creating payload:", formValues)
       const payload = new FormData()
       payload.append("name", formValues.name)
       payload.append("instruction_steps", JSON.stringify(formValues.detail.instruction_steps) || "")
@@ -531,20 +532,15 @@ function Exercises({
       payload.append("difficulty", formValues.difficulty || "")
       payload.append("secondary_muscle_group", formValues.secondary_muscle_group || "")
 
-      console.log("Image Upload form values:", formValues.image_upload, "Type:", typeof formValues.image_upload)
-      console.log("GIF Upload form values:", formValues.gif_upload, "Type:", typeof formValues.gif_upload)
-
       if (formValues.image_upload instanceof File) {
         payload.append("image_upload", formValues.image_upload)
       }
-      console.log("is gif_upload a File?", formValues.gif_upload instanceof File)
       if (formValues.gif_upload instanceof File) {
         payload.append("gif_upload", formValues.gif_upload)
       }
 
       const response = await axios.post(`${API_URL}`, payload, buildRequestConfig())
       const createdExercise = response?.data?.data ?? response?.data
-      console.log("Created exercise response:", createdExercise)
       if (createdExercise) {
         setExerciseLibraryState((prevState) => ({
           ...prevState,
@@ -574,13 +570,8 @@ function Exercises({
     }
   }
 
-  useEffect(() => {
-    console.log("Updated state inside useEffect:", formValues.detail, typeof formValues.detail)
-  }, [formValues])
-
   const handleAddChange = (event) => {
     const { name, value, type, checked, files } = event.target
-    console.log("Handling add change for event target:", event.target.name, "Type:", type, "Value:", value, "Checked:", checked, "Files:", files, "name:", name)
     const inputValue = type === "textarea" ? value : value;
     setFormValues((prev) => {
       if (name === "instruction_steps") {
@@ -803,24 +794,21 @@ function Exercises({
     return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
-  console.log('Current user session:', userSession)
   const currentUsername = userSession?.username || ""
-  console.log('Current username:', currentUsername)
   const selectedExercise = exerciseLibrary.find((exercise) => (exercise.id ?? null) === selectedExerciseId) || null
   const selectedExerciseOwner =
     selectedExercise?.created_by_username ||
     selectedExercise?.username ||
     selectedExercise?.created_by ||
     ""
-  console.log('Selected exercise owner:', selectedExerciseOwner, 'Current username:', currentUsername, 'Selected exercise:', selectedExercise)
+  
   const canEditSelectedExercise = Boolean(
-    (console.log('Selected exercise owner:', selectedExerciseOwner, 'Current username:', currentUsername, 'Selected exercise:', selectedExercise),
+    ( 
       selectedExercise &&
       currentUsername &&
       selectedExerciseOwner &&
       currentUsername === selectedExerciseOwner),
   )
-  console.log('Can edit selected exercise:', canEditSelectedExercise)
   const canDeleteSelectedExercise = canEditSelectedExercise
 
   useEffect(() => {
@@ -867,16 +855,21 @@ function Exercises({
       <section className="exercise-library-panel">
         <header className="exercise-panel-header">
           <div className="exercise-panel-header-top">
-            <h1>Exercise Library</h1>
-            <p>Browse and manage exercises in the library. Use the search and filter options to find specific exercises.</p>
+            <div>
+              <h1>Exercise Library</h1>
+              <p>Browse and manage exercises in the library. Use the search and filter options to find specific exercises.</p>
+            </div>
+            <div id="exercise-add-btn-wrapper">
+              <button className="exercise-add-btn" type="submit" disabled={isAddModalOpen} onClick={() => handleAddExercise()}>
+                <img src={AddIcon} alt="Add Exercise" />
+              </button>
+            </div>
           </div>
           <div className="exercise-header-actions">
             <div className="exercise-counts" aria-live="polite" aria-atomic="true">
               <span>{filteredAndSortedLibrary ? filteredAndSortedLibrary.length : exerciseLibrary.length} total</span>
             </div>
-            <button className="exercise-add-btn" type="submit" disabled={isAddModalOpen} onClick={() => handleAddExercise()}>
-              <img src={AddIcon} alt="Add Exercise" />
-            </button>
+            
           </div>
         </header>
         {isExerciseLibraryLoading ? (
@@ -925,7 +918,7 @@ function Exercises({
                 >
                   {exerciseImageUrl ? (
                     <div className="exercise-card-image-wrap" aria-hidden="true">
-                      <div className="add-exercise-to-program" onClick={() => addExerciseToProgram(currentExerciseId)} disabled={!currentExerciseId}></div>
+                      <AddToProgram currentExerciseId={currentExerciseId} addExerciseToProgram={addExerciseToProgram} removeExerciseFromProgram={removeExerciseFromProgram} />
                     {/* {programExercises.includes(currentExerciseId) && (
                       <img src={CheckMarkIcon} alt="Added to Programs" className="exercise-added-icon" />
                     )} */}

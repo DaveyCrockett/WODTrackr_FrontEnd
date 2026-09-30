@@ -195,6 +195,7 @@
 .exercise-panel-header h2 {
   margin: 0;
   color: #0f172a;
+  text-align: center;
 }
 
 .exercise-panel-header p {
@@ -204,8 +205,9 @@
 
 .exercise-panel-header-top {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
+  justify-content: space-between; /* Ensures the header content is spaced out */
 }
 
 .exercise-header-actions {
@@ -590,14 +592,14 @@
   font-size: 0.9rem;
 }
 
+#exercise-add-btn-wrapper {
+  height: 100%;
+}
+
 .exercise-add-btn {
   border: none;
   border-radius: 25%;
   cursor: pointer;
-  position: relative;
-  top: 2px;
-  left: 0;
-  vertical-align: middle;
 }
 
 .exercise-add-btn img {
@@ -637,6 +639,12 @@
   background-image: url('../assets/add-exercise-hover.png');
   transform: rotate(225deg);
   transition: transform 0.3s ease-in-out;
+}
+
+.add-exercise-to-program.added {
+  background-image: url('../assets/checkMark_Icon.png');
+  background-repeat: no-repeat;
+  background-position: center;
 }
 
 .exercise-primary-btn:disabled {

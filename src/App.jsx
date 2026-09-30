@@ -147,6 +147,9 @@ function App() {
     setProgramExercises((prevExercises) => [...prevExercises, exerciseId]);
   };
 
+  const removeExerciseFromProgram = (exerciseId) => {
+    setProgramExercises((prevExercises) => prevExercises.filter((id) => id !== exerciseId));
+  };
 
   const handleFilterChange = (filterName, selectedValues) => {
     setFilters((prev) => ({
@@ -294,9 +297,10 @@ function App() {
         <Route element={<ProgramFormProvider />}>
         <Route path="/" element={<Layout userSession={userSession} />}>
           <Route path="profile" element={<Profile />} />
-          {console.log('Current user session in App.jsx:', userSession)}
           <Route path="exercises" element={<Exercises
+            removeExerciseFromProgram={removeExerciseFromProgram}
             searchParams={searchParams}
+            setSearchParams={setSearchParams}
             isCreateModalOpen={isCreateModalOpen}
             programExercises={programExercises}
             addExerciseToProgram={addExerciseToProgram}
@@ -337,6 +341,7 @@ function App() {
             filters={filters}
             isChoicesLoading={isChoicesLoading}
             setIsChoicesLoading={setIsChoicesLoading}
+            setSearchParams={setSearchParams}
             goalChoices={goalChoices}
             difficultyChoices={difficultyChoices}
             categoryChoices={categoryChoices}
