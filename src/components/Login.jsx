@@ -42,9 +42,9 @@ const saveUserSession = userSession => {
                      userData?.name ?? "";
 
     console.log("Canonicalized user session values:", {
+      authToken,
       username,
       avatarUrl,
-      authToken,
       refreshToken,
     })
 
