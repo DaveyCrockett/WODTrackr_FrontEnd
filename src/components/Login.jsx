@@ -8,7 +8,6 @@ const USERS_API_BASE_URL = String(import.meta.env.VITE_USERS_API_BASE_URL || "/a
 const LOGIN_API_URL = `${USERS_API_BASE_URL}/auth/login/`
 
 function Login({ setUserSession, userSession }) {
-  console.log("Current user session on Login component mount:", userSession)
   const navigate = useNavigate()
   const [formValues, setFormValues] = useState({
     username: "",
@@ -19,8 +18,6 @@ function Login({ setUserSession, userSession }) {
   const [errorMessage, setErrorMessage] = useState("")
 const saveUserSession = userSession => {
     const userData = userSession?.user ?? userSession ?? {}
-    console.log("User data extracted from saveUserSession input:", userData)
-    console.log("Raw saveUserSession input:", userSession)
     
     const authToken = userSession?.data?.access ?? userSession?.token ?? userSession?.key ?? userSession?.auth_token ?? userData?.data?.access ?? userData?.token ?? userData?.key ?? userData?.auth_token ?? ""
     const refreshToken = userSession?.data?.refresh ?? userData?.data?.refresh ?? ""
@@ -41,12 +38,6 @@ const saveUserSession = userSession => {
                      userData?.username ?? 
                      userData?.name ?? "";
 
-    console.log("Canonicalized user session values:", {
-      username,
-      avatarUrl,
-      authToken,
-      refreshToken,
-    })
 
     if (authToken) {
       localStorage.setItem("wodtrackrAuthToken", authToken)
@@ -65,13 +56,6 @@ const saveUserSession = userSession => {
     } else {
       localStorage.removeItem("wodtrackrUsername")
     }
-    
-    console.log("Saved user session:", {
-      username,
-      avatarUrl,
-      authToken,
-      refreshToken,
-    })
 
     localStorage.setItem(
       "wodtrackrUser",
@@ -105,7 +89,6 @@ const saveUserSession = userSession => {
         password: formValues.password,
         remember_me: formValues.remember_me,
       }
-      console.log('Login payload:', loginPayload)
 
       let response
       try {
@@ -114,7 +97,6 @@ const saveUserSession = userSession => {
           loginPayload,
           { withCredentials: true },
         )
-        console.log("Primary login response:", response)
       } catch (primaryError) {
         if (!primaryError?.response) {
           response = await axios.post(
@@ -126,14 +108,8 @@ const saveUserSession = userSession => {
           throw primaryError
         }
       }
-      console.log("Final login response data:", response.config.data)
+      
       saveUserSession(response)
-      console.log("User session saved.", {
-        username: response.config.data?.username,
-        avatarUrl: response.data?.user?.avatar_url ?? null,
-        authToken: response.data?.access ?? response.data?.token ?? response.data?.key ?? response.data?.auth_token ?? "",
-        refreshToken: response.data?.refresh ?? "",
-      })
       const activeUser = JSON.parse(localStorage.getItem("wodtrackrUser"))
       setUserSession(activeUser)
       navigate("/profile")

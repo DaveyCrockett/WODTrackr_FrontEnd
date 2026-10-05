@@ -330,7 +330,6 @@ const getExerciseFormValues = (exercise) => ({
 
 
 function Exercises({
-  removeExerciseFromProgram,
   handleFilterChange = () => { },
   isChoicesLoading = false,
   categoryChoices = [],
@@ -352,6 +351,8 @@ function Exercises({
   addExerciseToProgram,
   programExercises,
   isCreateModalOpen,
+  exerciseIsAdded,
+  setExerciseIsAdded,
 }) {
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -370,7 +371,8 @@ function Exercises({
   const [editFormValues, setEditFormValues] = useState(EMPTY_EXERCISE_FORM_VALUES)
   const [exercisesErrorMessage, setExercisesErrorMessage] = useState("")
   const [visibleExerciseCount, setVisibleExerciseCount] = useState(PAGE_SIZE)
-
+  const [activeCardId, setActiveCardId] = useState(null)
+  const [isAdded, setIsAdded] = useState(false);
 
   // Refs for modal focus management
   const addModalRef = useRef(null)
@@ -634,6 +636,26 @@ function Exercises({
     }
   }
 
+  const toggleIsAdded = (exerciseId, event) => {
+    if (!isAdded) {
+      setIsAdded(true);
+      setExerciseIsAdded((prev) => {
+        const updated = [...prev, exerciseId];
+        console.log("Adding exerciseId. New state:", updated);
+        return updated;
+      });
+    } else {
+      setExerciseIsAdded((prev) => {
+        if (prev.includes(exerciseId)) {
+          const updated = prev.filter((id) => id !== exerciseId);
+          console.log("Removing exerciseId. New state:", updated);
+          return updated;
+        }
+        return prev;
+      });
+      setIsAdded(false);
+    }
+  };
 
 
   const handleOpenAddModal = () => {
@@ -801,9 +823,9 @@ function Exercises({
     selectedExercise?.username ||
     selectedExercise?.created_by ||
     ""
-  
+
   const canEditSelectedExercise = Boolean(
-    ( 
+    (
       selectedExercise &&
       currentUsername &&
       selectedExerciseOwner &&
@@ -869,7 +891,7 @@ function Exercises({
             <div className="exercise-counts" aria-live="polite" aria-atomic="true">
               <span>{filteredAndSortedLibrary ? filteredAndSortedLibrary.length : exerciseLibrary.length} total</span>
             </div>
-            
+
           </div>
         </header>
         {isExerciseLibraryLoading ? (
@@ -897,11 +919,12 @@ function Exercises({
             <p className="exercise-empty" role="status">No exercises found.</p>
           ) : (
             visibleExercises.map((exercise, index) => {
-              console.log("Rendering exercise:", exercise)
+
               const exerciseImageUrl = String(getExerciseImageUrl(exercise))
               const currentExerciseId = exercise.id ?? null
               return (
                 <article
+
                   className={`exercise-item ${currentExerciseId === selectedExerciseId ? "exercise-item-selected" : ""}`}
                   key={exercise.id ?? index}
                   id={exercise.id ? `exercise-option-${exercise.id}` : undefined}
@@ -917,11 +940,9 @@ function Exercises({
                   }}
                 >
                   {exerciseImageUrl ? (
+
                     <div className="exercise-card-image-wrap" aria-hidden="true">
-                      <AddToProgram currentExerciseId={currentExerciseId} addExerciseToProgram={addExerciseToProgram} removeExerciseFromProgram={removeExerciseFromProgram} />
-                    {/* {programExercises.includes(currentExerciseId) && (
-                      <img src={CheckMarkIcon} alt="Added to Programs" className="exercise-added-icon" />
-                    )} */}
+                      <AddToProgram isAdded={isAdded} setIsAdded={setIsAdded} currentExerciseId={currentExerciseId} onToggle={() => toggleIsAdded(currentExerciseId)} />
                       <img
                         src={exerciseImageUrl}
                         alt=""
@@ -1088,7 +1109,6 @@ function Exercises({
                   <ul style={{ color: '#666', listStyleType: 'none', margin: '0' }}>
                     <li style={{ fontStyle: 'italic' }}><span style={{ fontWeight: 'bold', lineHeight: '0', fontSize: '16px' }}>* </span>Separate steps with commas. Don't number steps.</li>
                   </ul>
-                  {console.log("instruction steps: ", formValues.detail?.instruction_steps.en)}
                   <textarea
                     name="instruction_steps"
                     value={formValues.detail?.instruction_steps.en}
@@ -1286,7 +1306,7 @@ function Exercises({
                       <strong>Visibility:</strong> {selectedExercise?.is_public ? "Public" : "Private"}
                     </p>
                     <p className="exercise-meta meta-read-only">
-                      <strong>Created by:</strong> {selectedExercise?.created_by_username || selectedExercise?.username || selectedExercise?.created_by || "Unknown"} {console.log(selectedExercise)}
+                      <strong>Created by:</strong> {selectedExercise?.created_by_username || selectedExercise?.username || selectedExercise?.created_by || "Unknown"}
                     </p>
                   </div>
                   <div className="exercise-meta-column">

@@ -139,17 +139,9 @@ function App() {
   const [isProgramsLoading, setIsProgramsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
   const isCreateModalOpen = searchParams.get("newProgram") === "true"
+  const [exerciseIsAdded, setExerciseIsAdded] = useState([]);
+ 
 
-  console.log("App Rendered! Current programs state count:", programs.length);
-
-
-  const addExerciseToProgram = (exerciseId) => {
-    setProgramExercises((prevExercises) => [...prevExercises, exerciseId]);
-  };
-
-  const removeExerciseFromProgram = (exerciseId) => {
-    setProgramExercises((prevExercises) => prevExercises.filter((id) => id !== exerciseId));
-  };
 
   const handleFilterChange = (filterName, selectedValues) => {
     setFilters((prev) => ({
@@ -298,12 +290,12 @@ function App() {
         <Route path="/" element={<Layout userSession={userSession} />}>
           <Route path="profile" element={<Profile />} />
           <Route path="exercises" element={<Exercises
-            removeExerciseFromProgram={removeExerciseFromProgram}
+            exerciseIsAdded={exerciseIsAdded}
+            setExerciseIsAdded={setExerciseIsAdded}
             searchParams={searchParams}
             setSearchParams={setSearchParams}
             isCreateModalOpen={isCreateModalOpen}
             programExercises={programExercises}
-            addExerciseToProgram={addExerciseToProgram}
             userSession={userSession}
             newProgram={newProgram}
             exerciseLibraryState={exerciseLibraryState}
@@ -324,6 +316,8 @@ function App() {
           />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="programs" element={<Programs
+            exerciseIsAdded={exerciseIsAdded}
+            setExerciseIsAdded={setExerciseIsAdded}
             searchParams={searchParams}
             isCreateModalOpen={isCreateModalOpen}
             programExercises={programExercises}

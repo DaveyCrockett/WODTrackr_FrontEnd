@@ -1,21 +1,16 @@
 import React, { useState } from 'react';
 
-function AddToProgram({ currentExerciseId, addExerciseToProgram, removeExerciseFromProgram }) {
-  const [isAdded, setIsAdded] = useState(false);
+function AddToProgram({ isAdded, setIsAdded, onToggle, currentExerciseId }) {
+  
 
-  const handleAddClick = () => {
-    if (!isAdded) {
-      setIsAdded(true);
-      addExerciseToProgram(currentExerciseId);
-    } else {
-      setIsAdded(false);
-      removeExerciseFromProgram(currentExerciseId);
-    }
+  const handleAddClick = (event) => {
+    event.stopPropagation();
+    onToggle(event);
   };
 
   return (
     <div 
-      className={`add-exercise-to-program ${isAdded ? 'added' : ''}`} onClick={handleAddClick} disabled={!currentExerciseId}
+      className={`add-exercise-to-program ${isAdded ? 'added' : ''}`} onClick={(e) => handleAddClick(e)} disabled={!currentExerciseId}
     >
     </div>
   );
