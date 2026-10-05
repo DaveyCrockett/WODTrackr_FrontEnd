@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-function AddToProgram({ isAdded, setIsAdded, onToggle, currentExerciseId }) {
-  
+function AddToProgram({ isAdded, onToggle, currentExerciseId }) {
 
   const handleAddClick = (event) => {
     event.stopPropagation();

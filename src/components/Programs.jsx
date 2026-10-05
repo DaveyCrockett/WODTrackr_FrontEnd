@@ -15,6 +15,7 @@ const STRIPE_CHECKOUT_API_URL = String(
 const WORKOUTS_STORAGE_KEY = "wodtrackrWorkouts"
 const PURCHASED_PROGRAMS_STORAGE_KEY = "wodtrackrPurchasedProgramIds"
 const PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY = "wodtrackrPendingCheckoutProgramId"
+const CREATE_PROGRAM_DRAFT_STORAGE_KEY = "wodtrackrCreateProgramDraftV1"
 const PAGE_SIZE = 18
 const SKELETON_CARD_COUNT = 6
 const DEFAULT_DIFFICULTIES = ["All Levels", "Beginner", "Intermediate", "Advanced"]
@@ -23,6 +24,33 @@ const DEFAULT_DURATION_MAX = 12
 const PROGRAMS_CHOICES_CACHE_KEY = "wodtrackrProgramChoicesV4"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
+
+const saveCreateProgramDraft = (payload) => {
+  try {
+    sessionStorage.setItem(CREATE_PROGRAM_DRAFT_STORAGE_KEY, JSON.stringify(payload))
+  } catch {
+    // Ignore draft persistence failures.
+  }
+}
+
+const loadCreateProgramDraft = () => {
+  try {
+    const raw = sessionStorage.getItem(CREATE_PROGRAM_DRAFT_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === "object" ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+const clearCreateProgramDraft = () => {
+  try {
+    sessionStorage.removeItem(CREATE_PROGRAM_DRAFT_STORAGE_KEY)
+  } catch {
+    // Ignore draft cleanup failures.
+  }
+}
 
 const normalizeDurationWeeks = (value) => {
   const parsed = Number(value)
@@ -939,8 +967,8 @@ function Programs({
   isCreateModalOpen,
   searchParams,
   setSearchParams,
-  isAdded,
-  setIsAdded,
+  exerciseIsAdded = [],
+  setExerciseIsAdded = () => { },
 }) {
   const currentUsername = userSession?.username ?? ""
   const currentUserId = userSession?.userId ?? null
@@ -958,7 +986,11 @@ function Programs({
     exerciseLibraryError = "",
   } = resolvedExerciseLibraryState
 
-  const { programDraft, clearDraft } = useProgramForm()
+  const programFormContext = useProgramForm()
+  const {
+    programDraft = { name: "", description: "", exercises: [] },
+    clearDraft = () => { },
+  } = programFormContext ?? {}
   const [successMessage, setSuccessMessage] = useState("")
   const [createFormValues, setCreateFormValues] = useState(EMPTY_PROGRAM_FORM_VALUES)
   const [createFieldErrors, setCreateFieldErrors] = useState({})
@@ -997,6 +1029,7 @@ function Programs({
   const [scheduleError, setScheduleError] = useState("")
   const [scheduleSuccess, setScheduleSuccess] = useState("")
   const [visibleProgramsCount, setVisibleProgramsCount] = useState(PAGE_SIZE)
+  const [hasHydratedCreateDraft, setHasHydratedCreateDraft] = useState(false)
   
   
   const openCreateModal = () => setSearchParams({ newProgram: "true" })
@@ -1294,9 +1327,11 @@ function Programs({
   }
 
   const handleOpenCreateModal = () => {
+    clearCreateProgramDraft()
     setCreateFormValues(EMPTY_PROGRAM_FORM_VALUES)
     setCreateFieldErrors({})
     setCreateErrorMessage("")
+    setExerciseIsAdded([])
     setCreatePlanWeek(1)
     setCreatePlanExercise([])
     setCreatePlanWorkoutId("")
@@ -1305,18 +1340,85 @@ function Programs({
     if (editImageInputRef.current) {
       editImageInputRef.current.value = ""
     }
+    setHasHydratedCreateDraft(true)
     openCreateModal()
   }
 
 
   const handleCloseCreateModal = () => {
+    clearCreateProgramDraft()
     setEditImageFile(null)
     setEditImagePreview("")
+    setExerciseIsAdded([])
     if (editImageInputRef.current) {
       editImageInputRef.current.value = ""
     }
+    setHasHydratedCreateDraft(false)
     closeCreateModal()
   }
+
+  useEffect(() => {
+    if (!isCreateModalOpen || hasHydratedCreateDraft) {
+      return
+    }
+
+    const storedDraft = loadCreateProgramDraft()
+    if (storedDraft?.createFormValues && typeof storedDraft.createFormValues === "object") {
+      setCreateFormValues((previousValues) => ({
+        ...previousValues,
+        ...storedDraft.createFormValues,
+      }))
+    }
+    if (Number.isFinite(Number(storedDraft?.createPlanWeek))) {
+      setCreatePlanWeek(Number(storedDraft.createPlanWeek))
+    }
+
+    setHasHydratedCreateDraft(true)
+  }, [isCreateModalOpen, hasHydratedCreateDraft])
+
+  useEffect(() => {
+    if (!isCreateModalOpen || !hasHydratedCreateDraft) {
+      return
+    }
+
+    saveCreateProgramDraft({
+      createFormValues,
+      createPlanWeek,
+    })
+  }, [isCreateModalOpen, hasHydratedCreateDraft, createFormValues, createPlanWeek])
+
+  const handleOpenExercisePicker = () => {
+    saveCreateProgramDraft({
+      createFormValues,
+      createPlanWeek,
+    })
+  }
+
+  useEffect(() => {
+    if (!isCreateModalOpen || !searchParams || searchParams.get("applyAddedExercises") !== "true") {
+      return
+    }
+
+    const rawWeek = Number(searchParams.get("planWeek") || createPlanWeek || 1)
+    const weekNumber = Number.isFinite(rawWeek) && rawWeek > 0 ? rawWeek : 1
+    const selectedIds = Array.isArray(exerciseIsAdded)
+      ? exerciseIsAdded
+        .map((exerciseId) => Number(exerciseId))
+        .filter((exerciseId) => Number.isFinite(exerciseId))
+      : []
+
+    if (selectedIds.length > 0) {
+      setCreateFormValues((prev) => {
+        const nextPlan = addExerciseIdsToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, selectedIds)
+        return { ...prev, workout_plan: nextPlan }
+      })
+      setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+      setCreatePlanWeek(weekNumber)
+    }
+
+    setExerciseIsAdded([])
+    setSearchParams({ newProgram: "true" })
+  }, [isCreateModalOpen, searchParams, setSearchParams, exerciseIsAdded, setExerciseIsAdded, createPlanWeek])
 
   const handleCreateFieldChange = (event) => {
     const { name, type, checked, value } = event.target
@@ -1452,11 +1554,13 @@ function Programs({
       }
 
       setIsCreateModalOpen(false)
+      clearCreateProgramDraft()
       setCreateFormValues(EMPTY_PROGRAM_FORM_VALUES)
       setCreateFieldErrors({})
       setCreatePlanWeek(1)
       setCreatePlanExercise([])
       setCreatePlanWorkoutId("")
+      setHasHydratedCreateDraft(false)
     } catch (error) {
       const fieldErrors = {}
       const responseData = error?.response?.data
@@ -2477,9 +2581,27 @@ function Programs({
                 {exerciseLibraryError ? <p className="programs-modal-error">{exerciseLibraryError}</p> : null}
 
                 <div className="programs-plan-controls">
+                  <label className="programs-modal-field">
+                    <span>Week</span>
+                    <select
+                      name="create_plan_week"
+                      value={String(createPlanWeek)}
+                      onChange={(event) => setCreatePlanWeek(Number(event.target.value) || 1)}
+                      disabled={workoutPlan.length === 0}
+                    >
+                      {workoutPlan.length === 0 ? <option value="1">No weeks available</option> : null}
+                      {workoutPlan.map((weekEntry) => (
+                        <option key={`create-week-${weekEntry.week_number}`} value={weekEntry.week_number}>
+                          Week {weekEntry.week_number}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
                   <Link
-                    to="/exercises"
+                    to={`/exercises?source=new-program&newProgram=true&planWeek=${createPlanWeek}`}
                     className="programs-modal-secondary-btn programs-plan-add-btn"
+                    onClick={handleOpenExercisePicker}
                     isOpen={isCreateModalOpen}
                     onClose={closeCreateModal}
                     draft={programDraft}

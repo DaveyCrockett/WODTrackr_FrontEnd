@@ -2,6 +2,7 @@ import "../CSS/exercises.css"
 import axios from "axios"
 import AddToProgram from "./AddToProgram"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { validateExerciseForm } from "../utils/exerciseUtils"
 import FilterIcon from "../assets/filter.png"
 import MultiSelect from "./MultiSelect"
@@ -354,6 +355,8 @@ function Exercises({
   exerciseIsAdded,
   setExerciseIsAdded,
 }) {
+  const navigate = useNavigate()
+  const [routeSearchParams] = useSearchParams()
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -372,7 +375,10 @@ function Exercises({
   const [exercisesErrorMessage, setExercisesErrorMessage] = useState("")
   const [visibleExerciseCount, setVisibleExerciseCount] = useState(PAGE_SIZE)
   const [activeCardId, setActiveCardId] = useState(null)
-  const [isAdded, setIsAdded] = useState(false);
+  const isProgramAddMode =
+    routeSearchParams.get("source") === "new-program" && routeSearchParams.get("newProgram") === "true"
+  const requestedPlanWeek = Number(routeSearchParams.get("planWeek") || 1)
+  const targetPlanWeek = Number.isFinite(requestedPlanWeek) && requestedPlanWeek > 0 ? requestedPlanWeek : 1
 
   // Refs for modal focus management
   const addModalRef = useRef(null)
@@ -636,26 +642,35 @@ function Exercises({
     }
   }
 
-  const toggleIsAdded = (exerciseId, event) => {
-    if (!isAdded) {
-      setIsAdded(true);
-      setExerciseIsAdded((prev) => {
-        const updated = [...prev, exerciseId];
-        console.log("Adding exerciseId. New state:", updated);
-        return updated;
-      });
-    } else {
-      setExerciseIsAdded((prev) => {
-        if (prev.includes(exerciseId)) {
-          const updated = prev.filter((id) => id !== exerciseId);
-          console.log("Removing exerciseId. New state:", updated);
-          return updated;
-        }
-        return prev;
-      });
-      setIsAdded(false);
+  const toggleIsAdded = (exerciseId) => {
+    if (!isProgramAddMode) {
+      return
     }
-  };
+
+    if (!exerciseId) {
+      return
+    }
+
+    setExerciseIsAdded((previousIds) => {
+      const safeIds = Array.isArray(previousIds) ? previousIds : []
+      if (safeIds.includes(exerciseId)) {
+        return safeIds.filter((id) => id !== exerciseId)
+      }
+      return [...safeIds, exerciseId]
+    })  
+  }
+
+  const handleApplySelectedToProgram = () => {
+    if (!Array.isArray(exerciseIsAdded) || exerciseIsAdded.length === 0) {
+      return
+    }
+
+    navigate(`/programs?newProgram=true&planWeek=${targetPlanWeek}&applyAddedExercises=true`)
+  }
+
+  const handleReturnToProgramBuilder = () => {
+    navigate(`/programs?newProgram=true&planWeek=${targetPlanWeek}`)
+  }
 
 
   const handleOpenAddModal = () => {
@@ -891,6 +906,25 @@ function Exercises({
             <div className="exercise-counts" aria-live="polite" aria-atomic="true">
               <span>{filteredAndSortedLibrary ? filteredAndSortedLibrary.length : exerciseLibrary.length} total</span>
             </div>
+            {isProgramAddMode ? (
+              <div className="exercise-search-actions">
+                <button
+                  type="button"
+                  className="exercise-secondary-btn"
+                  onClick={handleReturnToProgramBuilder}
+                >
+                  Back To Program
+                </button>
+                <button
+                  type="button"
+                  className="exercise-secondary-btn"
+                  onClick={handleApplySelectedToProgram}
+                  disabled={!Array.isArray(exerciseIsAdded) || exerciseIsAdded.length === 0}
+                >
+                  Add Selected ({Array.isArray(exerciseIsAdded) ? exerciseIsAdded.length : 0})
+                </button>
+              </div>
+            ) : null}
 
           </div>
         </header>
@@ -922,6 +956,9 @@ function Exercises({
 
               const exerciseImageUrl = String(getExerciseImageUrl(exercise))
               const currentExerciseId = exercise.id ?? null
+              const isExerciseAdded = Array.isArray(exerciseIsAdded)
+                ? exerciseIsAdded.includes(currentExerciseId)
+                : false
               return (
                 <article
 
@@ -942,7 +979,9 @@ function Exercises({
                   {exerciseImageUrl ? (
 
                     <div className="exercise-card-image-wrap" aria-hidden="true">
-                      <AddToProgram isAdded={isAdded} setIsAdded={setIsAdded} currentExerciseId={currentExerciseId} onToggle={() => toggleIsAdded(currentExerciseId)} />
+                      {isProgramAddMode ? (
+                        <AddToProgram isAdded={isExerciseAdded} currentExerciseId={currentExerciseId} onToggle={() => toggleIsAdded(currentExerciseId)} />
+                      ) : null}
                       <img
                         src={exerciseImageUrl}
                         alt=""
