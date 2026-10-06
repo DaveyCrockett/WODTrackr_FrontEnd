@@ -2,7 +2,7 @@ import "../CSS/programs.css"
 import "../CSS/multiselect.css"
 import axios from "axios"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useProgramForm } from "./contexts/ProgramFormContext"
 import MultiSelect from "./MultiSelect"
 import { buildRequestConfig } from "../utils/exerciseUtils"
@@ -60,6 +60,122 @@ const normalizeDurationWeeks = (value) => {
 const buildProgramItemsApiUrl = (programId) => `${API_URL}${programId}/item/`
 const buildProgramItemDetailApiUrl = (programId, itemId) => `${API_URL}${programId}/item/${itemId}/`
 
+const toPositiveIntegerOrNull = (value) => {
+  const candidate = Number(value)
+  if (!Number.isFinite(candidate) || candidate <= 0) return null
+  return Math.floor(candidate)
+}
+
+const normalizePlanExerciseEntry = (entry) => {
+  const exerciseId = Number(entry?.exercise_id ?? entry?.exerciseId ?? entry?.exercise?.id ?? entry?.exercise)
+  if (!Number.isFinite(exerciseId)) return null
+
+  const setNumber = toPositiveIntegerOrNull(entry?.set_number ?? entry?.setNumber ?? entry?.sets)
+  const reps = toPositiveIntegerOrNull(entry?.reps)
+  const timeSeconds = toPositiveIntegerOrNull(
+    entry?.time_seconds ?? entry?.timeSeconds ?? entry?.time ?? entry?.duration_seconds ?? entry?.durationSeconds,
+  )
+
+  return {
+    exercise_id: exerciseId,
+    ...(setNumber ? { set_number: setNumber } : {}),
+    ...(reps ? { reps } : {}),
+    ...(timeSeconds ? { time_seconds: timeSeconds } : {}),
+  }
+}
+
+const mergePlanExerciseEntries = (entries) => {
+  const entriesByExerciseId = new Map()
+  for (const rawEntry of Array.isArray(entries) ? entries : []) {
+    const normalizedEntry = normalizePlanExerciseEntry(rawEntry)
+    if (!normalizedEntry) continue
+    const currentEntry = entriesByExerciseId.get(normalizedEntry.exercise_id)
+    entriesByExerciseId.set(normalizedEntry.exercise_id, {
+      exercise_id: normalizedEntry.exercise_id,
+      set_number: normalizedEntry.set_number ?? currentEntry?.set_number,
+      reps: normalizedEntry.reps ?? currentEntry?.reps,
+      time_seconds: normalizedEntry.time_seconds ?? currentEntry?.time_seconds,
+    })
+  }
+
+  return [...entriesByExerciseId.values()].map((entry) => ({
+    exercise_id: entry.exercise_id,
+    ...(entry.set_number ? { set_number: entry.set_number } : {}),
+    ...(entry.reps ? { reps: entry.reps } : {}),
+    ...(entry.time_seconds ? { time_seconds: entry.time_seconds } : {}),
+  }))
+}
+
+const buildDefaultWodTitle = (index) => `WOD ${index + 1}`
+
+const buildWodKey = (weekNumber, index) => `week-${weekNumber}-wod-${index + 1}`
+
+const normalizeWodEntry = (wodEntry, weekNumber, index = 0) => {
+  const titleCandidate = String(wodEntry?.title ?? wodEntry?.name ?? "").trim()
+  const isRest = Boolean(wodEntry?.is_rest ?? wodEntry?.isRest)
+  const exerciseEntries = mergePlanExerciseEntries(
+    Array.isArray(wodEntry?.exercise_entries)
+      ? wodEntry.exercise_entries
+      : Array.isArray(wodEntry?.exercises)
+        ? wodEntry.exercises
+        : [],
+  )
+
+  return {
+    key: String(wodEntry?.key ?? wodEntry?.id ?? buildWodKey(weekNumber, index)),
+    title: titleCandidate || buildDefaultWodTitle(index),
+    is_rest: isRest,
+    exercise_entries: isRest ? [] : exerciseEntries,
+  }
+}
+
+const buildWodsFromWeekEntry = (weekEntry) => {
+  const weekNumber = Number(weekEntry?.week_number)
+  const normalizedWeek = Number.isFinite(weekNumber) && weekNumber > 0 ? weekNumber : 1
+  if (Array.isArray(weekEntry?.wods) && weekEntry.wods.length > 0) {
+    return weekEntry.wods.map((wodEntry, index) => normalizeWodEntry(wodEntry, normalizedWeek, index))
+  }
+
+  const fallbackEntries = mergePlanExerciseEntries([
+    ...(Array.isArray(weekEntry?.exercise_entries) ? weekEntry.exercise_entries : []),
+    ...(Array.isArray(weekEntry?.exercise_ids) ? weekEntry.exercise_ids.map((exercise_id) => ({ exercise_id })) : []),
+  ])
+
+  if (fallbackEntries.length === 0) return []
+
+  return [normalizeWodEntry({ title: "WOD 1", exercise_entries: fallbackEntries }, normalizedWeek, 0)]
+}
+
+const deriveWeekFieldsFromWods = (weekNumber, wods) => {
+  const normalizedWods = (Array.isArray(wods) ? wods : []).map((wodEntry, index) =>
+    normalizeWodEntry(wodEntry, weekNumber, index),
+  )
+  const exerciseEntries = normalizedWods.flatMap((wodEntry) => buildExerciseEntriesFromWeekEntry(wodEntry))
+  const mergedEntries = mergePlanExerciseEntries(exerciseEntries)
+  return {
+    wods: normalizedWods,
+    exercise_entries: mergedEntries,
+    exercise_ids: mergedEntries.map((entry) => entry.exercise_id),
+  }
+}
+
+const buildExerciseEntriesFromWeekEntry = (weekEntry) => {
+  if (Array.isArray(weekEntry?.wods) && weekEntry.wods.length > 0) {
+    return mergePlanExerciseEntries(
+      weekEntry.wods.flatMap((wodEntry) =>
+        Array.isArray(wodEntry?.exercise_entries) ? wodEntry.exercise_entries : [],
+      ),
+    )
+  }
+
+  const explicitEntries = Array.isArray(weekEntry?.exercise_entries) ? weekEntry.exercise_entries : []
+  const fallbackIdEntries = (Array.isArray(weekEntry?.exercise_ids) ? weekEntry.exercise_ids : [])
+    .map((exerciseId) => normalizePlanExerciseEntry({ exercise_id: exerciseId }))
+    .filter(Boolean)
+
+  return mergePlanExerciseEntries([...explicitEntries, ...fallbackIdEntries])
+}
+
 const normalizeProgramItemsPayload = (data) => {
   if (Array.isArray(data?.data)) return data.data
   if (Array.isArray(data?.results)) return data.results
@@ -76,14 +192,25 @@ const buildProgramItemsFromWorkoutPlan = (workoutPlan) => {
     const weekNumber = Number(weekEntry?.week_number)
     if (!Number.isFinite(weekNumber) || weekNumber < 1) continue
 
-    for (const exerciseId of Array.isArray(weekEntry?.exercise_ids) ? weekEntry.exercise_ids : []) {
-      const normalizedExerciseId = Number(exerciseId)
-      if (!Number.isFinite(normalizedExerciseId)) continue
+    const wods = buildWodsFromWeekEntry(weekEntry)
+    const orderedExerciseEntries =
+      wods.length > 0
+        ? wods.flatMap((wodEntry) =>
+          Array.isArray(wodEntry?.exercise_entries) ? wodEntry.exercise_entries : [],
+        )
+        : buildExerciseEntriesFromWeekEntry(weekEntry)
+
+    for (const exerciseEntry of orderedExerciseEntries) {
+      const normalizedEntry = normalizePlanExerciseEntry(exerciseEntry)
+      if (!normalizedEntry) continue
       items.push({
-        exercise: normalizedExerciseId,
+        exercise: normalizedEntry.exercise_id,
         position,
         week: weekNumber,
         day: 1,
+        ...(normalizedEntry.set_number ? { set_number: normalizedEntry.set_number } : {}),
+        ...(normalizedEntry.reps ? { reps: normalizedEntry.reps } : {}),
+        ...(normalizedEntry.time_seconds ? { time_seconds: normalizedEntry.time_seconds } : {}),
       })
       position += 1
     }
@@ -100,6 +227,11 @@ const normalizeProgramItemRecord = (item, fallbackPosition = 1) => {
   const dayCandidate = Number(item?.day)
   const positionCandidate = Number(item?.position)
   const idCandidate = Number(item?.id)
+  const setNumber = toPositiveIntegerOrNull(item?.set_number ?? item?.setNumber ?? item?.sets)
+  const reps = toPositiveIntegerOrNull(item?.reps)
+  const timeSeconds = toPositiveIntegerOrNull(
+    item?.time_seconds ?? item?.timeSeconds ?? item?.time ?? item?.duration_seconds ?? item?.durationSeconds,
+  )
 
   return {
     id: Number.isFinite(idCandidate) ? idCandidate : null,
@@ -107,6 +239,9 @@ const normalizeProgramItemRecord = (item, fallbackPosition = 1) => {
     week,
     day: Number.isFinite(dayCandidate) && dayCandidate > 0 ? dayCandidate : 1,
     position: Number.isFinite(positionCandidate) && positionCandidate > 0 ? positionCandidate : fallbackPosition,
+    ...(setNumber ? { set_number: setNumber } : {}),
+    ...(reps ? { reps } : {}),
+    ...(timeSeconds ? { time_seconds: timeSeconds } : {}),
   }
 }
 
@@ -120,7 +255,10 @@ const areProgramItemsEquivalent = (left, right) =>
   Number(left?.exercise) === Number(right?.exercise) &&
   Number(left?.week) === Number(right?.week) &&
   Number(left?.day ?? 1) === Number(right?.day ?? 1) &&
-  Number(left?.position) === Number(right?.position)
+  Number(left?.position) === Number(right?.position) &&
+  Number(left?.set_number ?? 0) === Number(right?.set_number ?? 0) &&
+  Number(left?.reps ?? 0) === Number(right?.reps ?? 0) &&
+  Number(left?.time_seconds ?? 0) === Number(right?.time_seconds ?? 0)
 
 
 
@@ -201,21 +339,26 @@ const syncProgramItems = async (programId, itemsPayload, replaceExisting = false
 
 const buildWorkoutPlanFromProgramItems = (items, durationValue) => {
   const grouped = (Array.isArray(items) ? items : []).reduce((accumulator, item) => {
-    const exerciseId = Number(item?.exercise_id ?? item?.exercise?.id ?? item?.exercise)
-    if (!Number.isFinite(exerciseId)) return accumulator
+    const normalizedExerciseEntry = normalizePlanExerciseEntry(item)
+    if (!normalizedExerciseEntry) return accumulator
 
     const weekNumber = Number(item?.week)
     const targetWeek = Number.isFinite(weekNumber) && weekNumber > 0 ? weekNumber : 1
-    if (!accumulator[targetWeek]) accumulator[targetWeek] = new Set()
-    accumulator[targetWeek].add(exerciseId)
+    if (!accumulator[targetWeek]) accumulator[targetWeek] = []
+    accumulator[targetWeek].push(normalizedExerciseEntry)
     return accumulator
   }, {})
 
   const basePlan = Object.entries(grouped)
-    .map(([weekNumber, exerciseIds]) => ({
-      week_number: Number(weekNumber),
-      exercise_ids: [...exerciseIds],
-    }))
+    .map(([weekNumber, exerciseEntries]) => {
+      const mergedEntries = mergePlanExerciseEntries(exerciseEntries)
+      return {
+        week_number: Number(weekNumber),
+        ...deriveWeekFieldsFromWods(Number(weekNumber), [
+          { key: buildWodKey(Number(weekNumber), 0), title: "WOD 1", is_rest: false, exercise_entries: mergedEntries },
+        ]),
+      }
+    })
     .sort((a, b) => a.week_number - b.week_number)
 
   return buildWorkoutPlanForDuration(durationValue, basePlan)
@@ -228,19 +371,18 @@ const buildWorkoutPlanForDuration = (durationValue, previousPlan = []) => {
   const planByWeek = new Map(
     (Array.isArray(previousPlan) ? previousPlan : []).map((entry) => [
       Number(entry?.week_number),
-      Array.isArray(entry?.exercise_ids)
-        ? entry.exercise_ids
-          .map((exerciseId) => Number(exerciseId))
-          .filter((exerciseId) => Number.isFinite(exerciseId))
-        : [],
+      buildWodsFromWeekEntry(entry),
     ]),
   )
 
   return Array.from({ length: weeks }, (_, index) => {
     const weekNumber = index + 1
+    const existingWods = planByWeek.get(weekNumber) ?? []
+    const normalizedWods = existingWods.length > 0 ? existingWods : [{ title: "WOD 1", exercise_entries: [] }]
+    const weekFields = deriveWeekFieldsFromWods(weekNumber, normalizedWods)
     return {
       week_number: weekNumber,
-      exercise_ids: [...new Set(planByWeek.get(weekNumber) ?? [])],
+      ...weekFields,
     }
   })
 }
@@ -249,13 +391,18 @@ const getWorkoutPlanValidationMessage = (durationValue, workoutPlan) => {
   const normalizedWorkoutPlan = buildWorkoutPlanForDuration(durationValue, workoutPlan)
   if (normalizedWorkoutPlan.length === 0) return ""
 
-  const weeksWithExercises = normalizedWorkoutPlan.filter((weekEntry) => weekEntry.exercise_ids.length > 0)
-  if (weeksWithExercises.length === 0) {
-    return "Add at least 1 workout to your program."
+  const hasConfiguredWod = (weekEntry) =>
+    buildWodsFromWeekEntry(weekEntry).some(
+      (wodEntry) => Boolean(wodEntry.is_rest) || (Array.isArray(wodEntry.exercise_entries) && wodEntry.exercise_entries.length > 0),
+    )
+
+  const weeksWithWods = normalizedWorkoutPlan.filter((weekEntry) => hasConfiguredWod(weekEntry))
+  if (weeksWithWods.length === 0) {
+    return "Add at least 1 WOD to your program."
   }
 
-  if (weeksWithExercises.length !== normalizedWorkoutPlan.length) {
-    return "Each week in the workout plan must include at least 1 workout."
+  if (weeksWithWods.length !== normalizedWorkoutPlan.length) {
+    return "Each week in the workout plan must include at least 1 WOD."
   }
 
   return ""
@@ -266,9 +413,16 @@ const areWorkoutPlansEqual = (leftPlan, rightPlan) => {
     (Array.isArray(plan) ? plan : [])
       .map((weekEntry) => ({
         week_number: Number(weekEntry?.week_number),
-        exercise_ids: [...new Set((Array.isArray(weekEntry?.exercise_ids) ? weekEntry.exercise_ids : [])
-          .map((exerciseId) => Number(exerciseId))
-          .filter((exerciseId) => Number.isFinite(exerciseId)))].sort((a, b) => a - b),
+        wods: buildWodsFromWeekEntry(weekEntry).map((wodEntry) => ({
+          title: String(wodEntry.title || "").trim(),
+          is_rest: Boolean(wodEntry.is_rest),
+          exercise_entries: mergePlanExerciseEntries(wodEntry.exercise_entries).map((entry) => ({
+            exercise_id: entry.exercise_id,
+            set_number: entry.set_number ?? null,
+            reps: entry.reps ?? null,
+            time_seconds: entry.time_seconds ?? null,
+          })),
+        })),
       }))
       .filter((weekEntry) => Number.isFinite(weekEntry.week_number) && weekEntry.week_number > 0)
       .sort((a, b) => a.week_number - b.week_number)
@@ -281,13 +435,134 @@ const areWorkoutPlansEqual = (leftPlan, rightPlan) => {
     const rightWeekEntry = right[index]
     if (!rightWeekEntry) return false
     if (weekEntry.week_number !== rightWeekEntry.week_number) return false
-    if (weekEntry.exercise_ids.length !== rightWeekEntry.exercise_ids.length) return false
-    return weekEntry.exercise_ids.every((exerciseId, exerciseIndex) => exerciseId === rightWeekEntry.exercise_ids[exerciseIndex])
+    if (weekEntry.wods.length !== rightWeekEntry.wods.length) return false
+    return weekEntry.wods.every((wodEntry, wodIndex) => {
+      const rightWod = rightWeekEntry.wods[wodIndex]
+      if (!rightWod) return false
+      if (wodEntry.title !== rightWod.title || wodEntry.is_rest !== rightWod.is_rest) return false
+      if (wodEntry.exercise_entries.length !== rightWod.exercise_entries.length) return false
+      return wodEntry.exercise_entries.every((entry, exerciseIndex) => {
+        const rightEntry = rightWod.exercise_entries[exerciseIndex]
+        if (!rightEntry) return false
+        return (
+          Number(entry.exercise_id) === Number(rightEntry.exercise_id) &&
+          Number(entry.set_number ?? 0) === Number(rightEntry.set_number ?? 0) &&
+          Number(entry.reps ?? 0) === Number(rightEntry.reps ?? 0) &&
+          Number(entry.time_seconds ?? 0) === Number(rightEntry.time_seconds ?? 0)
+        )
+      })
+    })
   })
 }
 
-const addExerciseIdsToWeekPlan = (durationValue, currentPlan, weekNumber, exerciseIdsToAdd) => {
+const addWodToWeekPlan = (durationValue, currentPlan, weekNumber, wodPayload) => {
   const normalizedWeek = Number(weekNumber)
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  const nextWod = normalizeWodEntry(
+    {
+      key: wodPayload?.key ?? `wod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      title: wodPayload?.title,
+      is_rest: wodPayload?.is_rest,
+      exercise_entries: [],
+    },
+    normalizedWeek,
+    999,
+  )
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const nextWods = [...buildWodsFromWeekEntry(weekEntry), nextWod]
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
+    }
+  })
+}
+
+const updateWodInWeekPlan = (durationValue, currentPlan, weekNumber, wodKey, updates) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedWodKey = String(wodKey || "")
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const nextWods = buildWodsFromWeekEntry(weekEntry).map((wodEntry) => {
+      if (String(wodEntry.key) !== normalizedWodKey) return wodEntry
+      const title = updates?.title === undefined ? wodEntry.title : String(updates.title || "").trim()
+      const isRest = updates?.is_rest === undefined ? wodEntry.is_rest : Boolean(updates.is_rest)
+      return normalizeWodEntry(
+        {
+          ...wodEntry,
+          title: title || wodEntry.title,
+          is_rest: isRest,
+          exercise_entries: isRest ? [] : wodEntry.exercise_entries,
+        },
+        weekEntry.week_number,
+        0,
+      )
+    })
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
+    }
+  })
+}
+
+const reorderWodInWeekPlan = (durationValue, currentPlan, weekNumber, wodKey, direction) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedWodKey = String(wodKey || "")
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  const offset = direction === "up" ? -1 : direction === "down" ? 1 : 0
+  if (offset === 0) return buildWorkoutPlanForDuration(durationValue, currentPlan)
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const nextWods = [...buildWodsFromWeekEntry(weekEntry)]
+    const currentIndex = nextWods.findIndex((wodEntry) => String(wodEntry.key) === normalizedWodKey)
+    if (currentIndex < 0) return weekEntry
+    const targetIndex = currentIndex + offset
+    if (targetIndex < 0 || targetIndex >= nextWods.length) return weekEntry
+    const [movedWod] = nextWods.splice(currentIndex, 1)
+    nextWods.splice(targetIndex, 0, movedWod)
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
+    }
+  })
+}
+
+const removeWodFromWeekPlan = (durationValue, currentPlan, weekNumber, wodKey) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedWodKey = String(wodKey || "")
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const nextWods = buildWodsFromWeekEntry(weekEntry).filter((wodEntry) => String(wodEntry.key) !== normalizedWodKey)
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
+    }
+  })
+}
+
+const addExerciseIdsToWeekPlan = (durationValue, currentPlan, weekNumber, exerciseIdsToAdd, targetWodKey = "") => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedTargetWodKey = String(targetWodKey || "")
   const normalizedIds = (Array.isArray(exerciseIdsToAdd) ? exerciseIdsToAdd : [])
     .map((exerciseId) => Number(exerciseId))
     .filter((exerciseId) => Number.isFinite(exerciseId))
@@ -298,26 +573,123 @@ const addExerciseIdsToWeekPlan = (durationValue, currentPlan, weekNumber, exerci
 
   return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
     if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const existingWods = buildWodsFromWeekEntry(weekEntry)
+    const fallbackWod = normalizeWodEntry({ key: buildWodKey(weekEntry.week_number, 0), title: "WOD 1" }, weekEntry.week_number, 0)
+    const targetWod = existingWods.find((wodEntry) => String(wodEntry.key) === normalizedTargetWodKey) ?? existingWods[0] ?? fallbackWod
+    const nextWods = (existingWods.length > 0 ? existingWods : [fallbackWod]).map((wodEntry) => {
+      if (String(wodEntry.key) !== String(targetWod.key)) return wodEntry
+      const nextEntries = mergePlanExerciseEntries([
+        ...wodEntry.exercise_entries,
+        ...normalizedIds.map((exercise_id) => ({ exercise_id })),
+      ])
+      return normalizeWodEntry({ ...wodEntry, exercise_entries: nextEntries, is_rest: false }, weekEntry.week_number, 0)
+    })
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
     return {
       ...weekEntry,
-      exercise_ids: [...new Set([...weekEntry.exercise_ids, ...normalizedIds])],
+      ...weekFields,
     }
   })
 }
 
-const removeExerciseIdFromWeekPlan = (durationValue, currentPlan, weekNumber, exerciseIdToRemove) => {
+const removeExerciseIdFromWeekPlan = (durationValue, currentPlan, weekNumber, wodKey, exerciseIdToRemove) => {
   const normalizedWeek = Number(weekNumber)
+  const normalizedWodKey = String(wodKey || "")
   const normalizedExerciseId = Number(exerciseIdToRemove)
 
-  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !Number.isFinite(normalizedExerciseId)) {
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey || !Number.isFinite(normalizedExerciseId)) {
     return buildWorkoutPlanForDuration(durationValue, currentPlan)
   }
 
   return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
     if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const nextWods = buildWodsFromWeekEntry(weekEntry).map((wodEntry) => {
+      if (String(wodEntry.key) !== normalizedWodKey) return wodEntry
+      return normalizeWodEntry(
+        {
+          ...wodEntry,
+          exercise_entries: wodEntry.exercise_entries.filter(
+            (entry) => Number(entry.exercise_id) !== normalizedExerciseId,
+          ),
+        },
+        weekEntry.week_number,
+        0,
+      )
+    })
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
     return {
       ...weekEntry,
-      exercise_ids: weekEntry.exercise_ids.filter((candidateId) => candidateId !== normalizedExerciseId),
+      ...weekFields,
+    }
+  })
+}
+
+const reorderExerciseInWeekPlan = (durationValue, currentPlan, weekNumber, wodKey, exerciseId, direction) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedWodKey = String(wodKey || "")
+  const normalizedExerciseId = Number(exerciseId)
+  const offset = direction === "up" ? -1 : direction === "down" ? 1 : 0
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey || !Number.isFinite(normalizedExerciseId) || offset === 0) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const nextWods = buildWodsFromWeekEntry(weekEntry).map((wodEntry) => {
+      if (String(wodEntry.key) !== normalizedWodKey) return wodEntry
+      const entries = [...wodEntry.exercise_entries]
+      const currentIndex = entries.findIndex((entry) => Number(entry.exercise_id) === normalizedExerciseId)
+      if (currentIndex < 0) return wodEntry
+      const targetIndex = currentIndex + offset
+      if (targetIndex < 0 || targetIndex >= entries.length) return wodEntry
+      const [movedEntry] = entries.splice(currentIndex, 1)
+      entries.splice(targetIndex, 0, movedEntry)
+      return normalizeWodEntry({ ...wodEntry, exercise_entries: entries }, weekEntry.week_number, 0)
+    })
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
+    }
+  })
+}
+
+const updateExerciseEntryInWeekPlan = (durationValue, currentPlan, weekNumber, wodKey, exerciseId, fieldName, fieldValue) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedWodKey = String(wodKey || "")
+  const normalizedExerciseId = Number(exerciseId)
+  if (!["set_number", "reps", "time_seconds"].includes(fieldName)) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey || !Number.isFinite(normalizedExerciseId)) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  const normalizedFieldValue = toPositiveIntegerOrNull(fieldValue)
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+
+    const nextWods = buildWodsFromWeekEntry(weekEntry).map((wodEntry) => {
+      if (String(wodEntry.key) !== normalizedWodKey) return wodEntry
+      const nextEntries = wodEntry.exercise_entries.map((entry) => {
+        if (Number(entry.exercise_id) !== normalizedExerciseId) return entry
+        const nextEntry = { ...entry }
+        if (normalizedFieldValue) {
+          nextEntry[fieldName] = normalizedFieldValue
+        } else {
+          delete nextEntry[fieldName]
+        }
+        return nextEntry
+      })
+      return normalizeWodEntry({ ...wodEntry, exercise_entries: nextEntries }, weekEntry.week_number, 0)
+    })
+
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
     }
   })
 }
@@ -358,11 +730,31 @@ const buildWorkoutPlanFromProgram = (program) => {
         const weekNumber = Number(entry?.week_number ?? entry?.week ?? entry?.weekNumber)
         if (!Number.isFinite(weekNumber) || weekNumber < 1) return null
 
+        const mappedWods = Array.isArray(entry?.wods)
+          ? entry.wods.map((wodEntry, index) => normalizeWodEntry(wodEntry, weekNumber, index))
+          : []
+        const explicitEntries = mergePlanExerciseEntries(
+          mappedWods.length > 0
+            ? mappedWods.flatMap((wodEntry) => wodEntry.exercise_entries)
+            : [
+              ...(Array.isArray(entry?.exercise_entries) ? entry.exercise_entries : []),
+              ...(Array.isArray(entry?.exercises) ? entry.exercises : []),
+            ],
+        )
         const explicitIds = extractExerciseIds(entry?.exercise_ids)
         const fromExercises = extractExerciseIds(entry?.exercises)
+        const fallbackEntries = [...new Set([...explicitIds, ...fromExercises])]
+          .map((exerciseId) => normalizePlanExerciseEntry({ exercise_id: exerciseId }))
+          .filter(Boolean)
+        const exerciseEntries = mergePlanExerciseEntries([...explicitEntries, ...fallbackEntries])
+        const nextWods =
+          mappedWods.length > 0
+            ? mappedWods
+            : [normalizeWodEntry({ title: "WOD 1", exercise_entries: exerciseEntries }, weekNumber, 0)]
+        const weekFields = deriveWeekFieldsFromWods(weekNumber, nextWods)
         return {
           week_number: weekNumber,
-          exercise_ids: [...new Set([...explicitIds, ...fromExercises])],
+          ...weekFields,
         }
       })
       .filter(Boolean)
@@ -370,41 +762,51 @@ const buildWorkoutPlanFromProgram = (program) => {
 
   const mappedFromExercises = Array.isArray(program.exercises)
     ? program.exercises.reduce((accumulator, entry) => {
-      const exerciseId = toExerciseId(entry?.id ?? entry?.exercise_id ?? entry)
+      const normalizedEntry = normalizePlanExerciseEntry(entry)
+      const exerciseId = normalizedEntry?.exercise_id ?? toExerciseId(entry?.id ?? entry?.exercise_id ?? entry)
       if (!exerciseId) return accumulator
       const weekNumber = Number(entry?.week_number ?? entry?.week ?? entry?.weekNumber)
       const targetWeek = Number.isFinite(weekNumber) && weekNumber > 0 ? weekNumber : 1
       if (!accumulator[targetWeek]) {
-        accumulator[targetWeek] = new Set()
+        accumulator[targetWeek] = []
       }
-      accumulator[targetWeek].add(exerciseId)
+      accumulator[targetWeek].push(normalizedEntry ?? { exercise_id: exerciseId })
       return accumulator
     }, {})
     : {}
 
-  const mappedFromExercisesList = Object.entries(mappedFromExercises).map(([week, ids]) => ({
-    week_number: Number(week),
-    exercise_ids: [...ids],
-  }))
+  const mappedFromExercisesList = Object.entries(mappedFromExercises).map(([week, entries]) => {
+    const weekNumber = Number(week)
+    const exerciseEntries = mergePlanExerciseEntries(entries)
+    const weekFields = deriveWeekFieldsFromWods(weekNumber, [
+      { key: buildWodKey(weekNumber, 0), title: "WOD 1", exercise_entries: exerciseEntries, is_rest: false },
+    ])
+    return {
+      week_number: weekNumber,
+      ...weekFields,
+    }
+  })
 
   const mergedPlan = [...mappedFromWorkoutPlan, ...mappedFromExercisesList]
   if (mergedPlan.length === 0) return []
 
   const mergedByWeek = mergedPlan.reduce((accumulator, entry) => {
     if (!accumulator[entry.week_number]) {
-      accumulator[entry.week_number] = new Set()
+      accumulator[entry.week_number] = []
     }
-    for (const exerciseId of entry.exercise_ids) {
-      accumulator[entry.week_number].add(exerciseId)
-    }
+    accumulator[entry.week_number].push(...buildWodsFromWeekEntry(entry))
     return accumulator
   }, {})
 
   const normalizedPlan = Object.entries(mergedByWeek)
-    .map(([week, ids]) => ({
-      week_number: Number(week),
-      exercise_ids: [...ids],
-    }))
+    .map(([week, wods]) => {
+      const weekNumber = Number(week)
+      const weekFields = deriveWeekFieldsFromWods(weekNumber, wods)
+      return {
+        week_number: weekNumber,
+        ...weekFields,
+      }
+    })
     .sort((a, b) => a.week_number - b.week_number)
 
   const durationWeeks = normalizeDurationWeeks(program.duration_weeks)
@@ -413,6 +815,21 @@ const buildWorkoutPlanFromProgram = (program) => {
   }
 
   return normalizedPlan
+}
+
+const formatExercisePlanMeta = (exerciseEntry) => {
+  if (!exerciseEntry || typeof exerciseEntry !== "object") return ""
+
+  const setNumber = toPositiveIntegerOrNull(exerciseEntry.set_number)
+  const reps = toPositiveIntegerOrNull(exerciseEntry.reps)
+  const timeSeconds = toPositiveIntegerOrNull(exerciseEntry.time_seconds)
+  const parts = []
+
+  if (setNumber) parts.push(`${setNumber} set${setNumber === 1 ? "" : "s"}`)
+  if (reps) parts.push(`${reps} rep${reps === 1 ? "" : "s"}`)
+  if (timeSeconds) parts.push(`${timeSeconds}s`)
+  if (parts.length === 0) return ""
+  return ` (${parts.join(" • ")})`
 }
 
 const EMPTY_PROGRAM_FORM_VALUES = {
@@ -944,7 +1361,7 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
 }
 
 function Programs({
-  programs,
+  programs = [],
   userSession,
   handleFilterChange = () => { },
   isChoicesLoading = false,
@@ -955,11 +1372,11 @@ function Programs({
   currentPage = 1,
   setCurrentPage = () => { },
   sortOrder = "asc",
-  goalChoices,
-  difficultyChoices,
-  categoryChoices,
-  equipmentChoices,
-  muscleChoices,
+  goalChoices = [],
+  difficultyChoices = [],
+  categoryChoices = [],
+  equipmentChoices = [],
+  muscleChoices = [],
   setIsChoicesLoading = () => { },
   isProgramsLoading,
   programsErrorMessage,
@@ -988,7 +1405,6 @@ function Programs({
 
   const programFormContext = useProgramForm()
   const {
-    programDraft = { name: "", description: "", exercises: [] },
     clearDraft = () => { },
   } = programFormContext ?? {}
   const [successMessage, setSuccessMessage] = useState("")
@@ -998,8 +1414,9 @@ function Programs({
   const [isCreateSubmitting, setIsCreateSubmitting] = useState(false)
   const [workouts, setWorkouts] = useState(() => getStoredWorkouts())
   const [createPlanWeek, setCreatePlanWeek] = useState(1)
-  const [createPlanExercise, setCreatePlanExercise] = useState([])
-  const [createPlanWorkoutId, setCreatePlanWorkoutId] = useState("")
+  const [createPlanWodKey, setCreatePlanWodKey] = useState("")
+  const [createPlanWodTitle, setCreatePlanWodTitle] = useState("")
+  const [createPlanWodIsRest, setCreatePlanWodIsRest] = useState(false)
   const [selectedProgramId, setSelectedProgramId] = useState(null)
   const [programDetailsById, setProgramDetailsById] = useState({})
   const [programItemRecordsById, setProgramItemRecordsById] = useState({})
@@ -1020,7 +1437,7 @@ function Programs({
   const editImageInputRef = useRef(null)
   const [detailWorkoutPlan, setDetailWorkoutPlan] = useState([])
   const [detailPlanWeek, setDetailPlanWeek] = useState(1)
-  const [detailPlanExerciseId, setDetailPlanExerciseId] = useState("")
+  const [detailPlanWodKey, setDetailPlanWodKey] = useState("")
   const [detailPlanWorkoutId, setDetailPlanWorkoutId] = useState("")
   const [durationRange, setDurationRange] = useState({ min: DEFAULT_DURATION_MIN, max: DEFAULT_DURATION_MAX })
   // Schedule-to-calendar state
@@ -1198,6 +1615,8 @@ function Programs({
 
 
   const workoutPlan = Array.isArray(createFormValues.workout_plan) ? createFormValues.workout_plan : []
+  const selectedCreateWeekEntry = workoutPlan.find((entry) => Number(entry.week_number) === Number(createPlanWeek)) ?? null
+  const selectedCreateWeekWods = selectedCreateWeekEntry ? buildWodsFromWeekEntry(selectedCreateWeekEntry) : []
   const exerciseOptions = useMemo(() => {
     return [...exerciseLibrary]
       .filter((exercise) => Number.isFinite(Number(exercise?.id)))
@@ -1216,6 +1635,8 @@ function Programs({
     [workouts],
   )
   const detailsWorkoutPlan = Array.isArray(detailWorkoutPlan) ? detailWorkoutPlan : []
+  const selectedDetailWeekEntry = detailsWorkoutPlan.find((entry) => Number(entry.week_number) === Number(detailPlanWeek)) ?? null
+  const selectedDetailWeekWods = selectedDetailWeekEntry ? buildWodsFromWeekEntry(selectedDetailWeekEntry) : []
   const createEquipmentSelection = Array.isArray(createFormValues.equipment) ? createFormValues.equipment : []
   const editEquipmentSelection = Array.isArray(editFormValues.equipment) ? editFormValues.equipment : []
   const createEquipmentValues = normalizeEquipmentValues(createFormValues.equipment)
@@ -1223,6 +1644,28 @@ function Programs({
   const filterCategoryValues = Array.isArray(resolvedFilters.category) ? resolvedFilters.category : []
   const filterEquipmentValues = Array.isArray(resolvedFilters.equipment) ? resolvedFilters.equipment : []
   const filterDifficultyValues = Array.isArray(resolvedFilters.difficulty) ? resolvedFilters.difficulty : []
+
+  useEffect(() => {
+    if (selectedCreateWeekWods.length === 0) {
+      setCreatePlanWodKey("")
+      return
+    }
+    if (selectedCreateWeekWods.some((wodEntry) => String(wodEntry.key) === String(createPlanWodKey))) {
+      return
+    }
+    setCreatePlanWodKey(String(selectedCreateWeekWods[0].key))
+  }, [selectedCreateWeekWods, createPlanWodKey])
+
+  useEffect(() => {
+    if (selectedDetailWeekWods.length === 0) {
+      setDetailPlanWodKey("")
+      return
+    }
+    if (selectedDetailWeekWods.some((wodEntry) => String(wodEntry.key) === String(detailPlanWodKey))) {
+      return
+    }
+    setDetailPlanWodKey(String(selectedDetailWeekWods[0].key))
+  }, [selectedDetailWeekWods, detailPlanWodKey])
 
   const filteredAndSortedProgramsLibrary = useMemo(() => {
     let result = [...programs]
@@ -1333,8 +1776,9 @@ function Programs({
     setCreateErrorMessage("")
     setExerciseIsAdded([])
     setCreatePlanWeek(1)
-    setCreatePlanExercise([])
-    setCreatePlanWorkoutId("")
+    setCreatePlanWodKey("")
+    setCreatePlanWodTitle("")
+    setCreatePlanWodIsRest(false)
     setEditImageFile(null)
     setEditImagePreview("")
     if (editImageInputRef.current) {
@@ -1350,6 +1794,9 @@ function Programs({
     setEditImageFile(null)
     setEditImagePreview("")
     setExerciseIsAdded([])
+    setCreatePlanWodKey("")
+    setCreatePlanWodTitle("")
+    setCreatePlanWodIsRest(false)
     if (editImageInputRef.current) {
       editImageInputRef.current.value = ""
     }
@@ -1372,6 +1819,9 @@ function Programs({
     if (Number.isFinite(Number(storedDraft?.createPlanWeek))) {
       setCreatePlanWeek(Number(storedDraft.createPlanWeek))
     }
+    if (typeof storedDraft?.createPlanWodKey === "string") {
+      setCreatePlanWodKey(storedDraft.createPlanWodKey)
+    }
 
     setHasHydratedCreateDraft(true)
   }, [isCreateModalOpen, hasHydratedCreateDraft])
@@ -1384,41 +1834,48 @@ function Programs({
     saveCreateProgramDraft({
       createFormValues,
       createPlanWeek,
+      createPlanWodKey,
     })
-  }, [isCreateModalOpen, hasHydratedCreateDraft, createFormValues, createPlanWeek])
+  }, [isCreateModalOpen, hasHydratedCreateDraft, createFormValues, createPlanWeek, createPlanWodKey])
 
   const handleOpenExercisePicker = () => {
     saveCreateProgramDraft({
       createFormValues,
       createPlanWeek,
+      createPlanWodKey,
     })
   }
 
   useEffect(() => {
-    if (!isCreateModalOpen || !searchParams || searchParams.get("applyAddedExercises") !== "true") {
+    if (!isCreateModalOpen) {
       return
     }
 
-    const rawWeek = Number(searchParams.get("planWeek") || createPlanWeek || 1)
-    const weekNumber = Number.isFinite(rawWeek) && rawWeek > 0 ? rawWeek : 1
     const selectedIds = Array.isArray(exerciseIsAdded)
       ? exerciseIsAdded
         .map((exerciseId) => Number(exerciseId))
         .filter((exerciseId) => Number.isFinite(exerciseId))
       : []
-
-    if (selectedIds.length > 0) {
-      setCreateFormValues((prev) => {
-        const nextPlan = addExerciseIdsToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, selectedIds)
-        return { ...prev, workout_plan: nextPlan }
-      })
-      setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
-      setCreatePlanWeek(weekNumber)
+    if (selectedIds.length === 0) {
+      return
     }
 
+    const rawWeek = Number(searchParams?.get("planWeek") || createPlanWeek || 1)
+    const weekNumber = Number.isFinite(rawWeek) && rawWeek > 0 ? rawWeek : 1
+
+    setCreateFormValues((prev) => {
+      const targetWodKey = String(createPlanWodKey || searchParams?.get("planWodKey") || "")
+      const nextPlan = addExerciseIdsToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, selectedIds, targetWodKey)
+      return { ...prev, workout_plan: nextPlan }
+    })
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+    setCreatePlanWeek(weekNumber)
     setExerciseIsAdded([])
-    setSearchParams({ newProgram: "true" })
-  }, [isCreateModalOpen, searchParams, setSearchParams, exerciseIsAdded, setExerciseIsAdded, createPlanWeek])
+
+    if (searchParams?.get("applyAddedExercises") === "true" || searchParams?.get("planWeek") || searchParams?.get("planWodKey")) {
+      setSearchParams({ newProgram: "true" })
+    }
+  }, [isCreateModalOpen, searchParams, setSearchParams, exerciseIsAdded, setExerciseIsAdded, createPlanWeek, createPlanWodKey])
 
   const handleCreateFieldChange = (event) => {
     const { name, type, checked, value } = event.target
@@ -1435,34 +1892,73 @@ function Programs({
     setCreateFieldErrors((prev) => clearFormFieldError(prev, name, name === "duration_weeks"))
   }
 
-  const handleAddWorkoutToPlanWeek = (weekNumber, selectedExerciseIds) => {
-    setCreateFormValues((prev) => {
-      const nextPlan = addExerciseIdsToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, selectedExerciseIds)
-      return { ...prev, workout_plan: nextPlan }
-    })
+  const handleUpdateCreateWeekExerciseMeta = (weekNumber, wodKey, exerciseId, fieldName, value) => {
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: updateExerciseEntryInWeekPlan(
+        prev.duration_weeks,
+        prev.workout_plan,
+        weekNumber,
+        wodKey,
+        exerciseId,
+        fieldName,
+        value,
+      ),
+    }))
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
-    setCreatePlanExercise([])
   }
 
-  const handleAddSavedWorkoutToCreateWeek = () => {
+  const handleAddWodToCreateWeek = () => {
     const weekNumber = Number(createPlanWeek)
-    const selectedWorkout = workoutById.get(String(createPlanWorkoutId))
-    const workoutExerciseIds = Array.isArray(selectedWorkout?.exercise_ids)
-      ? selectedWorkout.exercise_ids.map((exerciseId) => Number(exerciseId)).filter((exerciseId) => Number.isFinite(exerciseId))
-      : []
-    if (!Number.isFinite(weekNumber) || workoutExerciseIds.length === 0) return
-
-    setCreateFormValues((prev) => {
-      const nextPlan = addExerciseIdsToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, workoutExerciseIds)
-      return { ...prev, workout_plan: nextPlan }
-    })
+    if (!Number.isFinite(weekNumber) || weekNumber < 1) return
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: addWodToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, {
+        title: createPlanWodTitle,
+        is_rest: createPlanWodIsRest,
+      }),
+    }))
+    setCreatePlanWodTitle("")
+    setCreatePlanWodIsRest(false)
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
-    setCreatePlanWorkoutId("")
   }
 
-  const handleRemoveExerciseFromWorkoutWeek = (weekNumber, exerciseId) => {
+  const handleUpdateCreateWod = (weekNumber, wodKey, updates) => {
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: updateWodInWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, wodKey, updates),
+    }))
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleReorderCreateWod = (weekNumber, wodKey, direction) => {
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: reorderWodInWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, wodKey, direction),
+    }))
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleRemoveWodFromCreateWeek = (weekNumber, wodKey) => {
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: removeWodFromWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, wodKey),
+    }))
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+    setCreatePlanWodKey((prevWodKey) => (prevWodKey === wodKey ? "" : prevWodKey))
+  }
+
+  const handleReorderCreateExercise = (weekNumber, wodKey, exerciseId, direction) => {
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: reorderExerciseInWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, wodKey, exerciseId, direction),
+    }))
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleRemoveExerciseFromWorkoutWeek = (weekNumber, wodKey, exerciseId) => {
     setCreateFormValues((prev) => {
-      const nextPlan = removeExerciseIdFromWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, exerciseId)
+      const nextPlan = removeExerciseIdFromWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, wodKey, exerciseId)
       return { ...prev, workout_plan: nextPlan }
     })
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
@@ -1558,8 +2054,9 @@ function Programs({
       setCreateFormValues(EMPTY_PROGRAM_FORM_VALUES)
       setCreateFieldErrors({})
       setCreatePlanWeek(1)
-      setCreatePlanExercise([])
-      setCreatePlanWorkoutId("")
+      setCreatePlanWodKey("")
+      setCreatePlanWodTitle("")
+      setCreatePlanWodIsRest(false)
       setHasHydratedCreateDraft(false)
     } catch (error) {
       const fieldErrors = {}
@@ -1600,7 +2097,7 @@ function Programs({
     setIsWorkoutPlanUnlocked(false)
     setDetailWorkoutPlan([])
     setDetailPlanWeek(1)
-    setDetailPlanExerciseId("")
+    setDetailPlanWodKey("")
     setDetailPlanWorkoutId("")
     setEditImageFile(null)
     setEditImagePreview("")
@@ -1643,7 +2140,7 @@ function Programs({
     if (name === "duration_weeks") {
       setDetailWorkoutPlan((prev) => buildWorkoutPlanForDuration(nextValue, prev))
       setDetailPlanWeek(1)
-      setDetailPlanExerciseId("")
+      setDetailPlanWodKey("")
     }
     setEditFieldErrors((prev) => clearFormFieldError(prev, name, name === "duration_weeks"))
   }
@@ -1678,6 +2175,7 @@ function Programs({
       const nextWorkoutPlan = buildWorkoutPlanFromProgram(sourceProgram)
       setDetailWorkoutPlan(nextWorkoutPlan)
       setDetailPlanWeek(nextWorkoutPlan[0]?.week_number || 1)
+      setDetailPlanWodKey("")
       setDetailPlanWorkoutId("")
       setEditImageFile(null)
       setEditImagePreview(getProgramImageUrl(sourceProgram))
@@ -1696,7 +2194,7 @@ function Programs({
     setIsWorkoutPlanUnlocked(purchasedProgramIds.includes(Number(programId)))
     setDetailWorkoutPlan([])
     setDetailPlanWeek(1)
-    setDetailPlanExerciseId("")
+    setDetailPlanWodKey("")
     setDetailPlanWorkoutId("")
     setEditFieldErrors({})
     setEditErrorMessage("")
@@ -2053,20 +2551,27 @@ function Programs({
     }
   }
 
-  const handleAddExerciseToDetailWeek = () => {
-    if (!isDetailsEditMode || !canEditSelectedProgram) return
-
-    const weekNumber = Number(detailPlanWeek)
-    const exerciseId = Number(detailPlanExerciseId)
-    if (!Number.isFinite(weekNumber) || !Number.isFinite(exerciseId)) return
-
-    const totalWeeks = normalizeDurationWeeks(editFormValues.duration_weeks)
-    setDetailWorkoutPlan((prev) => {
-      const durationValue = totalWeeks > 0 ? totalWeeks : prev.length
-      return addExerciseIdsToWeekPlan(durationValue, prev, weekNumber, [exerciseId])
-    })
+  const handleUpdateDetailWeekExerciseMeta = (weekNumber, wodKey, exerciseId, fieldName, value) => {
+    setDetailWorkoutPlan((prev) =>
+      updateExerciseEntryInWeekPlan(editFormValues.duration_weeks, prev, weekNumber, wodKey, exerciseId, fieldName, value),
+    )
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
-    setDetailPlanExerciseId("")
+  }
+
+  const handleReorderDetailWod = (weekNumber, wodKey, direction) => {
+    if (!isDetailsEditMode || !canEditSelectedProgram) return
+    setDetailWorkoutPlan((prev) =>
+      reorderWodInWeekPlan(editFormValues.duration_weeks, prev, weekNumber, wodKey, direction),
+    )
+    setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleReorderDetailExercise = (weekNumber, wodKey, exerciseId, direction) => {
+    if (!isDetailsEditMode || !canEditSelectedProgram) return
+    setDetailWorkoutPlan((prev) =>
+      reorderExerciseInWeekPlan(editFormValues.duration_weeks, prev, weekNumber, wodKey, exerciseId, direction),
+    )
+    setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
   const handleAddSavedWorkoutToDetailWeek = () => {
@@ -2082,16 +2587,18 @@ function Programs({
     const totalWeeks = normalizeDurationWeeks(editFormValues.duration_weeks)
     setDetailWorkoutPlan((prev) => {
       const durationValue = totalWeeks > 0 ? totalWeeks : prev.length
-      return addExerciseIdsToWeekPlan(durationValue, prev, weekNumber, workoutExerciseIds)
+      return addExerciseIdsToWeekPlan(durationValue, prev, weekNumber, workoutExerciseIds, detailPlanWodKey)
     })
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
     setDetailPlanWorkoutId("")
   }
 
-  const handleRemoveExerciseFromDetailWeek = (weekNumber, exerciseId) => {
+  const handleRemoveExerciseFromDetailWeek = (weekNumber, wodKey, exerciseId) => {
     if (!isDetailsEditMode || !canEditSelectedProgram) return
 
-    setDetailWorkoutPlan((prev) => removeExerciseIdFromWeekPlan(editFormValues.duration_weeks, prev, weekNumber, exerciseId))
+    setDetailWorkoutPlan((prev) =>
+      removeExerciseIdFromWeekPlan(editFormValues.duration_weeks, prev, weekNumber, wodKey, exerciseId),
+    )
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
@@ -2226,7 +2733,7 @@ function Programs({
     const nextWorkoutPlan = buildWorkoutPlanFromProgram(sourceProgram)
     setDetailWorkoutPlan(nextWorkoutPlan)
     setDetailPlanWeek(nextWorkoutPlan[0]?.week_number || 1)
-    setDetailPlanExerciseId("")
+    setDetailPlanWodKey("")
     setDetailPlanWorkoutId("")
   }, [selectedProgramId, programDetailsById, selectedProgram, isDetailsEditMode])
 
@@ -2573,7 +3080,7 @@ function Programs({
               <section className="programs-plan-builder" aria-label="Workout plan builder">
                 <h3>Workout Plan By Week</h3>
                 <p className="programs-plan-helper">
-                  Pick a week, choose all exercises for that workout, then add the full workout. The number of weeks matches Duration.
+                  Create WODs per week, mark rest WODs when needed, then browse and add exercises to the selected WOD.
                 </p>
                 {createFieldErrors.workout_plan ? <small className="programs-modal-error">{createFieldErrors.workout_plan}</small> : null}
 
@@ -2598,16 +3105,66 @@ function Programs({
                     </select>
                   </label>
 
-                  <Link
-                    to={`/exercises?source=new-program&newProgram=true&planWeek=${createPlanWeek}`}
+                  <label className="programs-modal-field">
+                    <span>WOD</span>
+                    <select
+                      name="create_plan_wod"
+                      value={createPlanWodKey}
+                      onChange={(event) => setCreatePlanWodKey(event.target.value)}
+                      disabled={selectedCreateWeekWods.length === 0}
+                    >
+                      {selectedCreateWeekWods.length === 0 ? <option value="">No WODs in this week</option> : null}
+                      {selectedCreateWeekWods.map((wodEntry) => (
+                        <option key={wodEntry.key} value={String(wodEntry.key)}>
+                          {wodEntry.title}{wodEntry.is_rest ? " (Rest)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="programs-modal-field">
+                    <span>New WOD Title</span>
+                    <input
+                      type="text"
+                      value={createPlanWodTitle}
+                      onChange={(event) => setCreatePlanWodTitle(event.target.value)}
+                      placeholder="Example: Monday Strength"
+                      disabled={workoutPlan.length === 0}
+                    />
+                  </label>
+
+                  <label className="programs-modal-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={createPlanWodIsRest}
+                      onChange={(event) => setCreatePlanWodIsRest(event.target.checked)}
+                      disabled={workoutPlan.length === 0}
+                    />
+                    Rest WOD
+                  </label>
+
+                  <button
+                    type="button"
                     className="programs-modal-secondary-btn programs-plan-add-btn"
-                    onClick={handleOpenExercisePicker}
-                    isOpen={isCreateModalOpen}
-                    onClose={closeCreateModal}
-                    draft={programDraft}
+                    onClick={handleAddWodToCreateWeek}
+                    disabled={workoutPlan.length === 0}
                   >
-                    {console.log("Rendering Add Exercise button")}
-                    Add Exercise
+                    Add WOD to Week
+                  </button>
+
+                  <Link
+                    to={`/exercises?source=new-program&newProgram=true&planWeek=${createPlanWeek}&planWodKey=${createPlanWodKey}`}
+                    className="programs-modal-secondary-btn programs-plan-add-btn"
+                    onClick={(event) => {
+                      if (!createPlanWodKey) {
+                        event.preventDefault()
+                        return
+                      }
+                      handleOpenExercisePicker()
+                    }}
+                    aria-disabled={!createPlanWodKey}
+                  >
+                    Browse Exercise Library
                   </Link>
                 </div>
 
@@ -2618,25 +3175,162 @@ function Programs({
                     workoutPlan.map((weekEntry) => (
                       <article key={weekEntry.week_number} className="programs-plan-week-card">
                         <h4>Week {weekEntry.week_number}</h4>
-                        {weekEntry.exercise_ids.length === 0 ? (
-                          <p className="programs-plan-helper">No workout added yet.</p>
+                        {buildWodsFromWeekEntry(weekEntry).length === 0 ? (
+                          <p className="programs-plan-helper">No WODs added yet.</p>
                         ) : (
-                          <ul className="programs-plan-exercise-list">
-                            {weekEntry.exercise_ids.map((exerciseId) => (
-                              console.log("Rendering exercise list item", { weekNumber: weekEntry.week_number, exerciseId }),
-                              <li key={`${weekEntry.week_number}-${exerciseId}`}>
-                                <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
+                          buildWodsFromWeekEntry(weekEntry).map((wodEntry, wodIndex) => (
+                            <article key={`${weekEntry.week_number}-${wodEntry.key}`} className="programs-plan-week-card">
+                              <div className="programs-plan-controls">
+                                <label className="programs-modal-field">
+                                  <span>WOD Title</span>
+                                  <input
+                                    type="text"
+                                    value={wodEntry.title}
+                                    onChange={(event) =>
+                                      handleUpdateCreateWod(weekEntry.week_number, wodEntry.key, { title: event.target.value })}
+                                  />
+                                </label>
+                                <label className="programs-modal-checkbox">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(wodEntry.is_rest)}
+                                    onChange={(event) =>
+                                      handleUpdateCreateWod(weekEntry.week_number, wodEntry.key, { is_rest: event.target.checked })}
+                                  />
+                                  Rest
+                                </label>
+                                <button
+                                  type="button"
+                                  className="programs-modal-secondary-btn"
+                                  onClick={() => handleReorderCreateWod(weekEntry.week_number, wodEntry.key, "up")}
+                                  disabled={wodIndex === 0}
+                                >
+                                  WOD ↑
+                                </button>
+                                <button
+                                  type="button"
+                                  className="programs-modal-secondary-btn"
+                                  onClick={() => handleReorderCreateWod(weekEntry.week_number, wodEntry.key, "down")}
+                                  disabled={wodIndex === buildWodsFromWeekEntry(weekEntry).length - 1}
+                                >
+                                  WOD ↓
+                                </button>
                                 <button
                                   type="button"
                                   className="programs-plan-remove-btn"
-                                  onClick={() => handleRemoveExerciseFromWorkoutWeek(weekEntry.week_number, exerciseId)}
-                                  aria-label={`Remove ${exerciseNameById[exerciseId] || `exercise ${exerciseId}`} from week ${weekEntry.week_number}`}
+                                  onClick={() => handleRemoveWodFromCreateWeek(weekEntry.week_number, wodEntry.key)}
                                 >
-                                  Remove
+                                  Remove WOD
                                 </button>
-                              </li>
-                            ))}
-                          </ul>
+                              </div>
+
+                              {wodEntry.is_rest ? (
+                                <p className="programs-plan-helper">Rest day WOD</p>
+                              ) : wodEntry.exercise_entries.length === 0 ? (
+                                <p className="programs-plan-helper">No exercises in this WOD yet.</p>
+                              ) : (
+                                <ul className="programs-plan-exercise-list">
+                                  {wodEntry.exercise_entries.map((exerciseEntry, exerciseIndex) => (
+                                    <li key={`${weekEntry.week_number}-${wodEntry.key}-${exerciseEntry.exercise_id}`}>
+                                      <span>{exerciseNameById[exerciseEntry.exercise_id] || `Exercise #${exerciseEntry.exercise_id}`}</span>
+                                      <label className="programs-modal-field">
+                                        <span>Sets</span>
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          value={exerciseEntry.set_number ?? ""}
+                                          onChange={(event) =>
+                                            handleUpdateCreateWeekExerciseMeta(
+                                              weekEntry.week_number,
+                                              wodEntry.key,
+                                              exerciseEntry.exercise_id,
+                                              "set_number",
+                                              event.target.value,
+                                            )}
+                                          placeholder="Optional"
+                                        />
+                                      </label>
+                                      <label className="programs-modal-field">
+                                        <span>Reps</span>
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          value={exerciseEntry.reps ?? ""}
+                                          onChange={(event) =>
+                                            handleUpdateCreateWeekExerciseMeta(
+                                              weekEntry.week_number,
+                                              wodEntry.key,
+                                              exerciseEntry.exercise_id,
+                                              "reps",
+                                              event.target.value,
+                                            )}
+                                          placeholder="Optional"
+                                        />
+                                      </label>
+                                      <label className="programs-modal-field">
+                                        <span>Time (sec)</span>
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          value={exerciseEntry.time_seconds ?? ""}
+                                          onChange={(event) =>
+                                            handleUpdateCreateWeekExerciseMeta(
+                                              weekEntry.week_number,
+                                              wodEntry.key,
+                                              exerciseEntry.exercise_id,
+                                              "time_seconds",
+                                              event.target.value,
+                                            )}
+                                          placeholder="Optional"
+                                        />
+                                      </label>
+                                      <button
+                                        type="button"
+                                        className="programs-modal-secondary-btn"
+                                        onClick={() =>
+                                          handleReorderCreateExercise(
+                                            weekEntry.week_number,
+                                            wodEntry.key,
+                                            exerciseEntry.exercise_id,
+                                            "up",
+                                          )}
+                                        disabled={exerciseIndex === 0}
+                                      >
+                                        ↑
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="programs-modal-secondary-btn"
+                                        onClick={() =>
+                                          handleReorderCreateExercise(
+                                            weekEntry.week_number,
+                                            wodEntry.key,
+                                            exerciseEntry.exercise_id,
+                                            "down",
+                                          )}
+                                        disabled={exerciseIndex === wodEntry.exercise_entries.length - 1}
+                                      >
+                                        ↓
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="programs-plan-remove-btn"
+                                        onClick={() =>
+                                          handleRemoveExerciseFromWorkoutWeek(
+                                            weekEntry.week_number,
+                                            wodEntry.key,
+                                            exerciseEntry.exercise_id,
+                                          )}
+                                        aria-label={`Remove ${exerciseNameById[exerciseEntry.exercise_id] || `exercise ${exerciseEntry.exercise_id}`} from week ${weekEntry.week_number}`}
+                                      >
+                                        Remove
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </article>
+                          ))
                         )}
                       </article>
                     ))
@@ -2874,7 +3568,7 @@ function Programs({
                   <h3>Workout Plan By Week</h3>
                   <p className="programs-plan-helper">
                     {canEditSelectedProgram && isDetailsEditMode
-                      ? "Edit workouts by selecting a week and exercise."
+                      ? "Edit workouts by week and update set/rep/time details for each exercise."
                       : "Purchased workout plan view."}
                   </p>
                   {editFieldErrors.workout_plan ? <small className="programs-modal-error">{editFieldErrors.workout_plan}</small> : null}
@@ -2915,11 +3609,28 @@ function Programs({
                         </select>
                       </label>
 
+                      <label className="programs-modal-field">
+                        <span>WOD</span>
+                        <select
+                          name="details_plan_wod"
+                          value={detailPlanWodKey}
+                          onChange={(event) => setDetailPlanWodKey(event.target.value)}
+                          disabled={selectedDetailWeekWods.length === 0}
+                        >
+                          {selectedDetailWeekWods.length === 0 ? <option value="">No WODs in this week</option> : null}
+                          {selectedDetailWeekWods.map((wodEntry) => (
+                            <option key={wodEntry.key} value={String(wodEntry.key)}>
+                              {wodEntry.title}{wodEntry.is_rest ? " (Rest)" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
                       <button
                         type="button"
                         className="programs-modal-secondary-btn programs-plan-add-btn"
                         onClick={handleAddSavedWorkoutToDetailWeek}
-                        disabled={!detailPlanWorkoutId || detailsWorkoutPlan.length === 0}
+                        disabled={!detailPlanWorkoutId || !detailPlanWodKey || detailsWorkoutPlan.length === 0}
                       >
                         Add Saved Workout
                       </button>
@@ -2933,26 +3644,142 @@ function Programs({
                       detailsWorkoutPlan.map((weekEntry) => (
                         <article key={`details-week-${weekEntry.week_number}`} className="programs-plan-week-card">
                           <h4>Week {weekEntry.week_number}</h4>
-                          {weekEntry.exercise_ids.length === 0 ? (
-                            <p className="programs-plan-helper">No exercises added yet.</p>
+                          {buildWodsFromWeekEntry(weekEntry).length === 0 ? (
+                            <p className="programs-plan-helper">No WODs added yet.</p>
                           ) : (
-                            <ul className="programs-plan-exercise-list">
-                              {weekEntry.exercise_ids.map((exerciseId) => (
-                                <li key={`details-${weekEntry.week_number}-${exerciseId}`}>
-                                  <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
-                                  {canEditSelectedProgram && isDetailsEditMode ? (
+                            buildWodsFromWeekEntry(weekEntry).map((wodEntry, wodIndex) => (
+                              <article key={`details-${weekEntry.week_number}-${wodEntry.key}`} className="programs-plan-week-card">
+                                <h5>{wodEntry.title}{wodEntry.is_rest ? " (Rest)" : ""}</h5>
+                                {canEditSelectedProgram && isDetailsEditMode ? (
+                                  <div className="programs-plan-controls">
                                     <button
                                       type="button"
-                                      className="programs-plan-remove-btn"
-                                      onClick={() => handleRemoveExerciseFromDetailWeek(weekEntry.week_number, exerciseId)}
-                                      aria-label={`Remove ${exerciseNameById[exerciseId] || `exercise ${exerciseId}`} from week ${weekEntry.week_number}`}
+                                      className="programs-modal-secondary-btn"
+                                      onClick={() => handleReorderDetailWod(weekEntry.week_number, wodEntry.key, "up")}
+                                      disabled={wodIndex === 0}
                                     >
-                                      Remove
+                                      WOD ↑
                                     </button>
-                                  ) : null}
-                                </li>
-                              ))}
-                            </ul>
+                                    <button
+                                      type="button"
+                                      className="programs-modal-secondary-btn"
+                                      onClick={() => handleReorderDetailWod(weekEntry.week_number, wodEntry.key, "down")}
+                                      disabled={wodIndex === buildWodsFromWeekEntry(weekEntry).length - 1}
+                                    >
+                                      WOD ↓
+                                    </button>
+                                  </div>
+                                ) : null}
+                                {wodEntry.is_rest ? (
+                                  <p className="programs-plan-helper">Rest day WOD</p>
+                                ) : wodEntry.exercise_entries.length === 0 ? (
+                                  <p className="programs-plan-helper">No exercises added yet.</p>
+                                ) : (
+                                  <ul className="programs-plan-exercise-list">
+                                    {wodEntry.exercise_entries.map((exerciseEntry, exerciseIndex) => (
+                                      <li key={`details-${weekEntry.week_number}-${wodEntry.key}-${exerciseEntry.exercise_id}`}>
+                                        <span>{exerciseNameById[exerciseEntry.exercise_id] || `Exercise #${exerciseEntry.exercise_id}`}</span>
+                                        {canEditSelectedProgram && isDetailsEditMode ? (
+                                          <>
+                                            <label className="programs-modal-field">
+                                              <span>Sets</span>
+                                              <input
+                                                type="number"
+                                                min="1"
+                                                value={exerciseEntry.set_number ?? ""}
+                                                onChange={(event) =>
+                                                  handleUpdateDetailWeekExerciseMeta(
+                                                    weekEntry.week_number,
+                                                    wodEntry.key,
+                                                    exerciseEntry.exercise_id,
+                                                    "set_number",
+                                                    event.target.value,
+                                                  )}
+                                                placeholder="Optional"
+                                              />
+                                            </label>
+                                            <label className="programs-modal-field">
+                                              <span>Reps</span>
+                                              <input
+                                                type="number"
+                                                min="1"
+                                                value={exerciseEntry.reps ?? ""}
+                                                onChange={(event) =>
+                                                  handleUpdateDetailWeekExerciseMeta(
+                                                    weekEntry.week_number,
+                                                    wodEntry.key,
+                                                    exerciseEntry.exercise_id,
+                                                    "reps",
+                                                    event.target.value,
+                                                  )}
+                                                placeholder="Optional"
+                                              />
+                                            </label>
+                                            <label className="programs-modal-field">
+                                              <span>Time (sec)</span>
+                                              <input
+                                                type="number"
+                                                min="1"
+                                                value={exerciseEntry.time_seconds ?? ""}
+                                                onChange={(event) =>
+                                                  handleUpdateDetailWeekExerciseMeta(
+                                                    weekEntry.week_number,
+                                                    wodEntry.key,
+                                                    exerciseEntry.exercise_id,
+                                                    "time_seconds",
+                                                    event.target.value,
+                                                  )}
+                                                placeholder="Optional"
+                                              />
+                                            </label>
+                                            <button
+                                              type="button"
+                                              className="programs-modal-secondary-btn"
+                                              onClick={() =>
+                                                handleReorderDetailExercise(
+                                                  weekEntry.week_number,
+                                                  wodEntry.key,
+                                                  exerciseEntry.exercise_id,
+                                                  "up",
+                                                )}
+                                              disabled={exerciseIndex === 0}
+                                            >
+                                              ↑
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="programs-modal-secondary-btn"
+                                              onClick={() =>
+                                                handleReorderDetailExercise(
+                                                  weekEntry.week_number,
+                                                  wodEntry.key,
+                                                  exerciseEntry.exercise_id,
+                                                  "down",
+                                                )}
+                                              disabled={exerciseIndex === wodEntry.exercise_entries.length - 1}
+                                            >
+                                              ↓
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <span>{formatExercisePlanMeta(exerciseEntry)}</span>
+                                        )}
+                                        {canEditSelectedProgram && isDetailsEditMode ? (
+                                          <button
+                                            type="button"
+                                            className="programs-plan-remove-btn"
+                                            onClick={() => handleRemoveExerciseFromDetailWeek(weekEntry.week_number, wodEntry.key, exerciseEntry.exercise_id)}
+                                            aria-label={`Remove ${exerciseNameById[exerciseEntry.exercise_id] || `exercise ${exerciseEntry.exercise_id}`} from week ${weekEntry.week_number}`}
+                                          >
+                                            Remove
+                                          </button>
+                                        ) : null}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </article>
+                            ))
                           )}
                         </article>
                       ))
