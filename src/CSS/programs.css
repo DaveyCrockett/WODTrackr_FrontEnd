@@ -768,6 +768,37 @@
   align-items: end;
 }
 
+.programs-plan-reorder-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  width: 2rem;
+  height: 2rem;
+  padding: 0.25rem;
+  background: #ffffff;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.programs-plan-reorder-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.programs-plan-reorder-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.programs-plan-reorder-img {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+  object-fit: contain;
+}
+
 .programs-plan-add-btn {
   white-space: nowrap;
   position: relative;
@@ -817,6 +848,16 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 0.4rem 0.5rem;
+}
+
+.programs-plan-exercise-item {
+  cursor: grab;
+  opacity: 0.92;
+}
+
+.programs-plan-exercise-item:active {
+  cursor: grabbing;
+  opacity: 0.72;
 }
 
 .programs-plan-remove-btn {

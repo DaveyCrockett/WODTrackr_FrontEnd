@@ -6,6 +6,9 @@ import { Link } from 'react-router-dom'
 import { useProgramForm } from "./contexts/ProgramFormContext"
 import MultiSelect from "./MultiSelect"
 import { buildRequestConfig } from "../utils/exerciseUtils"
+import ExerciseIcon from "../assets/ExerciseIcon.png"
+import addWODIcon from "../assets/add-WOD-icon.png"
+import reorderIcon from "../assets/reorder-icon.png"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
 const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
@@ -644,6 +647,38 @@ const reorderExerciseInWeekPlan = (durationValue, currentPlan, weekNumber, wodKe
       if (targetIndex < 0 || targetIndex >= entries.length) return wodEntry
       const [movedEntry] = entries.splice(currentIndex, 1)
       entries.splice(targetIndex, 0, movedEntry)
+      return normalizeWodEntry({ ...wodEntry, exercise_entries: entries }, weekEntry.week_number, 0)
+    })
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
+    }
+  })
+}
+
+const reorderExerciseInWeekPlanToTarget = (durationValue, currentPlan, weekNumber, wodKey, sourceExerciseId, targetExerciseId) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedWodKey = String(wodKey || "")
+  const normalizedSourceExerciseId = Number(sourceExerciseId)
+  const normalizedTargetExerciseId = Number(targetExerciseId)
+
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey || !Number.isFinite(normalizedSourceExerciseId) || !Number.isFinite(normalizedTargetExerciseId)) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const nextWods = buildWodsFromWeekEntry(weekEntry).map((wodEntry) => {
+      if (String(wodEntry.key) !== normalizedWodKey) return wodEntry
+      const entries = [...wodEntry.exercise_entries]
+      const sourceIndex = entries.findIndex((entry) => Number(entry.exercise_id) === normalizedSourceExerciseId)
+      const targetIndex = entries.findIndex((entry) => Number(entry.exercise_id) === normalizedTargetExerciseId)
+      if (sourceIndex < 0 || targetIndex < 0) return wodEntry
+      if (sourceIndex === targetIndex) return wodEntry
+      const [movedEntry] = entries.splice(sourceIndex, 1)
+      const nextTargetIndex = sourceIndex < targetIndex ? targetIndex : targetIndex
+      entries.splice(Math.max(0, Math.min(nextTargetIndex, entries.length)), 0, movedEntry)
       return normalizeWodEntry({ ...wodEntry, exercise_entries: entries }, weekEntry.week_number, 0)
     })
     const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
@@ -1447,8 +1482,8 @@ function Programs({
   const [scheduleSuccess, setScheduleSuccess] = useState("")
   const [visibleProgramsCount, setVisibleProgramsCount] = useState(PAGE_SIZE)
   const [hasHydratedCreateDraft, setHasHydratedCreateDraft] = useState(false)
-  
-  
+
+
   const openCreateModal = () => setSearchParams({ newProgram: "true" })
 
   const closeCreateModal = () => {
@@ -1952,6 +1987,15 @@ function Programs({
     setCreateFormValues((prev) => ({
       ...prev,
       workout_plan: reorderExerciseInWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, wodKey, exerciseId, direction),
+    }))
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleDragReorderCreateExercise = (weekNumber, wodKey, sourceExerciseId, targetExerciseId) => {
+    if (!sourceExerciseId || !targetExerciseId || Number(sourceExerciseId) === Number(targetExerciseId)) return
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: reorderExerciseInWeekPlanToTarget(prev.duration_weeks, prev.workout_plan, weekNumber, wodKey, sourceExerciseId, targetExerciseId),
     }))
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
@@ -2574,6 +2618,16 @@ function Programs({
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
+  const handleDragReorderDetailExercise = (weekNumber, wodKey, sourceExerciseId, targetExerciseId) => {
+    if (!isDetailsEditMode || !canEditSelectedProgram) return
+    if (!sourceExerciseId || !targetExerciseId || Number(sourceExerciseId) === Number(targetExerciseId)) return
+    setDetailWorkoutPlan((prev) => ({
+      ...prev,
+      workout_plan: reorderExerciseInWeekPlanToTarget(editFormValues.duration_weeks, prev, weekNumber, wodKey, sourceExerciseId, targetExerciseId),
+    }))
+    setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
   const handleAddSavedWorkoutToDetailWeek = () => {
     if (!isDetailsEditMode || !canEditSelectedProgram) return
 
@@ -3121,37 +3175,6 @@ function Programs({
                       ))}
                     </select>
                   </label>
-
-                  <label className="programs-modal-field">
-                    <span>New WOD Title</span>
-                    <input
-                      type="text"
-                      value={createPlanWodTitle}
-                      onChange={(event) => setCreatePlanWodTitle(event.target.value)}
-                      placeholder="Example: Monday Strength"
-                      disabled={workoutPlan.length === 0}
-                    />
-                  </label>
-
-                  <label className="programs-modal-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={createPlanWodIsRest}
-                      onChange={(event) => setCreatePlanWodIsRest(event.target.checked)}
-                      disabled={workoutPlan.length === 0}
-                    />
-                    Rest WOD
-                  </label>
-
-                  <button
-                    type="button"
-                    className="programs-modal-secondary-btn programs-plan-add-btn"
-                    onClick={handleAddWodToCreateWeek}
-                    disabled={workoutPlan.length === 0}
-                  >
-                    Add WOD to Week
-                  </button>
-
                   <Link
                     to={`/exercises?source=new-program&newProgram=true&planWeek=${createPlanWeek}&planWodKey=${createPlanWodKey}`}
                     className="programs-modal-secondary-btn programs-plan-add-btn"
@@ -3164,8 +3187,18 @@ function Programs({
                     }}
                     aria-disabled={!createPlanWodKey}
                   >
-                    Browse Exercise Library
+                    <img src={ExerciseIcon} alt="Exercise Icon" />
                   </Link>
+
+                  <label className="programs-modal-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={createPlanWodIsRest}
+                      onChange={(event) => setCreatePlanWodIsRest(event.target.checked)}
+                      disabled={workoutPlan.length === 0}
+                    />
+                    Rest WOD
+                  </label>
                 </div>
 
                 <div className="programs-plan-weeks">
@@ -3175,6 +3208,7 @@ function Programs({
                     workoutPlan.map((weekEntry) => (
                       <article key={weekEntry.week_number} className="programs-plan-week-card">
                         <h4>Week {weekEntry.week_number}</h4>
+                        <img src={addWODIcon} alt="Add WOD Icon" onClick={handleAddWodToCreateWeek} />
                         {buildWodsFromWeekEntry(weekEntry).length === 0 ? (
                           <p className="programs-plan-helper">No WODs added yet.</p>
                         ) : (
@@ -3201,22 +3235,6 @@ function Programs({
                                 </label>
                                 <button
                                   type="button"
-                                  className="programs-modal-secondary-btn"
-                                  onClick={() => handleReorderCreateWod(weekEntry.week_number, wodEntry.key, "up")}
-                                  disabled={wodIndex === 0}
-                                >
-                                  WOD ↑
-                                </button>
-                                <button
-                                  type="button"
-                                  className="programs-modal-secondary-btn"
-                                  onClick={() => handleReorderCreateWod(weekEntry.week_number, wodEntry.key, "down")}
-                                  disabled={wodIndex === buildWodsFromWeekEntry(weekEntry).length - 1}
-                                >
-                                  WOD ↓
-                                </button>
-                                <button
-                                  type="button"
                                   className="programs-plan-remove-btn"
                                   onClick={() => handleRemoveWodFromCreateWeek(weekEntry.week_number, wodEntry.key)}
                                 >
@@ -3231,7 +3249,49 @@ function Programs({
                               ) : (
                                 <ul className="programs-plan-exercise-list">
                                   {wodEntry.exercise_entries.map((exerciseEntry, exerciseIndex) => (
-                                    <li key={`${weekEntry.week_number}-${wodEntry.key}-${exerciseEntry.exercise_id}`}>
+                                    <li
+                                      key={`${weekEntry.week_number}-${wodEntry.key}-${exerciseEntry.exercise_id}`}
+                                      className="programs-plan-exercise-item"
+                                      draggable
+                                      onDragStart={(event) => {
+                                        event.dataTransfer.effectAllowed = "move"
+                                        event.dataTransfer.setData(
+                                          "text/plain",
+                                          JSON.stringify({
+                                            weekNumber: weekEntry.week_number,
+                                            wodKey: wodEntry.key,
+                                            exerciseId: exerciseEntry.exercise_id,
+                                          }),
+                                        )
+                                      }}
+                                      onDragOver={(event) => {
+                                        event.preventDefault()
+                                        event.dataTransfer.dropEffect = "move"
+                                      }}
+                                      onDrop={(event) => {
+                                        event.preventDefault()
+                                        try {
+                                          const dragPayload = JSON.parse(event.dataTransfer.getData("text/plain") || "null")
+                                          if (!dragPayload) return
+                                          if (
+                                            Number(dragPayload.weekNumber) === Number(weekEntry.week_number) &&
+                                            String(dragPayload.wodKey) === String(wodEntry.key) &&
+                                            Number(dragPayload.exerciseId) === Number(exerciseEntry.exercise_id)
+                                          ) {
+                                            return
+                                          }
+                                          handleDragReorderCreateExercise(
+                                            weekEntry.week_number,
+                                            wodEntry.key,
+                                            dragPayload.exerciseId,
+                                            exerciseEntry.exercise_id,
+                                          )
+                                        } catch {
+                                          return
+                                        }
+                                      }}
+                                    >
+                                      <img src={reorderIcon} className="programs-plan-reorder-img" alt="" aria-hidden="true" />
                                       <span>{exerciseNameById[exerciseEntry.exercise_id] || `Exercise #${exerciseEntry.exercise_id}`}</span>
                                       <label className="programs-modal-field">
                                         <span>Sets</span>
@@ -3284,34 +3344,6 @@ function Programs({
                                           placeholder="Optional"
                                         />
                                       </label>
-                                      <button
-                                        type="button"
-                                        className="programs-modal-secondary-btn"
-                                        onClick={() =>
-                                          handleReorderCreateExercise(
-                                            weekEntry.week_number,
-                                            wodEntry.key,
-                                            exerciseEntry.exercise_id,
-                                            "up",
-                                          )}
-                                        disabled={exerciseIndex === 0}
-                                      >
-                                        ↑
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="programs-modal-secondary-btn"
-                                        onClick={() =>
-                                          handleReorderCreateExercise(
-                                            weekEntry.week_number,
-                                            wodEntry.key,
-                                            exerciseEntry.exercise_id,
-                                            "down",
-                                          )}
-                                        disabled={exerciseIndex === wodEntry.exercise_entries.length - 1}
-                                      >
-                                        ↓
-                                      </button>
                                       <button
                                         type="button"
                                         className="programs-plan-remove-btn"
@@ -3654,19 +3686,21 @@ function Programs({
                                   <div className="programs-plan-controls">
                                     <button
                                       type="button"
-                                      className="programs-modal-secondary-btn"
+                                      className="programs-plan-reorder-btn"
                                       onClick={() => handleReorderDetailWod(weekEntry.week_number, wodEntry.key, "up")}
                                       disabled={wodIndex === 0}
+                                      aria-label={`Move WOD ${wodEntry.title || "entry"} up`}
                                     >
-                                      WOD ↑
+                                      <img src={reorderIcon} alt="" aria-hidden="true" />
                                     </button>
                                     <button
                                       type="button"
-                                      className="programs-modal-secondary-btn"
+                                      className="programs-plan-reorder-btn"
                                       onClick={() => handleReorderDetailWod(weekEntry.week_number, wodEntry.key, "down")}
                                       disabled={wodIndex === buildWodsFromWeekEntry(weekEntry).length - 1}
+                                      aria-label={`Move WOD ${wodEntry.title || "entry"} down`}
                                     >
-                                      WOD ↓
+                                      <img src={reorderIcon} alt="" aria-hidden="true" />
                                     </button>
                                   </div>
                                 ) : null}
@@ -3677,7 +3711,67 @@ function Programs({
                                 ) : (
                                   <ul className="programs-plan-exercise-list">
                                     {wodEntry.exercise_entries.map((exerciseEntry, exerciseIndex) => (
-                                      <li key={`details-${weekEntry.week_number}-${wodEntry.key}-${exerciseEntry.exercise_id}`}>
+                                      <li
+                                        key={`details-${weekEntry.week_number}-${wodEntry.key}-${exerciseEntry.exercise_id}`}
+                                        className="programs-plan-exercise-item"
+                                        draggable={canEditSelectedProgram && isDetailsEditMode}
+                                        onDragStart={(event) => {
+                                          if (!canEditSelectedProgram || !isDetailsEditMode) return
+                                          event.dataTransfer.effectAllowed = "move"
+                                          event.dataTransfer.setData(
+                                            "text/plain",
+                                            JSON.stringify({
+                                              weekNumber: weekEntry.week_number,
+                                              wodKey: wodEntry.key,
+                                              exerciseId: exerciseEntry.exercise_id,
+                                            }),
+                                          )
+                                        }}
+                                        onDragOver={(event) => {
+                                          if (!canEditSelectedProgram || !isDetailsEditMode) return
+                                          event.preventDefault()
+                                          event.dataTransfer.dropEffect = "move"
+                                        }}
+                                        onDrop={(event) => {
+                                          if (!canEditSelectedProgram || !isDetailsEditMode) return
+                                          event.preventDefault()
+                                          try {
+                                            const dragPayload = JSON.parse(event.dataTransfer.getData("text/plain") || "null")
+                                            if (!dragPayload) return
+                                            if (
+                                              Number(dragPayload.weekNumber) === Number(weekEntry.week_number) &&
+                                              String(dragPayload.wodKey) === String(wodEntry.key) &&
+                                              Number(dragPayload.exerciseId) === Number(exerciseEntry.exercise_id)
+                                            ) {
+                                              return
+                                            }
+                                            handleDragReorderDetailExercise(
+                                              weekEntry.week_number,
+                                              wodEntry.key,
+                                              dragPayload.exerciseId,
+                                              exerciseEntry.exercise_id,
+                                            )
+                                          } catch {
+                                            return
+                                          }
+                                        }}
+                                      >
+                                        {canEditSelectedProgram && isDetailsEditMode ? (
+                                          <button
+                                            type="button"
+                                            className="programs-plan-reorder-btn"
+                                            onClick={() =>
+                                              handleReorderDetailExercise(
+                                                weekEntry.week_number,
+                                                wodEntry.key,
+                                                exerciseEntry.exercise_id,
+                                                exerciseIndex === 0 ? "up" : "down",
+                                              )}
+                                            aria-label={`Reorder ${exerciseNameById[exerciseEntry.exercise_id] || `exercise ${exerciseEntry.exercise_id}`}`}
+                                          >
+                                            <img src={reorderIcon} alt="" aria-hidden="true" />
+                                          </button>
+                                        ) : null}
                                         <span>{exerciseNameById[exerciseEntry.exercise_id] || `Exercise #${exerciseEntry.exercise_id}`}</span>
                                         {canEditSelectedProgram && isDetailsEditMode ? (
                                           <>
@@ -3732,34 +3826,6 @@ function Programs({
                                                 placeholder="Optional"
                                               />
                                             </label>
-                                            <button
-                                              type="button"
-                                              className="programs-modal-secondary-btn"
-                                              onClick={() =>
-                                                handleReorderDetailExercise(
-                                                  weekEntry.week_number,
-                                                  wodEntry.key,
-                                                  exerciseEntry.exercise_id,
-                                                  "up",
-                                                )}
-                                              disabled={exerciseIndex === 0}
-                                            >
-                                              ↑
-                                            </button>
-                                            <button
-                                              type="button"
-                                              className="programs-modal-secondary-btn"
-                                              onClick={() =>
-                                                handleReorderDetailExercise(
-                                                  weekEntry.week_number,
-                                                  wodEntry.key,
-                                                  exerciseEntry.exercise_id,
-                                                  "down",
-                                                )}
-                                              disabled={exerciseIndex === wodEntry.exercise_entries.length - 1}
-                                            >
-                                              ↓
-                                            </button>
                                           </>
                                         ) : (
                                           <span>{formatExercisePlanMeta(exerciseEntry)}</span>
