@@ -1784,6 +1784,7 @@ function Programs({
     selectedProgramOwnerId !== undefined &&
     String(currentUserId) === String(selectedProgramOwnerId)
   const canEditSelectedProgram = Boolean(selectedProgramId && currentUsername && (ownerMissing || ownerMatchesByUsername || ownerMatchesById))
+  const canScheduleSelectedProgram = Boolean(selectedProgramId && (canEditSelectedProgram || isWorkoutPlanUnlocked))
   const createProgramImageUrl = editImagePreview || getDefaultProgramImageUrl()
   const selectedProgramImageUrl = getProgramImageUrl(selectedProgramDetails) || getProgramImageUrl(selectedProgram) || editImagePreview || getDefaultProgramImageUrl()
 
@@ -1899,7 +1900,17 @@ function Programs({
     const weekNumber = Number.isFinite(rawWeek) && rawWeek > 0 ? rawWeek : 1
 
     setCreateFormValues((prev) => {
-      const targetWodKey = String(createPlanWodKey || searchParams?.get("planWodKey") || "")
+      const searchParamWodKey = String(searchParams?.get("planWodKey") || "")
+      const selectedCreateWodKey = String(createPlanWodKey || "")
+      const normalizedPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan)
+      const targetWeekEntry = normalizedPlan.find((entry) => Number(entry.week_number) === weekNumber) ?? null
+      const existingWodKeys = new Set(
+        targetWeekEntry ? buildWodsFromWeekEntry(targetWeekEntry).map((wodEntry) => String(wodEntry.key)) : [],
+      )
+      const targetWodKey =
+        [searchParamWodKey, selectedCreateWodKey].find((wodKey) => wodKey && existingWodKeys.has(wodKey)) ??
+        selectedCreateWodKey ??
+        searchParamWodKey
       const nextPlan = addExerciseIdsToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, selectedIds, targetWodKey)
       return { ...prev, workout_plan: nextPlan }
     })
@@ -1943,16 +1954,20 @@ function Programs({
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
-  const handleAddWodToCreateWeek = () => {
-    const weekNumber = Number(createPlanWeek)
+  const handleAddWodToCreateWeek = (targetWeekNumber = createPlanWeek) => {
+    const weekNumber = Number(targetWeekNumber)
     if (!Number.isFinite(weekNumber) || weekNumber < 1) return
+    const newWodKey = `wod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     setCreateFormValues((prev) => ({
       ...prev,
       workout_plan: addWodToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, {
+        key: newWodKey,
         title: createPlanWodTitle,
         is_rest: createPlanWodIsRest,
       }),
     }))
+    setCreatePlanWeek(weekNumber)
+    setCreatePlanWodKey(newWodKey)
     setCreatePlanWodTitle("")
     setCreatePlanWodIsRest(false)
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
@@ -2671,6 +2686,10 @@ function Programs({
   }
 
   const handleOpenScheduleModal = () => {
+    if (!canScheduleSelectedProgram) {
+      setScheduleError("Only program owners or users who purchased this program can schedule it.")
+      return
+    }
     const todayStr = new Date().toISOString().slice(0, 10)
     setScheduleStartDate(todayStr)
     setScheduleError("")
@@ -2685,6 +2704,10 @@ function Programs({
   }
 
   const handleScheduleProgram = () => {
+    if (!canScheduleSelectedProgram) {
+      setScheduleError("Only program owners or users who purchased this program can schedule it.")
+      return
+    }
     if (!scheduleStartDate) {
       setScheduleError("Please select a start date.")
       return
@@ -2924,11 +2947,11 @@ function Programs({
                     role="option"
                     aria-selected={(program.id ?? null) === selectedProgramId}
                     tabIndex={(program.id ?? null) === selectedProgramId ? 0 : -1}
-                    onClick={() => handleOpenProgramDetailsModal(program.id ?? null)}
+                    onClick={() => handleViewDetails(program.id ?? null)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault()
-                        handleOpenProgramDetailsModal(program.id ?? null)
+                        handleViewDetails(program.id ?? null)
                       }
                     }}
                   >
@@ -3208,7 +3231,7 @@ function Programs({
                     workoutPlan.map((weekEntry) => (
                       <article key={weekEntry.week_number} className="programs-plan-week-card">
                         <h4>Week {weekEntry.week_number}</h4>
-                        <img src={addWODIcon} alt="Add WOD Icon" onClick={handleAddWodToCreateWeek} />
+                        <img src={addWODIcon} alt="Add WOD Icon" onClick={() => handleAddWodToCreateWeek(weekEntry.week_number)} />
                         {buildWodsFromWeekEntry(weekEntry).length === 0 ? (
                           <p className="programs-plan-helper">No WODs added yet.</p>
                         ) : (
@@ -3875,7 +3898,7 @@ function Programs({
                     Edit Program
                   </button>
                 ) : null}
-                {!isDetailsEditMode ? (
+                {!isDetailsEditMode && canScheduleSelectedProgram ? (
                   <button
                     type="button"
                     className="programs-schedule-btn"

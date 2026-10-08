@@ -3,6 +3,7 @@ import React from "react"
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import axios from "axios"
+import { MemoryRouter } from "react-router-dom"
 import Programs from "../components/Programs"
 
 vi.mock("axios")
@@ -313,6 +314,77 @@ describe("Programs Component", () => {
 
     expect(axios.post).not.toHaveBeenCalled()
     expect(await screen.findByText("Each week in the workout plan must include at least 1 workout.")).toBeInTheDocument()
+  })
+
+  it("adds returned exercises to the selected week and selected WOD after adding a new WOD", async () => {
+    const setSearchParams = vi.fn()
+    const setExerciseIsAdded = vi.fn()
+    let searchParams = new URLSearchParams("newProgram=true")
+
+    axios.get.mockImplementation((url) => {
+      if (url === API_URL) return Promise.resolve({ data: { data: [mockProgram] } })
+      if (url === `${API_URL}choices/`) return Promise.resolve(mockChoicesResponse)
+      if (url === "/api/wodtrackr/exercises/") {
+        return Promise.resolve({ data: { data: [{ id: 101, name: "Back Squat" }] } })
+      }
+      return Promise.resolve({ data: {} })
+    })
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <Programs
+          isCreateModalOpen
+          searchParams={searchParams}
+          setSearchParams={setSearchParams}
+          exerciseIsAdded={[]}
+          setExerciseIsAdded={setExerciseIsAdded}
+        />
+      </MemoryRouter>,
+    )
+
+    const createDialog = await screen.findByRole("dialog", { name: "Create New Program" })
+    await userEvent.clear(within(createDialog).getByRole("spinbutton", { name: "Duration (weeks)" }))
+    await userEvent.type(within(createDialog).getByRole("spinbutton", { name: "Duration (weeks)" }), "2")
+
+    const week2Heading = within(createDialog).getByRole("heading", { name: "Week 2" })
+    const week2Card = week2Heading.closest("article")
+    expect(week2Card).not.toBeNull()
+    await userEvent.click(within(week2Card).getByAltText("Add WOD Icon"))
+
+    await userEvent.selectOptions(within(createDialog).getByRole("combobox", { name: "Week" }), "2")
+    const wodSelect = within(createDialog).getByRole("combobox", { name: "WOD" })
+    const wodOptions = within(wodSelect).getAllByRole("option")
+    expect(wodOptions.length).toBeGreaterThan(1)
+    await userEvent.selectOptions(wodSelect, wodOptions[1])
+    const selectedWodKey = wodSelect.value
+    expect(selectedWodKey).toBeTruthy()
+
+    searchParams = new URLSearchParams(`newProgram=true&applyAddedExercises=true&planWeek=2&planWodKey=${encodeURIComponent(selectedWodKey)}`)
+    rerender(
+      <MemoryRouter>
+        <Programs
+          isCreateModalOpen
+          searchParams={searchParams}
+          setSearchParams={setSearchParams}
+          exerciseIsAdded={[101]}
+          setExerciseIsAdded={setExerciseIsAdded}
+        />
+      </MemoryRouter>,
+    )
+
+    const refreshedDialog = await screen.findByRole("dialog", { name: "Create New Program" })
+    const refreshedWeek2Card = within(refreshedDialog).getByRole("heading", { name: "Week 2" }).closest("article")
+    const refreshedWeek1Card = within(refreshedDialog).getByRole("heading", { name: "Week 1" }).closest("article")
+    expect(refreshedWeek2Card).not.toBeNull()
+    expect(refreshedWeek1Card).not.toBeNull()
+
+    await waitFor(() => {
+      const week2WodCards = within(refreshedWeek2Card).getAllByRole("article")
+      expect(week2WodCards.length).toBeGreaterThan(1)
+      expect(within(week2WodCards[0]).queryByText("Exercise #101")).not.toBeInTheDocument()
+      expect(within(week2WodCards[1]).getByText("Exercise #101")).toBeInTheDocument()
+      expect(within(refreshedWeek1Card).queryByText("Exercise #101")).not.toBeInTheDocument()
+    })
   })
 
   it("starts checkout from details modal using program name as title fallback", async () => {

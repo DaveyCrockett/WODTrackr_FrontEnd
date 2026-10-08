@@ -225,7 +225,6 @@ function Calendar() {
   const [, setWorkouts] = useState(() => readWorkoutsFromStorage())
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [isProgramModalOpen, setIsProgramModalOpen] = useState(false)
 
   // Program event detail modal
@@ -405,6 +404,24 @@ function Calendar() {
         .sort((left, right) => left.label.localeCompare(right.label))
     },
     [exerciseLibrary],
+  )
+  const exerciseNameById = useMemo(
+    () =>
+      exerciseLibrary.reduce((accumulator, exercise) => {
+        const exerciseId = getExerciseRecordId(exercise)
+        if (exerciseId === null || exerciseId === undefined) return accumulator
+        const label = String(exercise?.name || exercise?.title || `Exercise #${exerciseId}`).trim()
+        accumulator[String(exerciseId)] = label
+        return accumulator
+      }, {}),
+    [exerciseLibrary],
+  )
+  const selectedEntryExerciseIds = useMemo(
+    () =>
+      Array.isArray(selectedEntry?.exerciseIds)
+        ? selectedEntry.exerciseIds.map((exerciseId) => String(exerciseId))
+        : [],
+    [selectedEntry],
   )
 
   const goToPreviousMonth = () => {
@@ -772,12 +789,8 @@ function Calendar() {
                           className={`calendar-week-entry${entry.programId ? " is-program" : ""}`}
                           onClick={(e) => {
                             e.stopPropagation()
-                            if (entry.programId) {
-                              handleOpenProgramModal(entry)
-                            } else {
-                              selectWeekDay(dateKey)
-                              setSelectedEntryId(entry.id)
-                            }
+                            selectWeekDay(dateKey)
+                            setSelectedEntryId(entry.id)
                           }}
                           title={entry.title}
                         >
@@ -795,105 +808,110 @@ function Calendar() {
         )}
 
         {/* Detail panel */}
-        {panelMode === "detail" && isDetailModalOpen ? (
-          <div className="calendar-modal-backdrop">
-            <>
-              <section className="calendar-selected-details" aria-label="Selected event details">
-                <h3>Event Details</h3>
-                {!selectedEntry ? (
-                  <p>Select an event below to view details, or add a new one.</p>
-                ) : (
-                  <div>
-                    <p className="calendar-entry-title">{selectedEntry.title}</p>
-                    <p className="calendar-entry-meta">{selectedEntry.time || "No time set"}</p>
-                    <p className="calendar-entry-notes">{selectedEntry.notes || "No notes for this event."}</p>
-                    {selectedEntry.workoutId ? (
-                      <p className="calendar-entry-program-info">
-                        <span className="calendar-entry-program-badge">Workout</span>
-                        {selectedEntry.workoutName || "Saved workout"}
-                      </p>
-                    ) : null}
-                    {selectedEntry.programId ? (
-                      <p className="calendar-entry-program-info">
-                        <span className="calendar-entry-program-badge">Program</span>
-                        {selectedEntry.programName || "Scheduled Program"}
-                        {selectedEntry.weekNumber ? ` · Week ${selectedEntry.weekNumber}` : ""}
-                      </p>
-                    ) : null}
-                    <div className="calendar-entry-actions">
-                      {!selectedEntry.programId ? (
-                        <button
-                          type="button"
-                          className="calendar-nav-controls"
-                          onClick={() => handleOpenEditForm(selectedEntry)}
-                        >
-                          Edit
-                        </button>
-                      ) : null}
+        {panelMode === "detail" ? (
+          <aside className="calendar-editor" aria-label="Selected day details">
+            <section className="calendar-selected-details" aria-label="Selected event details">
+              <h3>Event Details</h3>
+              {!selectedEntry ? (
+                <p>Select an event below to view details, or add a new one.</p>
+              ) : (
+                <div>
+                  <p className="calendar-entry-title">{selectedEntry.title}</p>
+                  <p className="calendar-entry-meta">{selectedEntry.time || "No time set"}</p>
+                  <p className="calendar-entry-notes">{selectedEntry.notes || "No notes for this event."}</p>
+                  {selectedEntry.workoutId ? (
+                    <p className="calendar-entry-program-info">
+                      <span className="calendar-entry-program-badge">Workout</span>
+                      {selectedEntry.workoutName || "Saved workout"}
+                    </p>
+                  ) : null}
+                  {selectedEntry.programId ? (
+                    <p className="calendar-entry-program-info">
+                      <span className="calendar-entry-program-badge">Program</span>
+                      {selectedEntry.programName || "Scheduled Program"}
+                      {selectedEntry.weekNumber ? ` · Week ${selectedEntry.weekNumber}` : ""}
+                    </p>
+                  ) : null}
+                  {selectedEntry.programId && selectedEntryExerciseIds.length > 0 ? (
+                    <div className="calendar-modal-exercises">
+                      <h3>Program Plan Exercises</h3>
+                      <ul>
+                        {selectedEntryExerciseIds.map((exerciseId) => (
+                          <li key={exerciseId}>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  <div className="calendar-entry-actions">
+                    {!selectedEntry.programId ? (
                       <button
                         type="button"
-                        className="calendar-btn-delete"
-                        onClick={() => handleDeleteEntry(selectedEntry.id)}
+                        className="calendar-nav-controls"
+                        onClick={() => handleOpenEditForm(selectedEntry)}
                       >
-                        Delete
+                        Edit
                       </button>
-                      {selectedEntry.programId ? (
-                        <button
-                          type="button"
-                          onClick={() => handleOpenProgramModal(selectedEntry)}
-                        >
-                          View Program
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                )}
-              </section>
-
-              <div className="calendar-entry-list">
-                <h3>Scheduled Items</h3>
-                {selectedEntries.length === 0 ? (
-                  <p className="calendar-empty-state">
-                    Nothing scheduled for this day yet.{" "}
-                    <button type="button" className="calendar-empty-add-link" onClick={handleOpenAddForm}>
-                      Add an entry
+                    ) : null}
+                    <button
+                      type="button"
+                      className="calendar-btn-delete"
+                      onClick={() => handleDeleteEntry(selectedEntry.id)}
+                    >
+                      Delete
                     </button>
-                  </p>
-                ) : (
-                  <ul>
-                    {selectedEntries.map((entry) => (
-                      <li key={entry.id}>
-                        <button
-                          type="button"
-                          className={`calendar-entry-item${selectedEntryId === entry.id ? " is-selected" : ""}${entry.programId ? " is-program" : ""}`}
-                          onClick={() => {
-                            setSelectedEntryId(entry.id)
-                            if (entry.programId) {
-                              handleOpenProgramModal(entry)
-                            }
-                          }}
-                        >
-                          <p className="calendar-entry-title">{entry.title}</p>
-                          <p className="calendar-entry-meta">{entry.time || "No time set"}</p>
-                          {entry.programId ? (
-                            <span className="calendar-entry-program-badge">
-                              {entry.programName ? `Program: ${entry.programName}` : "Program"}
-                            </span>
-                          ) : null}
-                          {!entry.programId && entry.workoutId ? (
-                            <span className="calendar-entry-program-badge">Workout</span>
-                          ) : null}
-                          {!entry.programId && entry.notes ? (
-                            <p className="calendar-entry-notes">{entry.notes}</p>
-                          ) : null}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </>
-          </div>
+                    {selectedEntry.programId ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenProgramModal(selectedEntry)}
+                      >
+                        View Program
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <div className="calendar-entry-list">
+              <h3>Scheduled Items</h3>
+              {selectedEntries.length === 0 ? (
+                <p className="calendar-empty-state">
+                  Nothing scheduled for this day yet.{" "}
+                  <button type="button" className="calendar-empty-add-link" onClick={handleOpenAddForm}>
+                    Add an entry
+                  </button>
+                </p>
+              ) : (
+                <ul>
+                  {selectedEntries.map((entry) => (
+                    <li key={entry.id}>
+                      <button
+                        type="button"
+                        className={`calendar-entry-item${selectedEntryId === entry.id ? " is-selected" : ""}${entry.programId ? " is-program" : ""}`}
+                        onClick={() => {
+                          setSelectedEntryId(entry.id)
+                        }}
+                      >
+                        <p className="calendar-entry-title">{entry.title}</p>
+                        <p className="calendar-entry-meta">{entry.time || "No time set"}</p>
+                        {entry.programId ? (
+                          <span className="calendar-entry-program-badge">
+                            {entry.programName ? `Program: ${entry.programName}` : "Program"}
+                          </span>
+                        ) : null}
+                        {!entry.programId && entry.workoutId ? (
+                          <span className="calendar-entry-program-badge">Workout</span>
+                        ) : null}
+                        {!entry.programId && entry.notes ? (
+                          <p className="calendar-entry-notes">{entry.notes}</p>
+                        ) : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </aside>
         ) : null}
 
         {/* Add form */}
@@ -1020,7 +1038,7 @@ function Calendar() {
                     <ul>
                       {programModalEntry.exerciseIds.map((exId) => (
                         <li key={exId}>
-                          {programModalEntry.exerciseNames?.[exId] || `Exercise #${exId}`}
+                          {programModalEntry.exerciseNames?.[exId] || exerciseNameById[String(exId)] || `Exercise #${exId}`}
                         </li>
                       ))}
                     </ul>

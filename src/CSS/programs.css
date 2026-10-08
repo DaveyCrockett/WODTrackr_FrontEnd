@@ -544,6 +544,12 @@
   gap: 0.35rem;
 }
 
+.programs-modal-grid label span {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #334155;
+}
+
 .programs-modal-field {
   display: grid;
   gap: 0.35rem;
@@ -588,12 +594,57 @@
   font-size: 0.92rem;
 }
 
+.programs-modal-grid label input,
+.programs-modal-grid label textarea,
+.programs-modal-grid label select {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
 .programs-modal-field input:focus,
 .programs-modal-field textarea:focus,
 .programs-modal-field select:focus {
   outline: none;
   border-color: #1d4ed8;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+.programs-modal-grid label input:focus,
+.programs-modal-grid label textarea:focus,
+.programs-modal-grid label select:focus {
+  outline: none;
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+.programs-modal-grid .multiselect-dropdown {
+  width: 100%;
+}
+
+.programs-modal-grid .multiselect-toggle {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.6rem 2rem 0.6rem 0.7rem;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
+.programs-modal-grid .multiselect-toggle:focus-visible {
+  outline: none;
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+.programs-modal-grid .multiselect-list {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  margin-top: 0.25rem;
 }
 
 .programs-modal-checkbox {
