@@ -488,7 +488,10 @@ const addWodToWeekPlan = (durationValue, currentPlan, weekNumber, wodPayload) =>
 
 const updateWodInWeekPlan = (durationValue, currentPlan, weekNumber, wodKey, updates) => {
   const normalizedWeek = Number(weekNumber)
+  console.log("Normalized Week:", normalizedWeek)
+  console.log("WOD Key:", wodKey)
   const normalizedWodKey = String(wodKey || "")
+  console.log("Normalized WOD Key:", normalizedWodKey)
   if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey) {
     return buildWorkoutPlanForDuration(durationValue, currentPlan)
   }
@@ -3231,7 +3234,6 @@ function Programs({
                     workoutPlan.map((weekEntry) => (
                       <article key={weekEntry.week_number} className="programs-plan-week-card">
                         <h4>Week {weekEntry.week_number}</h4>
-                        <img src={addWODIcon} alt="Add WOD Icon" onClick={() => handleAddWodToCreateWeek(weekEntry.week_number)} />
                         {buildWodsFromWeekEntry(weekEntry).length === 0 ? (
                           <p className="programs-plan-helper">No WODs added yet.</p>
                         ) : (
@@ -3247,15 +3249,7 @@ function Programs({
                                       handleUpdateCreateWod(weekEntry.week_number, wodEntry.key, { title: event.target.value })}
                                   />
                                 </label>
-                                <label className="programs-modal-checkbox">
-                                  <input
-                                    type="checkbox"
-                                    checked={Boolean(wodEntry.is_rest)}
-                                    onChange={(event) =>
-                                      handleUpdateCreateWod(weekEntry.week_number, wodEntry.key, { is_rest: event.target.checked })}
-                                  />
-                                  Rest
-                                </label>
+                               <img className="add-WOD-icon" src={addWODIcon} alt="Add WOD Icon" onClick={() => handleAddWodToCreateWeek(weekEntry.week_number)} />
                                 <button
                                   type="button"
                                   className="programs-plan-remove-btn"
@@ -3383,6 +3377,7 @@ function Programs({
                                     </li>
                                   ))}
                                 </ul>
+                                
                               )}
                             </article>
                           ))
@@ -3405,7 +3400,7 @@ function Programs({
 
               <div className="programs-modal-actions">
                 <button type="submit" className="programs-modal-primary-btn" disabled={isCreateSubmitting}>
-                  {isCreateSubmitting ? "Creating..." : "Create Program"}
+                  {isCreateSubmitting ? "Creating..." : "Create"}
                 </button>
               </div>
             </form>

@@ -397,6 +397,9 @@
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
+  position: relative;
+  left: 0.5rem;
+  bottom: 3rem;
 }
 
 .programs-banner-upload-btn:hover {
@@ -678,7 +681,7 @@
   background: transparent;
   position: absolute;
   top: 0.5rem;
-  /* left: 9rem; */
+  left: 0.5rem;
   /* z-index: 2; */
   color: #334155;
   /* width: 40px;  Set a defined width/height to make a perfect circle
@@ -697,7 +700,7 @@
   background-color: rgba(255, 255, 255, 0.15); /* Soft white tint over dark images */
   border-radius: 50%;
   opacity: 0; /* Hidden by default */
-  transform: scale(0.8); /* Slightly smaller initially */
+  transform: scale(0.5); /* Slightly smaller initially */
   transition: opacity 0.2s ease, transform 0.2s ease;
   z-index: -1; /* Keeps the overlay behind the "X" text */
 }
@@ -708,7 +711,7 @@
 }
 .programs-modal-close-btn:hover::before {
   opacity: 1; /* Fades the overlay in */
-  transform: scale(1); /* Expands the overlay to full size */
+  transform: scale(.8); /* Expands the overlay to full size */
 }
 
 
@@ -856,13 +859,25 @@
   top: 0;
   border: none;
   border-radius: 10px;
-  padding: 0.55rem 0.8rem;
+  padding: .25rem .25rem;
   background: #1d4ed8;
   color: #ffffff;
+  width: 3rem;
+  height: 3rem;
+}
+
+.programs-plan-add-btn img {
+  display: inline-block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+
 }
 
 .programs-modal-secondary-btn.programs-plan-add-btn:hover {
   transform: none;
+  cursor: pointer;
+  background: #1e40af;
 }
 
 .programs-plan-weeks {
@@ -923,6 +938,20 @@
 
 .programs-plan-remove-btn:hover {
   background: #f8fafc;
+}
+
+.add-WOD-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: contain;
+  cursor: pointer;
+  position: relative;
+  top: -0.25rem;
+}
+
+.add-WOD-icon:hover {
+  transform: scale(1.1);
+  cursor: pointer;
 }
 
 @media (max-width: 860px) {
