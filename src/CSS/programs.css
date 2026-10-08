@@ -817,6 +817,11 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 0.4rem 0.5rem;
+  cursor: grab;
+}
+
+.programs-plan-exercise-list li:active {
+  cursor: grabbing;
 }
 
 .programs-plan-remove-btn {

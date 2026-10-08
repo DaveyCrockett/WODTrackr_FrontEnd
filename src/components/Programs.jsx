@@ -258,6 +258,42 @@ const clearFormFieldError = (previousErrors, fieldName, clearWorkoutPlan = false
   ...(clearWorkoutPlan ? { workout_plan: "" } : {}),
 })
 
+const moveWorkoutPlanExercise = (workoutPlan, sourceWeekNumber, targetWeekNumber, exerciseId, beforeExerciseId = null) => {
+  const normalizedExerciseId = Number(exerciseId)
+  if (!Number.isFinite(normalizedExerciseId)) return workoutPlan
+
+  const normalizedSourceWeek = Number(sourceWeekNumber)
+  const normalizedTargetWeek = Number(targetWeekNumber)
+  if (!Number.isFinite(normalizedSourceWeek) || !Number.isFinite(normalizedTargetWeek)) return workoutPlan
+
+  const nextPlan = (Array.isArray(workoutPlan) ? workoutPlan : []).map((weekEntry) => ({
+    ...weekEntry,
+    exercise_ids: Array.isArray(weekEntry?.exercise_ids) ? [...weekEntry.exercise_ids] : [],
+  }))
+
+  const sourceWeek = nextPlan.find((entry) => Number(entry?.week_number) === normalizedSourceWeek)
+  const targetWeek = nextPlan.find((entry) => Number(entry?.week_number) === normalizedTargetWeek)
+  if (!sourceWeek || !targetWeek) return workoutPlan
+
+  const sourceIndex = sourceWeek.exercise_ids.findIndex((id) => Number(id) === normalizedExerciseId)
+  if (sourceIndex < 0) return workoutPlan
+  sourceWeek.exercise_ids.splice(sourceIndex, 1)
+
+  const targetHasExercise = targetWeek.exercise_ids.some((id) => Number(id) === normalizedExerciseId)
+  if (normalizedSourceWeek !== normalizedTargetWeek && targetHasExercise) {
+    return nextPlan
+  }
+
+  const normalizedBeforeExerciseId = Number(beforeExerciseId)
+  const beforeIndex = Number.isFinite(normalizedBeforeExerciseId)
+    ? targetWeek.exercise_ids.findIndex((id) => Number(id) === normalizedBeforeExerciseId)
+    : -1
+  const insertIndex = beforeIndex >= 0 ? beforeIndex : targetWeek.exercise_ids.length
+  targetWeek.exercise_ids.splice(insertIndex, 0, normalizedExerciseId)
+
+  return nextPlan
+}
+
 const toExerciseId = (value) => {
   const candidate = Number(value)
   return Number.isFinite(candidate) ? candidate : null
@@ -898,6 +934,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
   const [createPlanWeek, setCreatePlanWeek] = useState(1)
   const [createPlanExercise, setCreatePlanExercise] = useState([])
   const [createPlanWorkoutId, setCreatePlanWorkoutId] = useState("")
+  const [createDraggedExercise, setCreateDraggedExercise] = useState(null)
   const [searchName, setSearchName] = useState("")
   const [sortOrder, setSortOrder] = useState("asc")
   const [filters, setFilters] = useState({ difficulty: [], category: [], goal: [], equipment: [] })
@@ -924,6 +961,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
   const [detailPlanWeek, setDetailPlanWeek] = useState(1)
   const [detailPlanExerciseId, setDetailPlanExerciseId] = useState("")
   const [detailPlanWorkoutId, setDetailPlanWorkoutId] = useState("")
+  const [detailDraggedExercise, setDetailDraggedExercise] = useState(null)
   const [categoryChoices, setCategoryChoices] = useState([])
   const [goalChoices, setGoalChoices] = useState([])
   const [difficultyChoices, setDifficultyChoices] = useState([])
@@ -1318,6 +1356,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     setCreatePlanWeek(1)
     setCreatePlanExercise([])
     setCreatePlanWorkoutId("")
+    setCreateDraggedExercise(null)
     setEditImageFile(null)
     setEditImagePreview("")
     if (editImageInputRef.current) {
@@ -1328,6 +1367,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
 
 
   const handleCloseCreateModal = () => {
+    setCreateDraggedExercise(null)
     setEditImageFile(null)
     setEditImagePreview("")
     if (editImageInputRef.current) {
@@ -1404,6 +1444,28 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
       })
       return { ...prev, workout_plan: nextPlan }
     })
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleCreateExerciseDragStart = (weekNumber, exerciseId) => {
+    setCreateDraggedExercise({ weekNumber: Number(weekNumber), exerciseId: Number(exerciseId) })
+  }
+
+  const handleCreateExerciseDrop = (targetWeekNumber, beforeExerciseId = null) => {
+    if (!createDraggedExercise) return
+
+    setCreateFormValues((prev) => {
+      const basePlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan)
+      const nextPlan = moveWorkoutPlanExercise(
+        basePlan,
+        createDraggedExercise.weekNumber,
+        Number(targetWeekNumber),
+        createDraggedExercise.exerciseId,
+        beforeExerciseId,
+      )
+      return { ...prev, workout_plan: nextPlan }
+    })
+    setCreateDraggedExercise(null)
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
@@ -1512,6 +1574,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
       setCreatePlanWeek(1)
       setCreatePlanExercise([])
       setCreatePlanWorkoutId("")
+      setCreateDraggedExercise(null)
     } catch (error) {
       const fieldErrors = {}
       const responseData = error?.response?.data
@@ -1555,6 +1618,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     setDetailPlanWeek(1)
     setDetailPlanExerciseId("")
     setDetailPlanWorkoutId("")
+    setDetailDraggedExercise(null)
     setEditImageFile(null)
     setEditImagePreview("")
     if (editImageInputRef.current) {
@@ -1642,6 +1706,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
       setDetailWorkoutPlan(nextWorkoutPlan)
       setDetailPlanWeek(nextWorkoutPlan[0]?.week_number || 1)
       setDetailPlanWorkoutId("")
+      setDetailDraggedExercise(null)
       setEditImageFile(null)
       setEditImagePreview(getProgramImageUrl(sourceProgram))
       if (editImageInputRef.current) {
@@ -1656,6 +1721,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
   const handleViewDetails = async (programId) => {
     setSelectedProgramId(programId)
     setIsDetailsEditMode(false)
+    setDetailDraggedExercise(null)
     setIsWorkoutPlanUnlocked(purchasedProgramIds.includes(Number(programId)))
     setDetailWorkoutPlan([])
     setDetailPlanWeek(1)
@@ -2082,6 +2148,27 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
         }
       }),
     )
+    setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleDetailExerciseDragStart = (weekNumber, exerciseId) => {
+    if (!isDetailsEditMode || !canEditSelectedProgram) return
+    setDetailDraggedExercise({ weekNumber: Number(weekNumber), exerciseId: Number(exerciseId) })
+  }
+
+  const handleDetailExerciseDrop = (targetWeekNumber, beforeExerciseId = null) => {
+    if (!isDetailsEditMode || !canEditSelectedProgram || !detailDraggedExercise) return
+
+    setDetailWorkoutPlan((prev) =>
+      moveWorkoutPlanExercise(
+        prev,
+        detailDraggedExercise.weekNumber,
+        Number(targetWeekNumber),
+        detailDraggedExercise.exerciseId,
+        beforeExerciseId,
+      ),
+    )
+    setDetailDraggedExercise(null)
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
@@ -2626,12 +2713,12 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                           key={exercise.id}
                           type="checkbox"
                           name={"plan_exercises"}
-                          value={exercise.title}
-                          checked={createPlanExercise.includes(exercise.title)}
+                          value={String(exercise.id)}
+                          checked={createPlanExercise.includes(String(exercise.id))}
                           onChange={(event) => {
                             const selectedIds = event.target.checked
-                              ? [...createPlanExercise, String(exercise.title)]
-                              : createPlanExercise.filter((id) => id !== String(exercise.title))
+                              ? [...createPlanExercise, String(exercise.id)]
+                              : createPlanExercise.filter((id) => id !== String(exercise.id))
                             setCreatePlanExercise(selectedIds)
                           }}
                           disabled={exerciseOptions.length === 0 || workoutPlan.length === 0}
@@ -2644,10 +2731,14 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                   <button
                     type="button"
                     className="programs-modal-secondary-btn programs-plan-add-btn"
-                    onClick={() => handleAddWorkoutToPlanWeek(weekEntry.week_number, weekEntry.exercise_ids)}
+                    onClick={() =>
+                      handleAddWorkoutToPlanWeek(
+                        Number(createPlanWeek),
+                        createPlanExercise.map((exerciseId) => Number(exerciseId)).filter((exerciseId) => Number.isFinite(exerciseId)),
+                      )
+                    }
                     disabled={createPlanExercise.length === 0 || workoutPlan.length === 0}
                   >
-                    {console.log("Rendering Add Workout button", { createPlanExercise, workoutPlan })}
                     Add Workout
                   </button>
                 </div>
@@ -2657,15 +2748,30 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                     <p className="programs-plan-helper">Enter duration to start building your weekly workout plan.</p>
                   ) : (
                     workoutPlan.map((weekEntry) => (
-                      <article key={weekEntry.week_number} className="programs-plan-week-card">
+                      <article
+                        key={weekEntry.week_number}
+                        className="programs-plan-week-card"
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={() => handleCreateExerciseDrop(weekEntry.week_number)}
+                      >
                         <h4>Week {weekEntry.week_number}</h4>
                         {weekEntry.exercise_ids.length === 0 ? (
                           <p className="programs-plan-helper">No workout added yet.</p>
                         ) : (
                           <ul className="programs-plan-exercise-list">
                             {weekEntry.exercise_ids.map((exerciseId) => (
-                              console.log("Rendering exercise list item", { weekNumber: weekEntry.week_number, exerciseId }),
-                              <li key={`${weekEntry.week_number}-${exerciseId}`}>
+                              <li
+                                key={`${weekEntry.week_number}-${exerciseId}`}
+                                draggable
+                                onDragStart={() => handleCreateExerciseDragStart(weekEntry.week_number, exerciseId)}
+                                onDragEnd={() => setCreateDraggedExercise(null)}
+                                onDragOver={(event) => event.preventDefault()}
+                                onDrop={(event) => {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  handleCreateExerciseDrop(weekEntry.week_number, exerciseId)
+                                }}
+                              >
                                 <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
                                 <button
                                   type="button"
@@ -2990,14 +3096,30 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                       <p className="programs-plan-helper">No workout plan set for this program yet.</p>
                     ) : (
                       detailsWorkoutPlan.map((weekEntry) => (
-                        <article key={`details-week-${weekEntry.week_number}`} className="programs-plan-week-card">
+                        <article
+                          key={`details-week-${weekEntry.week_number}`}
+                          className="programs-plan-week-card"
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={() => handleDetailExerciseDrop(weekEntry.week_number)}
+                        >
                           <h4>Week {weekEntry.week_number}</h4>
                           {weekEntry.exercise_ids.length === 0 ? (
                             <p className="programs-plan-helper">No exercises added yet.</p>
                           ) : (
                             <ul className="programs-plan-exercise-list">
                               {weekEntry.exercise_ids.map((exerciseId) => (
-                                <li key={`details-${weekEntry.week_number}-${exerciseId}`}>
+                                <li
+                                  key={`details-${weekEntry.week_number}-${exerciseId}`}
+                                  draggable={canEditSelectedProgram && isDetailsEditMode}
+                                  onDragStart={() => handleDetailExerciseDragStart(weekEntry.week_number, exerciseId)}
+                                  onDragEnd={() => setDetailDraggedExercise(null)}
+                                  onDragOver={(event) => event.preventDefault()}
+                                  onDrop={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    handleDetailExerciseDrop(weekEntry.week_number, exerciseId)
+                                  }}
+                                >
                                   <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
                                   {canEditSelectedProgram && isDetailsEditMode ? (
                                     <button
