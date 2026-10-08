@@ -2,6 +2,8 @@ import { useState, useEffect } from "react"
 import "../CSS/settings.css"
 
 const PREFS_KEY = "wodtrackrPreferences"
+const PROFILE_KEY = "wodtrackrProfile"
+const USER_KEY = "wodtrackrUser"
 
 const DEFAULT_PREFS = {
   theme: "light",
@@ -9,6 +11,26 @@ const DEFAULT_PREFS = {
   workoutReminders: true,
   progressUpdates: true,
   weeklyDigest: false,
+  analytics: true,
+}
+
+const DEFAULT_PROFILE = {
+  name: "Guest user",
+  email: "guest@wodtrackr.com",
+  phone: "",
+  location: "Austin, TX",
+  timezone: "UTC-5",
+  bio: "Level up every week.",
+  fitnessGoal: "Build strength",
+}
+
+const getStoredUser = () => {
+  try {
+    const raw = localStorage.getItem(USER_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
 }
 
 const loadPrefs = () => {
@@ -24,17 +46,50 @@ const savePrefs = (prefs) => {
   localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
 }
 
-const applyTheme = (theme) => {
-  document.documentElement.setAttribute("data-theme", theme)
+const loadProfile = () => {
+  const storedUser = getStoredUser()
+
+  try {
+    const rawProfile = localStorage.getItem(PROFILE_KEY)
+    const storedProfile = rawProfile ? JSON.parse(rawProfile) : {}
+    return {
+      ...DEFAULT_PROFILE,
+      ...storedUser,
+      ...storedProfile,
+      name: storedProfile.name || storedUser.username || storedUser.name || DEFAULT_PROFILE.name,
+      email: storedProfile.email || storedUser.email || DEFAULT_PROFILE.email,
+    }
+  } catch {
+    return {
+      ...DEFAULT_PROFILE,
+      name: storedUser.username || storedUser.name || DEFAULT_PROFILE.name,
+      email: storedUser.email || DEFAULT_PROFILE.email,
+    }
+  }
 }
 
-const getStoredUser = () => {
-  try {
-    const raw = localStorage.getItem("wodtrackrUser")
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
+const saveProfile = (profile) => {
+  const safeProfile = {
+    ...DEFAULT_PROFILE,
+    ...profile,
   }
+
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(safeProfile))
+
+  const existingUser = getStoredUser()
+  localStorage.setItem(
+    USER_KEY,
+    JSON.stringify({
+      ...existingUser,
+      username: safeProfile.name || DEFAULT_PROFILE.name,
+      email: safeProfile.email || DEFAULT_PROFILE.email,
+    }),
+  )
+}
+
+const applyTheme = (theme) => {
+  document.documentElement.setAttribute("data-theme", theme)
+  localStorage.setItem("wodtrackrTheme", theme)
 }
 
 const TABS = ["General Preferences", "Account Settings", "Advanced Settings"]
@@ -48,6 +103,7 @@ const LANGUAGES = [
 
 function CollapsibleCard({ title, description, defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen)
+
   return (
     <div className="settings-card">
       <button
@@ -89,18 +145,7 @@ function Toggle({ id, checked, onChange, label, description }) {
   )
 }
 
-/* ── General Preferences tab ── */
-function GeneralPreferences({ prefs, onChange, onSaved }) {
-  const [saved, setSaved] = useState(false)
-
-  const handleSave = () => {
-    savePrefs(prefs)
-    applyTheme(prefs.theme)
-    setSaved(true)
-    onSaved()
-    setTimeout(() => setSaved(false), 2500)
-  }
-
+function GeneralPreferences({ prefs, onChange, onSave, onReset, savedMessage }) {
   return (
     <div className="settings-section">
       <CollapsibleCard title="Appearance" description="Customize how WODTrackr looks.">
@@ -110,6 +155,7 @@ function GeneralPreferences({ prefs, onChange, onSaved }) {
             <span>Choose between light and dark mode</span>
           </div>
           <select
+            id="settings-theme"
             className="settings-select"
             value={prefs.theme}
             onChange={(e) => onChange("theme", e.target.value)}
@@ -125,14 +171,15 @@ function GeneralPreferences({ prefs, onChange, onSaved }) {
             <span>Select your preferred language</span>
           </div>
           <select
+            id="settings-language"
             className="settings-select"
             value={prefs.language}
             onChange={(e) => onChange("language", e.target.value)}
             aria-label="Language"
           >
-            {LANGUAGES.map((l) => (
-              <option key={l.value} value={l.value}>
-                {l.label}
+            {LANGUAGES.map((language) => (
+              <option key={language.value} value={language.value}>
+                {language.label}
               </option>
             ))}
           </select>
@@ -143,81 +190,56 @@ function GeneralPreferences({ prefs, onChange, onSaved }) {
         <Toggle
           id="pref-workout-reminders"
           checked={prefs.workoutReminders}
-          onChange={(v) => onChange("workoutReminders", v)}
+          onChange={(value) => onChange("workoutReminders", value)}
           label="Workout Reminders"
           description="Daily reminders to complete your scheduled workout"
         />
         <Toggle
           id="pref-progress-updates"
           checked={prefs.progressUpdates}
-          onChange={(v) => onChange("progressUpdates", v)}
+          onChange={(value) => onChange("progressUpdates", value)}
           label="Progress Updates"
           description="Notify me when I hit a personal record or milestone"
         />
         <Toggle
           id="pref-weekly-digest"
           checked={prefs.weeklyDigest}
-          onChange={(v) => onChange("weeklyDigest", v)}
+          onChange={(value) => onChange("weeklyDigest", value)}
           label="Weekly Digest"
           description="Summary email with your training stats every Monday"
         />
       </CollapsibleCard>
 
       <div className="settings-save-bar">
-        <button type="button" className="settings-primary-btn" onClick={handleSave}>
+        <button type="button" className="settings-primary-btn" onClick={onSave}>
           Save Preferences
         </button>
-        {saved && <span className="settings-success">Preferences saved!</span>}
+        <button type="button" className="settings-reset-btn" onClick={onReset}>
+          Reset to defaults
+        </button>
+        {savedMessage && <span className="settings-success">{savedMessage}</span>}
       </div>
     </div>
   )
 }
 
-/* ── Account Settings tab ── */
-function AccountSettings() {
-  const user = getStoredUser()
-  const email = user?.email || "guest@wodtrackr.com"
-  const username = user?.username || "Guest user"
-
-  const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" })
-  const [pwMsg, setPwMsg] = useState(null)
+function AccountSettings({ profile, onProfileChange, onSaveProfile, onResetProfile, savedMessage }) {
   const [emailOpen, setEmailOpen] = useState(false)
   const [newEmail, setNewEmail] = useState("")
   const [emailMsg, setEmailMsg] = useState(null)
 
-  const handlePwChange = (e) => {
-    setPwForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
-  }
-
-  const handlePwSubmit = (e) => {
-    e.preventDefault()
-    if (!pwForm.current) {
-      setPwMsg({ type: "error", text: "Please enter your current password." })
-      return
-    }
-    if (pwForm.next.length < 8) {
-      setPwMsg({ type: "error", text: "New password must be at least 8 characters." })
-      return
-    }
-    if (pwForm.next !== pwForm.confirm) {
-      setPwMsg({ type: "error", text: "Passwords do not match." })
-      return
-    }
-    // Placeholder — real implementation would call the backend API
-    setPwMsg({ type: "success", text: "Password updated successfully." })
-    setPwForm({ current: "", next: "", confirm: "" })
-    setTimeout(() => setPwMsg(null), 3000)
-  }
-
-  const handleEmailSubmit = (e) => {
-    e.preventDefault()
+  const handleEmailSubmit = (event) => {
+    event.preventDefault()
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
     if (!newEmail || !emailPattern.test(newEmail)) {
       setEmailMsg({ type: "error", text: "Please enter a valid email address." })
       return
     }
-    // Placeholder — real implementation would call the backend API
-    setEmailMsg({ type: "success", text: "Verification email sent to " + newEmail })
+
+    onProfileChange("email", newEmail)
+    onSaveProfile()
+    setEmailMsg({ type: "success", text: `Verification email sent to ${newEmail}.` })
     setNewEmail("")
     setEmailOpen(false)
     setTimeout(() => setEmailMsg(null), 3500)
@@ -225,131 +247,149 @@ function AccountSettings() {
 
   return (
     <div className="settings-section">
-      <CollapsibleCard title="Account Info" description="Your current account details.">
-        <div className="settings-row">
-          <div className="settings-row-label">
-            <strong>Username</strong>
+      <CollapsibleCard title="Account Info" description="Review and update your public profile details.">
+        <form className="settings-form" onSubmit={(event) => {
+          event.preventDefault()
+          onSaveProfile()
+        }}>
+          <div className="settings-form-grid">
+            <div className="settings-field">
+              <label htmlFor="profile-name">Full name</label>
+              <input
+                id="profile-name"
+                type="text"
+                value={profile.name}
+                onChange={(event) => onProfileChange("name", event.target.value)}
+              />
+            </div>
+            <div className="settings-field">
+              <label htmlFor="profile-email">Email address</label>
+              <input
+                id="profile-email"
+                type="email"
+                value={profile.email}
+                onChange={(event) => onProfileChange("email", event.target.value)}
+              />
+            </div>
+            <div className="settings-field">
+              <label htmlFor="profile-phone">Phone</label>
+              <input
+                id="profile-phone"
+                type="tel"
+                value={profile.phone}
+                onChange={(event) => onProfileChange("phone", event.target.value)}
+                placeholder="(555) 123-4567"
+              />
+            </div>
+            <div className="settings-field">
+              <label htmlFor="profile-location">Location</label>
+              <input
+                id="profile-location"
+                type="text"
+                value={profile.location}
+                onChange={(event) => onProfileChange("location", event.target.value)}
+              />
+            </div>
+            <div className="settings-field">
+              <label htmlFor="profile-timezone">Timezone</label>
+              <input
+                id="profile-timezone"
+                type="text"
+                value={profile.timezone}
+                onChange={(event) => onProfileChange("timezone", event.target.value)}
+              />
+            </div>
+            <div className="settings-field">
+              <label htmlFor="profile-goal">Primary goal</label>
+              <input
+                id="profile-goal"
+                type="text"
+                value={profile.fitnessGoal}
+                onChange={(event) => onProfileChange("fitnessGoal", event.target.value)}
+              />
+            </div>
           </div>
-          <span className="settings-code">{username}</span>
-        </div>
+
+          <div className="settings-field">
+            <label htmlFor="profile-bio">Bio</label>
+            <textarea
+              id="profile-bio"
+              rows="3"
+              value={profile.bio}
+              onChange={(event) => onProfileChange("bio", event.target.value)}
+            />
+          </div>
+
+          <div className="settings-save-bar">
+            <button type="submit" className="settings-primary-btn">
+              Save profile
+            </button>
+            <button type="button" className="settings-reset-btn" onClick={onResetProfile}>
+              Reset profile
+            </button>
+            {savedMessage && <span className="settings-success">{savedMessage}</span>}
+          </div>
+        </form>
+      </CollapsibleCard>
+
+      <CollapsibleCard title="Email Preferences" description="Manage how we keep in touch.">
         <div className="settings-row">
           <div className="settings-row-label">
-            <strong>Email Address</strong>
-            <span>
-              {emailMsg?.type === "success" ? emailMsg.text : email}
-            </span>
+            <strong>Primary email</strong>
+            <span>{profile.email}</span>
           </div>
           <button
             type="button"
             className="settings-secondary-btn"
             onClick={() => setEmailOpen((prev) => !prev)}
           >
-            {emailOpen ? "Cancel" : "Change"}
+            {emailOpen ? "Close" : "Change"}
           </button>
         </div>
         {emailOpen && (
           <form className="settings-form" onSubmit={handleEmailSubmit}>
             <div className="settings-field">
-              <label htmlFor="new-email">New Email Address</label>
+              <label htmlFor="new-email">New email address</label>
               <input
                 id="new-email"
                 type="email"
                 value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
+                onChange={(event) => setNewEmail(event.target.value)}
                 placeholder="your@email.com"
               />
             </div>
-            {emailMsg?.type === "error" && (
-              <span className="settings-error">{emailMsg.text}</span>
-            )}
+            {emailMsg?.type === "error" && <span className="settings-error">{emailMsg.text}</span>}
             <button type="submit" className="settings-primary-btn">
-              Send Verification
+              Send verification
             </button>
           </form>
         )}
       </CollapsibleCard>
 
-      <CollapsibleCard title="Change Password" description="Keep your account secure.">
-        <form className="settings-form" onSubmit={handlePwSubmit}>
+      <CollapsibleCard title="Change Password" description="Keep your account secure." defaultOpen={false}>
+        <form className="settings-form">
           <div className="settings-field">
-            <label htmlFor="pw-current">Current Password</label>
-            <input
-              id="pw-current"
-              type="password"
-              name="current"
-              value={pwForm.current}
-              onChange={handlePwChange}
-              autoComplete="current-password"
-            />
+            <label htmlFor="pw-current">Current password</label>
+            <input id="pw-current" type="password" autoComplete="current-password" />
           </div>
           <div className="settings-field">
-            <label htmlFor="pw-next">New Password</label>
-            <input
-              id="pw-next"
-              type="password"
-              name="next"
-              value={pwForm.next}
-              onChange={handlePwChange}
-              autoComplete="new-password"
-            />
+            <label htmlFor="pw-next">New password</label>
+            <input id="pw-next" type="password" autoComplete="new-password" />
           </div>
           <div className="settings-field">
-            <label htmlFor="pw-confirm">Confirm New Password</label>
-            <input
-              id="pw-confirm"
-              type="password"
-              name="confirm"
-              value={pwForm.confirm}
-              onChange={handlePwChange}
-              autoComplete="new-password"
-            />
+            <label htmlFor="pw-confirm">Confirm new password</label>
+            <input id="pw-confirm" type="password" autoComplete="new-password" />
           </div>
-          {pwMsg && (
-            <span className={pwMsg.type === "success" ? "settings-success" : "settings-error"}>
-              {pwMsg.text}
-            </span>
-          )}
-          <button type="submit" className="settings-primary-btn">
-            Update Password
+          <button type="button" className="settings-primary-btn">
+            Update password
           </button>
         </form>
-      </CollapsibleCard>
-
-      <CollapsibleCard title="Subscription" description="Manage your WODTrackr plan.">
-        <div className="settings-row">
-          <div className="settings-row-label">
-            <strong>Current Plan</strong>
-            <span>Free tier — unlimited basic tracking</span>
-          </div>
-          <span className="settings-badge is-free">Free</span>
-        </div>
-        <div className="settings-btn-row">
-          <button type="button" className="settings-primary-btn">
-            Upgrade to Pro
-          </button>
-          <button type="button" className="settings-secondary-btn">
-            View Plan Details
-          </button>
-        </div>
-      </CollapsibleCard>
-
-      <CollapsibleCard title="Danger Zone" description="Irreversible account actions." defaultOpen={false}>
-        <div className="settings-row">
-          <div className="settings-row-label">
-            <strong>Delete Account</strong>
-            <span>Permanently remove your account and all data</span>
-          </div>
-          <button type="button" className="settings-danger-btn">
-            Delete Account
-          </button>
-        </div>
       </CollapsibleCard>
     </div>
   )
 }
 
-/* ── Advanced Settings tab ── */
-function AdvancedSettings() {
+function AdvancedSettings({ analyticsEnabled, onAnalyticsToggle }) {
   const [apiKey] = useState("wt_••••••••••••••••••••••••••••••••")
   const [keyVisible, setKeyVisible] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -385,11 +425,6 @@ function AdvancedSettings() {
             {copied ? "Copied!" : "Copy"}
           </button>
         </div>
-        <div className="settings-btn-row" style={{ marginTop: "0.5rem" }}>
-          <button type="button" className="settings-secondary-btn">
-            Regenerate Key
-          </button>
-        </div>
       </CollapsibleCard>
 
       <CollapsibleCard title="Integrations" description="Connect WODTrackr with external services." defaultOpen={false}>
@@ -411,34 +446,20 @@ function AdvancedSettings() {
             Connect
           </button>
         </div>
-        <div className="settings-row">
-          <div className="settings-row-label">
-            <strong>Apple Health</strong>
-            <span>Share workouts and health metrics with Apple Health</span>
-          </div>
-          <button type="button" className="settings-secondary-btn">
-            Connect
-          </button>
-        </div>
       </CollapsibleCard>
 
       <CollapsibleCard title="Data & Privacy" description="Control your data and export options." defaultOpen={false}>
-        <div className="settings-row">
-          <div className="settings-row-label">
-            <strong>Export Data</strong>
-            <span>Download a copy of all your WODTrackr data as CSV</span>
-          </div>
-          <button type="button" className="settings-secondary-btn">
-            Export
-          </button>
-        </div>
         <div className="settings-row">
           <div className="settings-row-label">
             <strong>Analytics</strong>
             <span>Allow anonymous usage data to improve the platform</span>
           </div>
           <label className="settings-toggle" aria-label="Analytics">
-            <input type="checkbox" defaultChecked />
+            <input
+              type="checkbox"
+              checked={analyticsEnabled}
+              onChange={(event) => onAnalyticsToggle(event.target.checked)}
+            />
             <span className="settings-toggle-track" />
           </label>
         </div>
@@ -447,22 +468,70 @@ function AdvancedSettings() {
   )
 }
 
-/* ── Main Settings component ── */
 function Settings() {
   const [activeTab, setActiveTab] = useState(TABS[0])
   const [prefs, setPrefs] = useState(loadPrefs)
+  const [profile, setProfile] = useState(loadProfile)
+  const [savedMessage, setSavedMessage] = useState("")
 
-  // Apply persisted theme on mount
   useEffect(() => {
     applyTheme(prefs.theme)
   }, [prefs.theme])
+
+  useEffect(() => {
+    if (!savedMessage) {
+      return undefined
+    }
+
+    const timeoutId = window.setTimeout(() => setSavedMessage(""), 2500)
+    return () => window.clearTimeout(timeoutId)
+  }, [savedMessage])
 
   const handlePrefChange = (key, value) => {
     setPrefs((prev) => ({ ...prev, [key]: value }))
   }
 
-  const handleSaved = () => {
-    // Theme is applied inside GeneralPreferences; nothing extra needed here
+  const handlePrefSave = () => {
+    savePrefs(prefs)
+    applyTheme(prefs.theme)
+    setSavedMessage("Preferences saved!")
+  }
+
+  const handleAnalyticsToggle = (checked) => {
+    setPrefs((prev) => {
+      const nextPrefs = { ...prev, analytics: checked }
+      savePrefs(nextPrefs)
+      return nextPrefs
+    })
+    setSavedMessage("Privacy preferences saved!")
+  }
+
+  const handleResetDefaults = () => {
+    const nextPrefs = { ...DEFAULT_PREFS }
+    setPrefs(nextPrefs)
+    savePrefs(nextPrefs)
+    applyTheme(nextPrefs.theme)
+
+    const nextProfile = { ...DEFAULT_PROFILE }
+    setProfile(nextProfile)
+    saveProfile(nextProfile)
+    setSavedMessage("Settings reset to defaults.")
+  }
+
+  const handleProfileChange = (key, value) => {
+    setProfile((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleProfileSave = () => {
+    saveProfile(profile)
+    setSavedMessage("Profile saved!")
+  }
+
+  const handleResetProfile = () => {
+    const nextProfile = { ...DEFAULT_PROFILE }
+    setProfile(nextProfile)
+    saveProfile(nextProfile)
+    setSavedMessage("Profile reset to defaults.")
   }
 
   return (
@@ -488,10 +557,29 @@ function Settings() {
       </div>
 
       {activeTab === "General Preferences" && (
-        <GeneralPreferences prefs={prefs} onChange={handlePrefChange} onSaved={handleSaved} />
+        <GeneralPreferences
+          prefs={prefs}
+          onChange={handlePrefChange}
+          onSave={handlePrefSave}
+          onReset={handleResetDefaults}
+          savedMessage={savedMessage}
+        />
       )}
-      {activeTab === "Account Settings" && <AccountSettings />}
-      {activeTab === "Advanced Settings" && <AdvancedSettings />}
+      {activeTab === "Account Settings" && (
+        <AccountSettings
+          profile={profile}
+          onProfileChange={handleProfileChange}
+          onSaveProfile={handleProfileSave}
+          onResetProfile={handleResetProfile}
+          savedMessage={savedMessage}
+        />
+      )}
+      {activeTab === "Advanced Settings" && (
+        <AdvancedSettings
+          analyticsEnabled={prefs.analytics ?? true}
+          onAnalyticsToggle={handleAnalyticsToggle}
+        />
+      )}
     </section>
   )
 }
