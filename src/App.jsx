@@ -137,7 +137,6 @@ function App() {
   const [programExercises, setProgramExercises] = useState([])
   const [programsErrorMessage, setProgramsErrorMessage] = useState("")
   const [isProgramsLoading, setIsProgramsLoading] = useState(false)
-  const [errorMessage, setErrorMessage] = useState("")
   const isCreateModalOpen = searchParams.get("newProgram") === "true"
   const [exerciseIsAdded, setExerciseIsAdded] = useState([]);
  
@@ -255,22 +254,23 @@ function App() {
   useEffect(() => {
      if(!userSession?.authToken) {
     setPrograms([])
+    setProgramsErrorMessage("")
     return;
   }
 
     const loadPrograms = async () => {
       setIsProgramsLoading(true)
-      setErrorMessage("")
+      setProgramsErrorMessage("")
 
       try {
         const response = await axios.get(PROGRAM_API_URL, buildRequestConfig())
         setPrograms(normalizeProgramsPayload(response?.data))
       } catch (error) {
         if (error?.response?.status === 401 || error?.response?.status === 403) {
-          setErrorMessage("Please log in to load training programs.")
+          setProgramsErrorMessage("Please log in to load training programs.")
         } else {
           const message = error?.response?.data?.detail || "Unable to load programs. Please try again."
-          setErrorMessage(message)
+          setProgramsErrorMessage(message)
         }
         setPrograms([])
       } finally {
@@ -324,6 +324,7 @@ function App() {
             userSession={userSession}
             isProgramsLoading={isProgramsLoading}
             programs={programs}
+            setPrograms={setPrograms}
             programsErrorMessage={programsErrorMessage}
             exerciseLibraryState={exerciseLibraryState}
             setExerciseLibraryState={setExerciseLibraryState}

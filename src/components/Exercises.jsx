@@ -379,6 +379,7 @@ function Exercises({
     routeSearchParams.get("source") === "new-program" && routeSearchParams.get("newProgram") === "true"
   const requestedPlanWeek = Number(routeSearchParams.get("planWeek") || 1)
   const targetPlanWeek = Number.isFinite(requestedPlanWeek) && requestedPlanWeek > 0 ? requestedPlanWeek : 1
+  const targetPlanWodKey = String(routeSearchParams.get("planWodKey") || "")
 
   // Refs for modal focus management
   const addModalRef = useRef(null)
@@ -665,11 +666,26 @@ function Exercises({
       return
     }
 
-    navigate(`/programs?newProgram=true&planWeek=${targetPlanWeek}&applyAddedExercises=true`)
+    const nextSearchParams = new URLSearchParams({
+      newProgram: "true",
+      planWeek: String(targetPlanWeek),
+      applyAddedExercises: "true",
+    })
+    if (targetPlanWodKey) {
+      nextSearchParams.set("planWodKey", targetPlanWodKey)
+    }
+    navigate(`/programs?${nextSearchParams.toString()}`)
   }
 
   const handleReturnToProgramBuilder = () => {
-    navigate(`/programs?newProgram=true&planWeek=${targetPlanWeek}`)
+    const nextSearchParams = new URLSearchParams({
+      newProgram: "true",
+      planWeek: String(targetPlanWeek),
+    })
+    if (targetPlanWodKey) {
+      nextSearchParams.set("planWodKey", targetPlanWodKey)
+    }
+    navigate(`/programs?${nextSearchParams.toString()}`)
   }
 
 

@@ -28,6 +28,29 @@ const PROGRAMS_CHOICES_CACHE_KEY = "wodtrackrProgramChoicesV4"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
 
+const normalizeApiErrorMessage = (value, fallbackMessage = "") => {
+  const extractMessage = (candidate) => {
+    if (candidate === null || candidate === undefined) return ""
+    if (typeof candidate === "string") return candidate.trim()
+    if (typeof candidate === "number" || typeof candidate === "boolean") return String(candidate)
+    if (Array.isArray(candidate)) {
+      return candidate.map((entry) => extractMessage(entry)).filter(Boolean).join(" ").trim()
+    }
+    if (typeof candidate === "object") {
+      const priorityKeys = ["detail", "message", "error", "name", "non_field_errors"]
+      for (const key of priorityKeys) {
+        const nestedMessage = extractMessage(candidate[key])
+        if (nestedMessage) return nestedMessage
+      }
+      return Object.values(candidate).map((entry) => extractMessage(entry)).filter(Boolean).join(" ").trim()
+    }
+    return ""
+  }
+
+  const message = extractMessage(value)
+  return message || fallbackMessage
+}
+
 const saveCreateProgramDraft = (payload) => {
   try {
     sessionStorage.setItem(CREATE_PROGRAM_DRAFT_STORAGE_KEY, JSON.stringify(payload))
@@ -660,35 +683,90 @@ const reorderExerciseInWeekPlan = (durationValue, currentPlan, weekNumber, wodKe
   })
 }
 
-const reorderExerciseInWeekPlanToTarget = (durationValue, currentPlan, weekNumber, wodKey, sourceExerciseId, targetExerciseId) => {
-  const normalizedWeek = Number(weekNumber)
-  const normalizedWodKey = String(wodKey || "")
+const reorderExerciseInWeekPlanToTarget = (
+  durationValue,
+  currentPlan,
+  sourceWeekNumber,
+  sourceWodKey,
+  sourceExerciseId,
+  targetWeekNumber,
+  targetWodKey,
+  targetExerciseId = null,
+) => {
+  const normalizedSourceWeek = Number(sourceWeekNumber)
+  const normalizedSourceWodKey = String(sourceWodKey || "")
   const normalizedSourceExerciseId = Number(sourceExerciseId)
-  const normalizedTargetExerciseId = Number(targetExerciseId)
+  const normalizedTargetWeek = Number(targetWeekNumber)
+  const normalizedTargetWodKey = String(targetWodKey || "")
+  const normalizedTargetExerciseId =
+    targetExerciseId === null || targetExerciseId === undefined ? null : Number(targetExerciseId)
 
-  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey || !Number.isFinite(normalizedSourceExerciseId) || !Number.isFinite(normalizedTargetExerciseId)) {
+  if (
+    !Number.isFinite(normalizedSourceWeek) ||
+    normalizedSourceWeek < 1 ||
+    !normalizedSourceWodKey ||
+    !Number.isFinite(normalizedSourceExerciseId) ||
+    !Number.isFinite(normalizedTargetWeek) ||
+    normalizedTargetWeek < 1 ||
+    !normalizedTargetWodKey ||
+    (normalizedTargetExerciseId !== null && !Number.isFinite(normalizedTargetExerciseId))
+  ) {
     return buildWorkoutPlanForDuration(durationValue, currentPlan)
   }
 
-  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
-    if (weekEntry.week_number !== normalizedWeek) return weekEntry
-    const nextWods = buildWodsFromWeekEntry(weekEntry).map((wodEntry) => {
-      if (String(wodEntry.key) !== normalizedWodKey) return wodEntry
-      const entries = [...wodEntry.exercise_entries]
-      const sourceIndex = entries.findIndex((entry) => Number(entry.exercise_id) === normalizedSourceExerciseId)
-      const targetIndex = entries.findIndex((entry) => Number(entry.exercise_id) === normalizedTargetExerciseId)
-      if (sourceIndex < 0 || targetIndex < 0) return wodEntry
-      if (sourceIndex === targetIndex) return wodEntry
-      const [movedEntry] = entries.splice(sourceIndex, 1)
-      const nextTargetIndex = sourceIndex < targetIndex ? targetIndex : targetIndex
-      entries.splice(Math.max(0, Math.min(nextTargetIndex, entries.length)), 0, movedEntry)
-      return normalizeWodEntry({ ...wodEntry, exercise_entries: entries }, weekEntry.week_number, 0)
-    })
-    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
-    return {
-      ...weekEntry,
-      ...weekFields,
+  const normalizedPlan = buildWorkoutPlanForDuration(durationValue, currentPlan)
+  const weekToWods = new Map(
+    normalizedPlan.map((weekEntry) => [Number(weekEntry.week_number), buildWodsFromWeekEntry(weekEntry)]),
+  )
+
+  const sourceWods = weekToWods.get(normalizedSourceWeek)
+  const targetWods = weekToWods.get(normalizedTargetWeek)
+  if (!sourceWods || !targetWods) return normalizedPlan
+
+  const sourceWodIndex = sourceWods.findIndex((wodEntry) => String(wodEntry.key) === normalizedSourceWodKey)
+  const targetWodIndex = targetWods.findIndex((wodEntry) => String(wodEntry.key) === normalizedTargetWodKey)
+  if (sourceWodIndex < 0 || targetWodIndex < 0) return normalizedPlan
+
+  const sourceWodEntries = [...sourceWods[sourceWodIndex].exercise_entries]
+  const sourceExerciseIndex = sourceWodEntries.findIndex(
+    (entry) => Number(entry.exercise_id) === normalizedSourceExerciseId,
+  )
+  if (sourceExerciseIndex < 0) return normalizedPlan
+
+  const [movedEntry] = sourceWodEntries.splice(sourceExerciseIndex, 1)
+  sourceWods[sourceWodIndex] = normalizeWodEntry(
+    { ...sourceWods[sourceWodIndex], exercise_entries: sourceWodEntries },
+    normalizedSourceWeek,
+    sourceWodIndex,
+  )
+
+  const targetWodEntries =
+    normalizedSourceWeek === normalizedTargetWeek && sourceWodIndex === targetWodIndex
+      ? [...sourceWodEntries]
+      : [...targetWods[targetWodIndex].exercise_entries]
+
+  let nextTargetIndex = targetWodEntries.length
+  if (normalizedTargetExerciseId !== null) {
+    const targetExerciseIndex = targetWodEntries.findIndex(
+      (entry) => Number(entry.exercise_id) === normalizedTargetExerciseId,
+    )
+    if (targetExerciseIndex >= 0) {
+      nextTargetIndex = targetExerciseIndex
     }
+  }
+  targetWodEntries.splice(Math.max(0, Math.min(nextTargetIndex, targetWodEntries.length)), 0, movedEntry)
+  targetWods[targetWodIndex] = normalizeWodEntry(
+    { ...targetWods[targetWodIndex], exercise_entries: targetWodEntries, is_rest: false },
+    normalizedTargetWeek,
+    targetWodIndex,
+  )
+
+  return normalizedPlan.map((weekEntry) => {
+    const weekNumber = Number(weekEntry.week_number)
+    const updatedWods = weekToWods.get(weekNumber)
+    if (!updatedWods) return weekEntry
+    const weekFields = deriveWeekFieldsFromWods(weekNumber, updatedWods)
+    return { ...weekEntry, ...weekFields }
   })
 }
 
@@ -1400,6 +1478,7 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
 
 function Programs({
   programs = [],
+  setPrograms = () => { },
   userSession,
   handleFilterChange = () => { },
   isChoicesLoading = false,
@@ -2009,11 +2088,27 @@ function Programs({
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
-  const handleDragReorderCreateExercise = (weekNumber, wodKey, sourceExerciseId, targetExerciseId) => {
-    if (!sourceExerciseId || !targetExerciseId || Number(sourceExerciseId) === Number(targetExerciseId)) return
+  const handleDragReorderCreateExercise = (
+    sourceWeekNumber,
+    sourceWodKey,
+    sourceExerciseId,
+    targetWeekNumber,
+    targetWodKey,
+    targetExerciseId = null,
+  ) => {
+    if (!sourceExerciseId) return
     setCreateFormValues((prev) => ({
       ...prev,
-      workout_plan: reorderExerciseInWeekPlanToTarget(prev.duration_weeks, prev.workout_plan, weekNumber, wodKey, sourceExerciseId, targetExerciseId),
+      workout_plan: reorderExerciseInWeekPlanToTarget(
+        prev.duration_weeks,
+        prev.workout_plan,
+        sourceWeekNumber,
+        sourceWodKey,
+        sourceExerciseId,
+        targetWeekNumber,
+        targetWodKey,
+        targetExerciseId,
+      ),
     }))
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
@@ -2137,12 +2232,17 @@ function Programs({
           if (!rawValue) {
             continue
           }
-          fieldErrors[fieldName] = Array.isArray(rawValue) ? rawValue.join(" ") : String(rawValue)
+          fieldErrors[fieldName] = normalizeApiErrorMessage(rawValue)
         }
       }
 
       setCreateFieldErrors(fieldErrors)
-      setCreateErrorMessage(error?.response?.data?.detail || "Unable to create program. Please review your inputs.")
+      setCreateErrorMessage(
+        normalizeApiErrorMessage(
+          error?.response?.data?.detail ?? error?.response?.data,
+          "Unable to create program. Please review your inputs.",
+        ),
+      )
     } finally {
       setIsCreateSubmitting(false)
     }
@@ -2329,7 +2429,10 @@ function Programs({
       }
       setProgramDetailsById((prev) => ({ ...prev, [programId]: mergedDetail }))
     } catch (error) {
-      const message = error?.response?.data?.detail || "Unable to load program details."
+      const message = normalizeApiErrorMessage(
+        error?.response?.data?.detail ?? error?.response?.data,
+        "Unable to load program details.",
+      )
       setDetailErrorById((prev) => ({ ...prev, [programId]: message }))
     } finally {
       setDetailLoadingId(null)
@@ -2453,10 +2556,13 @@ function Programs({
             message: imageError?.message,
           })
           const imageErrorMessage =
-            imageError?.response?.data?.program_image?.[0] ||
-            imageError?.response?.data?.image?.[0] ||
-            imageError?.response?.data?.detail ||
-            "Image upload failed. Other changes were saved."
+            normalizeApiErrorMessage(
+              imageError?.response?.data?.program_image ??
+              imageError?.response?.data?.image ??
+              imageError?.response?.data?.detail ??
+              imageError?.response?.data,
+              "Image upload failed. Other changes were saved.",
+            )
           setEditErrorMessage(imageErrorMessage)
           setIsEditSubmitting(false)
           return
@@ -2519,11 +2625,16 @@ function Programs({
         for (const fieldName of knownFields) {
           const rawValue = responseData[fieldName]
           if (!rawValue) continue
-          fieldErrors[fieldName] = Array.isArray(rawValue) ? rawValue.join(" ") : String(rawValue)
+          fieldErrors[fieldName] = normalizeApiErrorMessage(rawValue)
         }
       }
       setEditFieldErrors(fieldErrors)
-      setEditErrorMessage(error?.response?.data?.detail || "Unable to update program. Please review your inputs.")
+      setEditErrorMessage(
+        normalizeApiErrorMessage(
+          error?.response?.data?.detail ?? error?.response?.data,
+          "Unable to update program. Please review your inputs.",
+        ),
+      )
     } finally {
       setIsEditSubmitting(false)
     }
@@ -2549,7 +2660,12 @@ function Programs({
       })
       handleCloseDetailsModal()
     } catch (error) {
-      setEditErrorMessage(error?.response?.data?.detail || "Unable to delete program. Please try again.")
+      setEditErrorMessage(
+        normalizeApiErrorMessage(
+          error?.response?.data?.detail ?? error?.response?.data,
+          "Unable to delete program. Please try again.",
+        ),
+      )
     } finally {
       setIsDeleteSubmitting(false)
     }
@@ -2604,9 +2720,10 @@ function Programs({
       throw new Error("Checkout session response did not include a redirect URL or session ID.")
     } catch (error) {
       setCheckoutErrorMessage(
-        error?.response?.data?.detail ||
-        error?.message ||
-        "Unable to start checkout right now. Please try again.",
+        normalizeApiErrorMessage(
+          error?.response?.data?.detail ?? error?.response?.data ?? error?.message,
+          "Unable to start checkout right now. Please try again.",
+        ),
       )
     } finally {
       setIsCheckoutSubmitting(false)
@@ -2636,13 +2753,28 @@ function Programs({
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
-  const handleDragReorderDetailExercise = (weekNumber, wodKey, sourceExerciseId, targetExerciseId) => {
+  const handleDragReorderDetailExercise = (
+    sourceWeekNumber,
+    sourceWodKey,
+    sourceExerciseId,
+    targetWeekNumber,
+    targetWodKey,
+    targetExerciseId = null,
+  ) => {
     if (!isDetailsEditMode || !canEditSelectedProgram) return
-    if (!sourceExerciseId || !targetExerciseId || Number(sourceExerciseId) === Number(targetExerciseId)) return
-    setDetailWorkoutPlan((prev) => ({
-      ...prev,
-      workout_plan: reorderExerciseInWeekPlanToTarget(editFormValues.duration_weeks, prev, weekNumber, wodKey, sourceExerciseId, targetExerciseId),
-    }))
+    if (!sourceExerciseId) return
+    setDetailWorkoutPlan((prev) =>
+      reorderExerciseInWeekPlanToTarget(
+        editFormValues.duration_weeks,
+        prev,
+        sourceWeekNumber,
+        sourceWodKey,
+        sourceExerciseId,
+        targetWeekNumber,
+        targetWodKey,
+        targetExerciseId,
+      ),
+    )
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
@@ -3262,9 +3394,58 @@ function Programs({
                               {wodEntry.is_rest ? (
                                 <p className="programs-plan-helper">Rest day WOD</p>
                               ) : wodEntry.exercise_entries.length === 0 ? (
-                                <p className="programs-plan-helper">No exercises in this WOD yet.</p>
+                                <p
+                                  className="programs-plan-helper"
+                                  onDragOver={(event) => {
+                                    event.preventDefault()
+                                    event.dataTransfer.dropEffect = "move"
+                                  }}
+                                  onDrop={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    try {
+                                      const dragPayload = JSON.parse(event.dataTransfer.getData("text/plain") || "null")
+                                      if (!dragPayload) return
+                                      handleDragReorderCreateExercise(
+                                        dragPayload.weekNumber,
+                                        dragPayload.wodKey,
+                                        dragPayload.exerciseId,
+                                        weekEntry.week_number,
+                                        wodEntry.key,
+                                        null,
+                                      )
+                                    } catch {
+                                      return
+                                    }
+                                  }}
+                                >
+                                  No exercises in this WOD yet. Drag an exercise here.
+                                </p>
                               ) : (
-                                <ul className="programs-plan-exercise-list">
+                                <ul
+                                  className="programs-plan-exercise-list"
+                                  onDragOver={(event) => {
+                                    event.preventDefault()
+                                    event.dataTransfer.dropEffect = "move"
+                                  }}
+                                  onDrop={(event) => {
+                                    event.preventDefault()
+                                    try {
+                                      const dragPayload = JSON.parse(event.dataTransfer.getData("text/plain") || "null")
+                                      if (!dragPayload) return
+                                      handleDragReorderCreateExercise(
+                                        dragPayload.weekNumber,
+                                        dragPayload.wodKey,
+                                        dragPayload.exerciseId,
+                                        weekEntry.week_number,
+                                        wodEntry.key,
+                                        null,
+                                      )
+                                    } catch {
+                                      return
+                                    }
+                                  }}
+                                >
                                   {wodEntry.exercise_entries.map((exerciseEntry, exerciseIndex) => (
                                     <li
                                       key={`${weekEntry.week_number}-${wodEntry.key}-${exerciseEntry.exercise_id}`}
@@ -3298,9 +3479,11 @@ function Programs({
                                             return
                                           }
                                           handleDragReorderCreateExercise(
+                                            dragPayload.weekNumber,
+                                            dragPayload.wodKey,
+                                            dragPayload.exerciseId,
                                             weekEntry.week_number,
                                             wodEntry.key,
-                                            dragPayload.exerciseId,
                                             exerciseEntry.exercise_id,
                                           )
                                         } catch {
@@ -3725,9 +3908,62 @@ function Programs({
                                 {wodEntry.is_rest ? (
                                   <p className="programs-plan-helper">Rest day WOD</p>
                                 ) : wodEntry.exercise_entries.length === 0 ? (
-                                  <p className="programs-plan-helper">No exercises added yet.</p>
+                                  <p
+                                    className="programs-plan-helper"
+                                    onDragOver={(event) => {
+                                      if (!canEditSelectedProgram || !isDetailsEditMode) return
+                                      event.preventDefault()
+                                      event.dataTransfer.dropEffect = "move"
+                                    }}
+                                    onDrop={(event) => {
+                                      if (!canEditSelectedProgram || !isDetailsEditMode) return
+                                      event.preventDefault()
+                                      event.stopPropagation()
+                                      try {
+                                        const dragPayload = JSON.parse(event.dataTransfer.getData("text/plain") || "null")
+                                        if (!dragPayload) return
+                                        handleDragReorderDetailExercise(
+                                          dragPayload.weekNumber,
+                                          dragPayload.wodKey,
+                                          dragPayload.exerciseId,
+                                          weekEntry.week_number,
+                                          wodEntry.key,
+                                          null,
+                                        )
+                                      } catch {
+                                        return
+                                      }
+                                    }}
+                                  >
+                                    No exercises added yet. Drag an exercise here.
+                                  </p>
                                 ) : (
-                                  <ul className="programs-plan-exercise-list">
+                                  <ul
+                                    className="programs-plan-exercise-list"
+                                    onDragOver={(event) => {
+                                      if (!canEditSelectedProgram || !isDetailsEditMode) return
+                                      event.preventDefault()
+                                      event.dataTransfer.dropEffect = "move"
+                                    }}
+                                    onDrop={(event) => {
+                                      if (!canEditSelectedProgram || !isDetailsEditMode) return
+                                      event.preventDefault()
+                                      try {
+                                        const dragPayload = JSON.parse(event.dataTransfer.getData("text/plain") || "null")
+                                        if (!dragPayload) return
+                                        handleDragReorderDetailExercise(
+                                          dragPayload.weekNumber,
+                                          dragPayload.wodKey,
+                                          dragPayload.exerciseId,
+                                          weekEntry.week_number,
+                                          wodEntry.key,
+                                          null,
+                                        )
+                                      } catch {
+                                        return
+                                      }
+                                    }}
+                                  >
                                     {wodEntry.exercise_entries.map((exerciseEntry, exerciseIndex) => (
                                       <li
                                         key={`details-${weekEntry.week_number}-${wodEntry.key}-${exerciseEntry.exercise_id}`}
@@ -3764,9 +4000,11 @@ function Programs({
                                               return
                                             }
                                             handleDragReorderDetailExercise(
+                                              dragPayload.weekNumber,
+                                              dragPayload.wodKey,
+                                              dragPayload.exerciseId,
                                               weekEntry.week_number,
                                               wodEntry.key,
-                                              dragPayload.exerciseId,
                                               exerciseEntry.exercise_id,
                                             )
                                           } catch {
