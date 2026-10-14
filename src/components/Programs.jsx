@@ -27,8 +27,17 @@ const DEFAULT_DURATION_MAX = 12
 const PROGRAMS_CHOICES_CACHE_KEY = "wodtrackrProgramChoicesV4"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
+const WEEKDAY_OPTIONS = [
+  { value: 0, label: "Sun" },
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+]
 
-const normalizeApiErrorMessage = (value, fallbackMessage = "") => {
+export const normalizeApiErrorMessage = (value, fallbackMessage = "") => {
   const extractMessage = (candidate) => {
     if (candidate === null || candidate === undefined) return ""
     if (typeof candidate === "string") return candidate.trim()
@@ -511,10 +520,7 @@ const addWodToWeekPlan = (durationValue, currentPlan, weekNumber, wodPayload) =>
 
 const updateWodInWeekPlan = (durationValue, currentPlan, weekNumber, wodKey, updates) => {
   const normalizedWeek = Number(weekNumber)
-  console.log("Normalized Week:", normalizedWeek)
-  console.log("WOD Key:", wodKey)
   const normalizedWodKey = String(wodKey || "")
-  console.log("Normalized WOD Key:", normalizedWodKey)
   if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey) {
     return buildWorkoutPlanForDuration(durationValue, currentPlan)
   }
@@ -1258,12 +1264,10 @@ const parseCheckoutSessionResponse = (responseData) => {
 
 const buildCheckoutReturnUrl = (type, programId) => {
   const basePath = window.location.origin + window.location.pathname
-  console.log("Building checkout return URL with basePath:", basePath, "type:", type, "programId:", programId)
   const query = new URLSearchParams({
     checkout: type,
     programId: String(programId),
   })
-  console.log("Constructed query parameters:", query.toString())
   return `${basePath}?${query.toString()}`
 }
 
@@ -1560,6 +1564,7 @@ function Programs({
   // Schedule-to-calendar state
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false)
   const [scheduleStartDate, setScheduleStartDate] = useState("")
+  const [scheduleDaysOfWeek, setScheduleDaysOfWeek] = useState([])
   const [scheduleError, setScheduleError] = useState("")
   const [scheduleSuccess, setScheduleSuccess] = useState("")
   const [visibleProgramsCount, setVisibleProgramsCount] = useState(PAGE_SIZE)
@@ -1704,7 +1709,6 @@ function Programs({
   const categoryFilterOptions = categories
 
   const goals = useMemo(() => {
-    console.log("goalChoices: ", goalChoices)
     if (goalChoices.length > 0) {
       const seen = new Map()
       for (const c of goalChoices) {
@@ -1715,7 +1719,6 @@ function Programs({
     const fromPrograms = programs.map((p) => p?.goal).filter(Boolean)
     return [...new Set(fromPrograms)].sort().map((v) => ({ value: v, label: v }))
   }, [programs, goalChoices])
-  console.log("goals: ", goals)
 
   const equipments = useMemo(() => {
     if (equipmentChoices.length > 0) {
@@ -1786,7 +1789,6 @@ function Programs({
 
   const filteredAndSortedProgramsLibrary = useMemo(() => {
     let result = [...programs]
-    console.log("result", result)
 
     if (searchName.trim()) {
       const query = searchName.trim().toLowerCase()
@@ -2011,7 +2013,6 @@ function Programs({
 
     setCreateFormValues((prev) => {
       const nextFormValues = { ...prev, [name]: nextValue }
-      console.log(`Updated create form field "${name}" to value:`, nextValue)
       if (name === "duration_weeks") {
         nextFormValues.workout_plan = buildWorkoutPlanForDuration(nextValue, prev.workout_plan)
       }
@@ -2159,9 +2160,7 @@ function Programs({
     setIsCreateSubmitting(true)
     try {
       const normalizedWorkoutPlan = buildWorkoutPlanForDuration(createFormValues.duration_weeks, workoutPlan)
-      console.log("Normalized workout plan for submission:", normalizedWorkoutPlan)
       const selectedExerciseIds = [...new Set(normalizedWorkoutPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))]
-      console.log("Selected exercise IDs for submission:", selectedExerciseIds)
       const payload = {
         name: createFormValues.title.trim(),
         description: createFormValues.description.trim(),
@@ -2261,6 +2260,11 @@ function Programs({
     setDetailPlanWeek(1)
     setDetailPlanWodKey("")
     setDetailPlanWorkoutId("")
+    setIsScheduleModalOpen(false)
+    setScheduleStartDate("")
+    setScheduleDaysOfWeek([])
+    setScheduleError("")
+    setScheduleSuccess("")
     setEditImageFile(null)
     setEditImagePreview("")
     if (editImageInputRef.current) {
@@ -2309,12 +2313,6 @@ function Programs({
 
   const handleEditImageChange = (event) => {
     const file = event.target.files?.[0] ?? null
-    console.log("[Programs] handleEditImageChange", {
-      hasFile: Boolean(file),
-      fileName: file?.name,
-      fileType: file?.type,
-      fileSize: file?.size,
-    })
     setEditImageFile(file)
     if (file) {
       const objectUrl = URL.createObjectURL(file)
@@ -2396,10 +2394,6 @@ function Programs({
         axios.get(`${API_URL}${programId}/`, buildRequestConfig()),
         axios.get(buildProgramItemsApiUrl(programId), buildRequestConfig()).catch(() => null),
       ])
-      console.log("[Programs] Loaded program detail and items", {
-        detailResponse,
-        itemsResponse,
-      })
       const detail = normalizeProgramDetailPayload(detailResponse?.data)
       if (!detail) {
         throw new Error("No detail payload")
@@ -2441,11 +2435,6 @@ function Programs({
 
   const handleUpdateProgram = async (event) => {
     event.preventDefault()
-    console.log("[Programs] handleUpdateProgram start", {
-      selectedProgramId,
-      isDetailsEditMode,
-      canEditSelectedProgram,
-    })
     if (!selectedProgramId) return
 
     setEditErrorMessage("")
@@ -2494,12 +2483,6 @@ function Programs({
         }
       }
       const pendingImageFile = editImageInputRef.current?.files?.[0] ?? editImageFile
-      console.log("[Programs] pendingImageFile check", {
-        hasPendingImageFile: Boolean(pendingImageFile),
-        fromInputRef: Boolean(editImageInputRef.current?.files?.[0]),
-        fromState: Boolean(editImageFile),
-        pendingFileName: pendingImageFile?.name,
-      })
       if (pendingImageFile) {
         const authToken = getAuthToken()
         const imageRequestConfig = authToken
@@ -2509,14 +2492,6 @@ function Programs({
           const imageUploadUrl = `${API_URL}${selectedProgramId}/`
           const imageFormData = new FormData()
           imageFormData.append("program_image", pendingImageFile)
-          console.log("[Programs] Uploading banner image", {
-            url: imageUploadUrl,
-            programId: selectedProgramId,
-            fileName: pendingImageFile?.name,
-            fileType: pendingImageFile?.type,
-            fileSize: pendingImageFile?.size,
-            fieldName: "program_image",
-          })
           let imageUploadResponse
           try {
             imageUploadResponse = await axios.patch(imageUploadUrl, imageFormData, imageRequestConfig)
@@ -2675,11 +2650,8 @@ function Programs({
     if (!selectedProgramId) return
 
     setCheckoutErrorMessage("")
-    console.log("[Programs] handleBuyProgram start", { selectedProgramId, selectedProgramDetails, selectedProgram })
     setIsCheckoutSubmitting(true)
-    console.log("[Programs] handleBuyProgram checkout submitting state set to true")
     try {
-      console.log("[Programs] handleBuyProgram building checkout URLs and payload")
       const successUrl = buildCheckoutReturnUrl("success", selectedProgramId)
       const cancelUrl = buildCheckoutReturnUrl("cancel", selectedProgramId)
       const programTitle = getProgramCheckoutTitle(selectedProgramDetails, selectedProgram, editFormValues)
@@ -2691,9 +2663,7 @@ function Programs({
         cancel_url: cancelUrl,
       }
       const response = await axios.post(STRIPE_CHECKOUT_API_URL, payload, buildRequestConfig())
-      console.log("[Programs] handleBuyProgram received checkout session response", { response })
       const { checkoutUrl, sessionId } = parseCheckoutSessionResponse(response?.data)
-      console.log("[Programs] handleBuyProgram parsed checkout session response", { checkoutUrl, sessionId })
       if (checkoutUrl) {
         savePendingCheckoutProgramId(selectedProgramId)
         window.location.assign(checkoutUrl)
@@ -2825,8 +2795,10 @@ function Programs({
       setScheduleError("Only program owners or users who purchased this program can schedule it.")
       return
     }
-    const todayStr = new Date().toISOString().slice(0, 10)
+    const today = new Date()
+    const todayStr = today.toISOString().slice(0, 10)
     setScheduleStartDate(todayStr)
+    setScheduleDaysOfWeek([today.getDay()])
     setScheduleError("")
     setScheduleSuccess("")
     setIsScheduleModalOpen(true)
@@ -2836,6 +2808,18 @@ function Programs({
     setIsScheduleModalOpen(false)
     setScheduleError("")
     setScheduleSuccess("")
+    setScheduleDaysOfWeek([])
+  }
+
+  const toggleScheduleDayOfWeek = (dayValue) => {
+    const normalizedDay = Number(dayValue)
+    if (!Number.isFinite(normalizedDay) || normalizedDay < 0 || normalizedDay > 6) return
+    setScheduleDaysOfWeek((prev) => {
+      const exists = prev.includes(normalizedDay)
+      const next = exists ? prev.filter((entry) => entry !== normalizedDay) : [...prev, normalizedDay]
+      return [...new Set(next)].sort((a, b) => a - b)
+    })
+    setScheduleError("")
   }
 
   const handleScheduleProgram = () => {
@@ -2845,6 +2829,10 @@ function Programs({
     }
     if (!scheduleStartDate) {
       setScheduleError("Please select a start date.")
+      return
+    }
+    if (!Array.isArray(scheduleDaysOfWeek) || scheduleDaysOfWeek.length === 0) {
+      setScheduleError("Please select at least one day to schedule this program.")
       return
     }
 
@@ -2896,32 +2884,55 @@ function Programs({
 
     const nextEntries = { ...existingEntries }
 
+    const sortedScheduleDays = [...new Set(scheduleDaysOfWeek)]
+      .map((entry) => Number(entry))
+      .filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6)
+      .sort((a, b) => a - b)
+    if (sortedScheduleDays.length === 0) {
+      setScheduleError("Please select at least one day to schedule this program.")
+      return
+    }
     for (const weekEntry of plan) {
       const weekNumber = Number(weekEntry?.week_number)
       if (!Number.isFinite(weekNumber) || weekNumber < 1) continue
 
-      const exerciseIds = Array.isArray(weekEntry?.exercise_ids)
-        ? weekEntry.exercise_ids.map(Number).filter((id) => Number.isFinite(id))
-        : []
-
-      // Place workout on Monday of that week (startDate is day 1 of week 1)
+      const wods = buildWodsFromWeekEntry(weekEntry).filter((wodEntry) => !wodEntry.is_rest)
+      const normalizedWods = wods.length > 0 ? wods : [{ key: `week-${weekNumber}-summary`, title: `Week ${weekNumber}`, exercise_entries: [] }]
       const weekOffset = (weekNumber - 1) * 7
-      const workoutDate = new Date(startDate)
-      workoutDate.setDate(startDate.getDate() + weekOffset)
-      const dateKey = toDateKey(workoutDate)
+      const weekStartDate = new Date(startDate)
+      weekStartDate.setDate(startDate.getDate() + weekOffset)
+      const weekStartDay = weekStartDate.getDay()
+      const daySlotsForWeek = sortedScheduleDays.map((dayValue) => ({
+        dayValue,
+        offset: (dayValue - weekStartDay + 7) % 7,
+      }))
 
-      const newEntry = {
-        id: generateEntryId(),
-        title: `${programName} – Week ${weekNumber}`,
-        time: "",
-        notes: `Week ${weekNumber} of ${programName} (${plan.length}-week program)`,
-        programId,
-        programName,
-        weekNumber,
-        exerciseIds,
+      for (let wodIndex = 0; wodIndex < normalizedWods.length; wodIndex += 1) {
+        const wodEntry = normalizedWods[wodIndex]
+        const daySlot = daySlotsForWeek[wodIndex % daySlotsForWeek.length]
+        const workoutDate = new Date(weekStartDate)
+        workoutDate.setDate(weekStartDate.getDate() + daySlot.offset)
+        const dateKey = toDateKey(workoutDate)
+        const exerciseIds = Array.isArray(wodEntry?.exercise_entries)
+          ? wodEntry.exercise_entries
+            .map((entry) => Number(entry?.exercise_id))
+            .filter((id) => Number.isFinite(id))
+          : []
+        const wodTitle = String(wodEntry?.title || `WOD ${wodIndex + 1}`)
+        const newEntry = {
+          id: generateEntryId(),
+          title: `${programName} – Week ${weekNumber} – ${wodTitle}`,
+          time: "",
+          notes: `${wodTitle} • Week ${weekNumber} of ${programName} (${plan.length}-week program)`,
+          programId,
+          programName,
+          weekNumber,
+          exerciseIds,
+          wodKey: wodEntry?.key ? String(wodEntry.key) : "",
+        }
+
+        nextEntries[dateKey] = [...(nextEntries[dateKey] || []), newEntry]
       }
-
-      nextEntries[dateKey] = [...(nextEntries[dateKey] || []), newEntry]
     }
 
     try {
@@ -2931,7 +2942,13 @@ function Programs({
       return
     }
 
-    setScheduleSuccess(`Scheduled ${plan.length} week${plan.length !== 1 ? "s" : ""} starting ${scheduleStartDate}. Check your Calendar!`)
+    const selectedDayLabels = WEEKDAY_OPTIONS
+      .filter((entry) => sortedScheduleDays.includes(entry.value))
+      .map((entry) => entry.label)
+      .join(", ")
+    setScheduleSuccess(
+      `Scheduled ${plan.length} week${plan.length !== 1 ? "s" : ""} starting ${scheduleStartDate} on ${selectedDayLabels}. Check your Calendar!`,
+    )
     setScheduleError("")
   }
 
@@ -3058,7 +3075,6 @@ function Programs({
             aria-label={!isProgramsLoading && filteredAndSortedProgramsLibrary.length > 0 ? "Programs" : undefined}
             aria-busy={isProgramsLoading}
           >
-            {console.log("isProgramsLoading:", isProgramsLoading, "filteredAndSortedProgramsLibrary.length:", filteredAndSortedProgramsLibrary.length)}
             {isProgramsLoading ? (
               Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (
                 <div className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`} aria-hidden="true">
@@ -3072,7 +3088,6 @@ function Programs({
               <p className="exercise-empty" role="status">No programs found.</p>
             ) : (
               visiblePrograms.map((program, index) => {
-                console.log("Rendering program:", program)
                 const programImageUrl = String(getProgramImageUrl(program))
                 return (
                   <article
@@ -3606,7 +3621,6 @@ function Programs({
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </button>
-              {console.log("Selected Program Image URL", { selectedProgramImageUrl })}
               {selectedProgramImageUrl ? (
                 <div className="programs-banner-preview">
                   <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
@@ -3787,7 +3801,6 @@ function Programs({
                   </p>
                 </section>
               )}
-              {console.log("is loading: ", isProgramsLoading, "has more visible programs: ", hasMoreVisiblePrograms, "visible programs count: ", visibleProgramsCount)}
               {!isProgramsLoading && hasMoreVisiblePrograms ? (
                 <div className="exercise-search-actions">
                   <button type="button" className="exercise-secondary-btn" onClick={handleLoadMorePrograms}>
@@ -4110,6 +4123,98 @@ function Programs({
                 </section>
               ) : null}
 
+              {!isDetailsEditMode && canScheduleSelectedProgram && isScheduleModalOpen ? (
+                <section className="programs-schedule-inline" aria-label="Schedule program to calendar">
+                  <h3 className="programs-modal-title">Schedule to Calendar</h3>
+                  <p className="programs-schedule-description">
+                    Choose a start date for <strong>{(programDetailsById[selectedProgramId] ?? selectedProgram)?.name || (programDetailsById[selectedProgramId] ?? selectedProgram)?.title || "this program"}</strong>.
+                    Checkmark the day(s) you want workouts on each week.
+                  </p>
+
+                  {scheduleError ? (
+                    <p className="programs-modal-error" role="alert">{scheduleError}</p>
+                  ) : null}
+
+                  {scheduleSuccess ? (
+                    <p className="programs-schedule-success" role="status">{scheduleSuccess}</p>
+                  ) : null}
+
+                  {!scheduleSuccess ? (
+                    <>
+                      <label className="programs-modal-field programs-schedule-date-field">
+                        <span>Start Date</span>
+                        <input
+                          type="date"
+                          value={scheduleStartDate}
+                          onChange={(e) => {
+                            setScheduleStartDate(e.target.value)
+                            setScheduleError("")
+                            if (!Array.isArray(scheduleDaysOfWeek) || scheduleDaysOfWeek.length === 0) {
+                              const [year, month, day] = String(e.target.value || "").split("-").map(Number)
+                              if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+                                const nextDate = new Date(year, month - 1, day)
+                                setScheduleDaysOfWeek([nextDate.getDay()])
+                              }
+                            }
+                          }}
+                        />
+                      </label>
+
+                      <div className="programs-schedule-days">
+                        <span className="programs-field-label">Workout Days</span>
+                        <div className="programs-schedule-days-grid">
+                          {WEEKDAY_OPTIONS.map((dayOption) => (
+                            <button
+                              key={dayOption.value}
+                              type="button"
+                              className={`programs-schedule-day-pill${scheduleDaysOfWeek.includes(dayOption.value) ? " is-selected" : ""}`}
+                              onClick={() => toggleScheduleDayOfWeek(dayOption.value)}
+                              aria-pressed={scheduleDaysOfWeek.includes(dayOption.value)}
+                            >
+                              <span className="programs-schedule-day-pill-check" aria-hidden="true">
+                                {scheduleDaysOfWeek.includes(dayOption.value) ? "✓" : ""}
+                              </span>
+                              <span>{dayOption.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                        <p className="programs-schedule-days-selected">
+                          {scheduleDaysOfWeek.length > 0
+                            ? `Selected: ${WEEKDAY_OPTIONS.filter((entry) => scheduleDaysOfWeek.includes(entry.value)).map((entry) => entry.label).join(", ")}`
+                            : "No days selected."}
+                        </p>
+                      </div>
+
+                      <p className="programs-plan-helper">
+                        {detailWorkoutPlan.length > 0
+                          ? "This will create calendar entries for each selected day and WOD in every program week."
+                          : "No workout plan found. Please add weeks to this program first."}
+                      </p>
+
+                      <div className="programs-modal-actions">
+                        <button
+                          type="button"
+                          className="programs-modal-primary-btn"
+                          onClick={handleScheduleProgram}
+                          disabled={detailWorkoutPlan.length === 0}
+                        >
+                          Confirm Schedule
+                        </button>
+                        <button type="button" className="programs-modal-secondary-btn" onClick={handleCloseScheduleModal}>
+                          Cancel
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="programs-modal-actions">
+                      <button type="button" className="programs-modal-primary-btn" onClick={handleCloseScheduleModal}>
+                        Done
+                      </button>
+                    </div>
+                  )}
+                </section>
+              ) : null}
+
               <div className="programs-modal-actions">
                 {!isDetailsEditMode && !isWorkoutPlanUnlocked ? (
                   <button
@@ -4135,10 +4240,16 @@ function Programs({
                   <button
                     type="button"
                     className="programs-schedule-btn"
-                    onClick={handleOpenScheduleModal}
+                    onClick={() => {
+                      if (isScheduleModalOpen) {
+                        handleCloseScheduleModal()
+                        return
+                      }
+                      handleOpenScheduleModal()
+                    }}
                     disabled={detailLoadingId === selectedProgramId}
                   >
-                    Schedule to Calendar
+                    {isScheduleModalOpen ? "Hide Schedule" : "Schedule to Calendar"}
                   </button>
                 ) : null}
                 {canEditSelectedProgram && isDetailsEditMode ? (
@@ -4162,83 +4273,6 @@ function Programs({
         </div>
       ) : null}
 
-      {isScheduleModalOpen ? (
-        <div className="programs-modal-backdrop" role="presentation" onClick={handleCloseScheduleModal}>
-          <aside
-            className="programs-modal programs-schedule-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Schedule program to calendar"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="programs-modal-header">
-              <button type="button" className="programs-btn-base programs-modal-secondary-btn" onClick={handleCloseScheduleModal} aria-label="Close schedule modal">
-                <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              </button>
-              <h2 className="programs-modal-title">Schedule to Calendar</h2>
-            </header>
-
-            <div className="programs-modal-form">
-              <p className="programs-schedule-description">
-                Choose a start date for <strong>{(programDetailsById[selectedProgramId] ?? selectedProgram)?.name || (programDetailsById[selectedProgramId] ?? selectedProgram)?.title || "this program"}</strong>.
-                One workout entry will be added to your calendar for each week of the program.
-              </p>
-
-              {scheduleError ? (
-                <p className="programs-modal-error" role="alert">{scheduleError}</p>
-              ) : null}
-
-              {scheduleSuccess ? (
-                <p className="programs-schedule-success" role="status">{scheduleSuccess}</p>
-              ) : null}
-
-              {!scheduleSuccess ? (
-                <>
-                  <label className="programs-modal-field programs-schedule-date-field">
-                    <span>Start Date</span>
-                    <input
-                      type="date"
-                      value={scheduleStartDate}
-                      onChange={(e) => {
-                        setScheduleStartDate(e.target.value)
-                        setScheduleError("")
-                      }}
-                    />
-                  </label>
-
-                  <p className="programs-plan-helper">
-                    {detailWorkoutPlan.length > 0
-                      ? `This will create ${detailWorkoutPlan.length} calendar entr${detailWorkoutPlan.length !== 1 ? "ies" : "y"} (one per week).`
-                      : "No workout plan found. Please add weeks to this program first."}
-                  </p>
-
-                  <div className="programs-modal-actions">
-                    <button
-                      type="button"
-                      className="programs-modal-primary-btn"
-                      onClick={handleScheduleProgram}
-                      disabled={detailWorkoutPlan.length === 0}
-                    >
-                      Confirm Schedule
-                    </button>
-                    <button type="button" className="programs-modal-secondary-btn" onClick={handleCloseScheduleModal}>
-                      Cancel
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="programs-modal-actions">
-                  <button type="button" className="programs-modal-primary-btn" onClick={handleCloseScheduleModal}>
-                    Done
-                  </button>
-                </div>
-              )}
-            </div>
-          </aside>
-        </div>
-      ) : null}
     </main>
   )
 }

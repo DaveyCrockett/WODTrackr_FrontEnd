@@ -83,9 +83,9 @@ describe("Programs Component", () => {
     })
     axios.put.mockResolvedValue({ data: { ...mockProgram, name: "Updated Strength Cycle" } })
 
-    render(<Programs />)
+    render(<Programs programs={[listedProgram]} />)
 
-    await screen.findByText("Strength Cycle")
+    await screen.findByRole("heading", { name: /strength cycle/i })
     await waitFor(() => {
       expect(window.location.search).toBe("")
     })
@@ -151,11 +151,13 @@ describe("Programs Component", () => {
     })
     axios.put.mockResolvedValue({ data: putResponse })
 
-    render(<Programs />)
+    render(<Programs programs={[listedProgram]} />)
 
     // Open details and edit
-    await screen.findByText("Strength Cycle")
-    await userEvent.click(screen.getByRole("button", { name: "View Details" }))
+    const programHeading = await screen.findByRole("heading", { name: /strength cycle/i })
+    const programCard = programHeading.closest("article")
+    expect(programCard).not.toBeNull()
+    await userEvent.click(programCard)
     await screen.findByRole("dialog")
     await userEvent.click(screen.getByRole("button", { name: "Edit Program" }))
     await screen.findByRole("textbox", { name: "Title" })
@@ -191,8 +193,10 @@ describe("Programs Component", () => {
 
     render(<Programs />)
 
-    await screen.findByText("Strength Cycle")
-    await userEvent.click(screen.getByRole("button", { name: "View Details" }))
+    const programHeading = await screen.findByRole("heading", { name: /strength cycle/i })
+    const programCard = programHeading.closest("article")
+    expect(programCard).not.toBeNull()
+    await userEvent.click(programCard)
     await screen.findByRole("dialog")
     await userEvent.click(screen.getByRole("button", { name: "Edit Program" }))
 
@@ -219,7 +223,7 @@ describe("Programs Component", () => {
 
     render(<Programs />)
 
-    await screen.findByText("Strength Cycle")
+    await screen.findByRole("heading", { name: /strength cycle/i })
     await userEvent.click(screen.getByRole("button", { name: "New Program" }))
     const createDialog = await screen.findByRole("dialog", { name: "Create New Program" })
 
@@ -267,9 +271,9 @@ describe("Programs Component", () => {
       return Promise.resolve({ data: {} })
     })
 
-    render(<Programs />)
+    render(<Programs programs={[listedProgram]} />)
 
-    await screen.findByText("Strength Cycle")
+    await screen.findByRole("heading", { name: /strength cycle/i })
     await userEvent.click(screen.getByRole("button", { name: "New Program" }))
     const createDialog = await screen.findByRole("dialog", { name: "Create New Program" })
 
@@ -457,4 +461,5 @@ describe("Programs Component", () => {
     expect(within(dialog).queryByRole("button", { name: "Buy Program" })).not.toBeInTheDocument()
     expect(within(dialog).getByText("Purchased workout plan view.")).toBeInTheDocument()
   })
+
 })

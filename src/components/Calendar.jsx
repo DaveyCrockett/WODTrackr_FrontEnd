@@ -23,6 +23,32 @@ const SCORE_TYPE_OPTIONS = [
   { value: "rounds_reps", label: "Rounds + Reps" },
   { value: "load", label: "Load" },
 ]
+const DAY_SLOT_HOURS = Array.from({ length: 13 }, (_, index) => index)
+
+const formatDaySlotLabel = (hour) => {
+  const normalizedHour = Number(hour)
+  const period = normalizedHour < 12 ? "AM" : "PM"
+  const displayHour = normalizedHour % 12 === 0 ? 12 : normalizedHour % 12
+  return `${displayHour}:00 ${period}`
+}
+
+const formatDaySlotTimeValue = (hour) => `${String(hour).padStart(2, "0")}:00`
+
+const getEntryHour = (timeValue) => {
+  const parsedTime = String(timeValue || "").trim()
+  const match = /^(\d{1,2}):(\d{2})/.exec(parsedTime)
+  if (!match) return null
+  const hour = Number(match[1])
+  if (!Number.isFinite(hour) || hour < 0 || hour > 23) return null
+  return hour
+}
+
+const getDaySlotKeyForEntry = (entry) => {
+  const hour = getEntryHour(entry?.time)
+  if (hour === null) return "unslotted"
+  if (hour >= 0 && hour <= 12) return String(hour)
+  return "unslotted"
+}
 
 const toDateKey = (dateValue) => {
   const year = dateValue.getFullYear()
@@ -219,6 +245,8 @@ function Calendar() {
   const [addFormValues, setAddFormValues] = useState(EMPTY_WORKOUT_FORM)
   const [editFormValues, setEditFormValues] = useState(EMPTY_ENTRY_FORM)
   const [formError, setFormError] = useState("")
+  const [draggingDayEntryId, setDraggingDayEntryId] = useState(null)
+  const [dragOverDaySlotKey, setDragOverDaySlotKey] = useState("")
   const [exerciseLibrary, setExerciseLibrary] = useState([])
   const [isExerciseLibraryLoading, setIsExerciseLibraryLoading] = useState(false)
   const [exerciseLibraryError, setExerciseLibraryError] = useState("")
@@ -423,6 +451,22 @@ function Calendar() {
         : [],
     [selectedEntry],
   )
+  const dayEntriesBySlot = useMemo(() => {
+    const bucketedEntries = DAY_SLOT_HOURS.reduce((accumulator, hour) => {
+      accumulator[String(hour)] = []
+      return accumulator
+    }, { unslotted: [] })
+
+    for (const entry of selectedEntries) {
+      const slotKey = getDaySlotKeyForEntry(entry)
+      if (!Array.isArray(bucketedEntries[slotKey])) {
+        bucketedEntries[slotKey] = []
+      }
+      bucketedEntries[slotKey].push(entry)
+    }
+
+    return bucketedEntries
+  }, [selectedEntries])
 
   const goToPreviousMonth = () => {
     setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
@@ -444,6 +488,19 @@ function Calendar() {
       return d
     })
   }
+  const shiftSelectedDay = (dayOffset) => {
+    const currentDate = fromDateKey(selectedDateKey)
+    currentDate.setDate(currentDate.getDate() + dayOffset)
+    const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
+    const nextDateKey = toDateKey(nextDate)
+    const startOfWeek = new Date(nextDate)
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay())
+    selectDate(nextDateKey)
+    setCurrentMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1))
+    setWeekStart(new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate()))
+  }
+  const goToPreviousDay = () => shiftSelectedDay(-1)
+  const goToNextDay = () => shiftSelectedDay(1)
 
   const goToToday = () => {
     const now = new Date()
@@ -626,6 +683,26 @@ function Calendar() {
     setFormError("")
   }
 
+  const handleDayEntryDragStart = (entryId) => {
+    setDraggingDayEntryId(entryId)
+  }
+
+  const handleDayEntryDropToSlot = (targetSlotKey) => {
+    if (!draggingDayEntryId) return
+
+    const nextTimeValue = targetSlotKey === "unslotted" ? "" : formatDaySlotTimeValue(targetSlotKey)
+    const nextEntries = {
+      ...entriesByDate,
+      [selectedDateKey]: (entriesByDate[selectedDateKey] || []).map((entry) =>
+        entry.id === draggingDayEntryId ? { ...entry, time: nextTimeValue } : entry,
+      ),
+    }
+    persistEntries(nextEntries)
+    setSelectedEntryId(draggingDayEntryId)
+    setDraggingDayEntryId(null)
+    setDragOverDaySlotKey("")
+  }
+
   // ── Delete entry ───────────────────────────────────────────
   const handleDeleteEntry = (entryId) => {
     const nextList = (entriesByDate[selectedDateKey] || []).filter((entry) => entry.id !== entryId)
@@ -679,14 +756,21 @@ function Calendar() {
           >
             Week
           </button>
+          <button
+            type="button"
+            className={`calendar-view-btn${viewMode === "day" ? " is-active" : ""}`}
+            onClick={() => setViewMode("day")}
+          >
+            Day
+          </button>
         </div>
 
-        <div className="calendar-nav-controls" aria-label={viewMode === "month" ? "Change month" : "Change week"}>
-          <button type="button" onClick={viewMode === "month" ? goToPreviousMonth : goToPreviousWeek}>
+        <div className="calendar-nav-controls" aria-label={viewMode === "month" ? "Change month" : viewMode === "week" ? "Change week" : "Change day"}>
+          <button type="button" onClick={viewMode === "month" ? goToPreviousMonth : viewMode === "week" ? goToPreviousWeek : goToPreviousDay}>
             Prev
           </button>
-          <p>{viewMode === "month" ? monthLabel : weekLabel}</p>
-          <button type="button" onClick={viewMode === "month" ? goToNextMonth : goToNextWeek}>
+          <p>{viewMode === "month" ? monthLabel : viewMode === "week" ? weekLabel : selectedDateLabel}</p>
+          <button type="button" onClick={viewMode === "month" ? goToNextMonth : viewMode === "week" ? goToNextWeek : goToNextDay}>
             Next
           </button>
           <button type="button" className="calendar-today-btn" onClick={goToToday}>
@@ -744,7 +828,7 @@ function Calendar() {
             </div>
           </section>
 
-        ) : (
+        ) : viewMode === "week" ? (
           /* ── Week view ── */
           <section className="calendar-board" aria-label="Weekly calendar">
             <div className="calendar-weekdays">
@@ -803,6 +887,103 @@ function Calendar() {
                   </div>
                 )
               })}
+            </div>
+          </section>
+        ) : (
+          /* ── Day view ── */
+          <section className="calendar-board" aria-label="Daily calendar">
+            <div className="calendar-day-view-header">
+              <p>{selectedDateLabel}</p>
+            </div>
+            <div className="calendar-day-slots">
+              {DAY_SLOT_HOURS.map((hour) => {
+                const slotKey = String(hour)
+                const slotEntries = dayEntriesBySlot[slotKey] || []
+                return (
+                  <div
+                    key={`day-slot-${slotKey}`}
+                    className={`calendar-day-slot${dragOverDaySlotKey === slotKey ? " is-drag-over" : ""}`}
+                    onDragOver={(event) => {
+                      event.preventDefault()
+                      setDragOverDaySlotKey(slotKey)
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverDaySlotKey === slotKey) setDragOverDaySlotKey("")
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      handleDayEntryDropToSlot(slotKey)
+                    }}
+                  >
+                    <div className="calendar-day-slot-label">{formatDaySlotLabel(hour)}</div>
+                    <div className="calendar-day-slot-events">
+                      {slotEntries.length === 0 ? (
+                        <p className="calendar-day-slot-empty">—</p>
+                      ) : (
+                        slotEntries.map((entry) => (
+                          <button
+                            key={entry.id}
+                            type="button"
+                            draggable
+                            className={`calendar-week-entry calendar-day-entry${selectedEntryId === entry.id ? " is-selected" : ""}${entry.programId ? " is-program" : ""}`}
+                            onDragStart={() => handleDayEntryDragStart(entry.id)}
+                            onDragEnd={() => {
+                              setDraggingDayEntryId(null)
+                              setDragOverDaySlotKey("")
+                            }}
+                            onClick={() => setSelectedEntryId(entry.id)}
+                            title={`${entry.title} (${entry.time || "No time set"})`}
+                          >
+                            {entry.time ? <span className="calendar-week-entry-time">{entry.time}</span> : null}
+                            <span className="calendar-week-entry-title">{entry.title}</span>
+                            {entry.programId ? <span className="calendar-entry-program-badge">Program</span> : null}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {(dayEntriesBySlot.unslotted || []).length > 0 ? (
+                <div
+                  className={`calendar-day-slot calendar-day-slot-unslotted${dragOverDaySlotKey === "unslotted" ? " is-drag-over" : ""}`}
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    setDragOverDaySlotKey("unslotted")
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverDaySlotKey === "unslotted") setDragOverDaySlotKey("")
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    handleDayEntryDropToSlot("unslotted")
+                  }}
+                >
+                  <div className="calendar-day-slot-label">Unscheduled / Other Times</div>
+                  <div className="calendar-day-slot-events">
+                    {dayEntriesBySlot.unslotted.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        draggable
+                        className={`calendar-week-entry calendar-day-entry${selectedEntryId === entry.id ? " is-selected" : ""}${entry.programId ? " is-program" : ""}`}
+                        onDragStart={() => handleDayEntryDragStart(entry.id)}
+                        onDragEnd={() => {
+                          setDraggingDayEntryId(null)
+                          setDragOverDaySlotKey("")
+                        }}
+                        onClick={() => setSelectedEntryId(entry.id)}
+                        title={`${entry.title} (${entry.time || "No time set"})`}
+                      >
+                        {entry.time ? <span className="calendar-week-entry-time">{entry.time}</span> : null}
+                        <span className="calendar-week-entry-title">{entry.title}</span>
+                        {entry.programId ? <span className="calendar-entry-program-badge">Program</span> : null}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </section>
         )}
