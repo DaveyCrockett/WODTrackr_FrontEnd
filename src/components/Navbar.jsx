@@ -5,8 +5,8 @@ import calendarIcon from "../assets/CalendarIconWhite.png"
 import programsIcon from "../assets/ProgramsIconWhite.png"
 import settingsIcon from "../assets/SettingsIcon.png"
 import helpIcon from "../assets/HelpIcon.png"
-import wLogo from "../assets/WLogo.png"
-
+import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
+import DEFAULT_AVATAR from "../assets/WLogo.png"
 const navItems = [
   { label: "Home", to: "/", icon: homeIcon },
   { label: "Exercise", to: "/exercises", icon: exerciseIcon },
@@ -15,8 +15,6 @@ const navItems = [
   { label: "Settings", to: "/settings", icon: settingsIcon },
   { label: "Help", to: "/help", icon: helpIcon },
 ]
-
-const DEFAULT_AVATAR = wLogo
 
 const getStoredUser = () => {
   try {
@@ -45,7 +43,7 @@ function Navbar() {
   return (
     <nav className="nav-rail">
       <div className="nav-logo">
-        <img src={wLogo} alt="WODTrackr logo" />
+        <img src={WODTrackrLogo} alt="WODTrackr logo" />
       </div>
       <div className="nav-links">
         <div className="nav-profile-menu">
