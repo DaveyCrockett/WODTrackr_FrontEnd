@@ -5,8 +5,13 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import MultiSelect from "./MultiSelect"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
-const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 const EQUIPMENT_API_URL = "/api/wodtrackr/equipment/"
+const STRIPE_CHECKOUT_API_URL = String(
+  import.meta.env.VITE_CHECKOUT_SESSION_API_URL || "/api/users/billing/stripe/checkout-session/",
+).trim()
+const WORKOUTS_STORAGE_KEY = "wodtrackrWorkouts"
+const PURCHASED_PROGRAMS_STORAGE_KEY = "wodtrackrPurchasedProgramIds"
+const PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY = "wodtrackrPendingCheckoutProgramId"
 const PROGRAMS_PER_PAGE = 10
 const DEFAULT_DIFFICULTIES = ["All Levels", "Beginner", "Intermediate", "Advanced"]
 const DEFAULT_DURATION_MIN = 1
@@ -216,7 +221,7 @@ const getWorkoutPlanValidationMessage = (durationValue, workoutPlan) => {
   }
 
   if (weeksWithExercises.length !== normalizedWorkoutPlan.length) {
-    return "Each week in the workout plan must include at least 1 exercise."
+    return "Each week in the workout plan must include at least 1 workout."
   }
 
   return ""
@@ -252,6 +257,42 @@ const clearFormFieldError = (previousErrors, fieldName, clearWorkoutPlan = false
   [fieldName]: "",
   ...(clearWorkoutPlan ? { workout_plan: "" } : {}),
 })
+
+const moveWorkoutPlanExercise = (workoutPlan, sourceWeekNumber, targetWeekNumber, exerciseId, beforeExerciseId = null) => {
+  const normalizedExerciseId = Number(exerciseId)
+  if (!Number.isFinite(normalizedExerciseId)) return workoutPlan
+
+  const normalizedSourceWeek = Number(sourceWeekNumber)
+  const normalizedTargetWeek = Number(targetWeekNumber)
+  if (!Number.isFinite(normalizedSourceWeek) || !Number.isFinite(normalizedTargetWeek)) return workoutPlan
+
+  const nextPlan = (Array.isArray(workoutPlan) ? workoutPlan : []).map((weekEntry) => ({
+    ...weekEntry,
+    exercise_ids: Array.isArray(weekEntry?.exercise_ids) ? [...weekEntry.exercise_ids] : [],
+  }))
+
+  const sourceWeek = nextPlan.find((entry) => Number(entry?.week_number) === normalizedSourceWeek)
+  const targetWeek = nextPlan.find((entry) => Number(entry?.week_number) === normalizedTargetWeek)
+  if (!sourceWeek || !targetWeek) return workoutPlan
+
+  const sourceIndex = sourceWeek.exercise_ids.findIndex((id) => Number(id) === normalizedExerciseId)
+  if (sourceIndex < 0) return workoutPlan
+  sourceWeek.exercise_ids.splice(sourceIndex, 1)
+
+  const targetHasExercise = targetWeek.exercise_ids.some((id) => Number(id) === normalizedExerciseId)
+  if (normalizedSourceWeek !== normalizedTargetWeek && targetHasExercise) {
+    return nextPlan
+  }
+
+  const normalizedBeforeExerciseId = Number(beforeExerciseId)
+  const beforeIndex = Number.isFinite(normalizedBeforeExerciseId)
+    ? targetWeek.exercise_ids.findIndex((id) => Number(id) === normalizedBeforeExerciseId)
+    : -1
+  const insertIndex = beforeIndex >= 0 ? beforeIndex : targetWeek.exercise_ids.length
+  targetWeek.exercise_ids.splice(insertIndex, 0, normalizedExerciseId)
+
+  return nextPlan
+}
 
 const toExerciseId = (value) => {
   const candidate = Number(value)
@@ -427,13 +468,6 @@ const normalizeProgramDetailPayload = (data) => {
   return null
 }
 
-const normalizeExercisesPayload = (data) => {
-  if (Array.isArray(data?.data)) return data.data
-  if (Array.isArray(data?.results)) return data.results
-  if (Array.isArray(data)) return data
-  return []
-}
-
 const normalizeEquipmentPayload = (data) => {
   if (Array.isArray(data?.data)) return data.data
   if (Array.isArray(data?.results)) return data.results
@@ -589,6 +623,101 @@ const formatTimestamp = (value) => {
 }
 
 const getDefaultProgramImageUrl = () => "../src/assets/DefaultBanner.jpg"
+
+const getStoredWorkouts = () => {
+  try {
+    const rawValue = localStorage.getItem(WORKOUTS_STORAGE_KEY)
+    const parsed = rawValue ? JSON.parse(rawValue) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((entry) => entry && typeof entry === "object")
+      .map((entry) => ({
+        ...entry,
+        id: String(entry.id || ""),
+        title: String(entry.title || ""),
+        exercise_ids: Array.isArray(entry.exercise_ids)
+          ? entry.exercise_ids.map((exerciseId) => Number(exerciseId)).filter((exerciseId) => Number.isFinite(exerciseId))
+          : [],
+      }))
+      .filter((entry) => entry.id && entry.title && entry.exercise_ids.length > 0)
+  } catch {
+    return []
+  }
+}
+
+const getPurchasedProgramIds = () => {
+  try {
+    const rawValue = localStorage.getItem(PURCHASED_PROGRAMS_STORAGE_KEY)
+    const parsed = rawValue ? JSON.parse(rawValue) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map((entry) => Number(entry))
+      .filter((entry) => Number.isFinite(entry))
+  } catch {
+    return []
+  }
+}
+
+const savePurchasedProgramIds = (programIds) => {
+  const normalized = [...new Set((Array.isArray(programIds) ? programIds : [])
+    .map((entry) => Number(entry))
+    .filter((entry) => Number.isFinite(entry)))]
+  localStorage.setItem(PURCHASED_PROGRAMS_STORAGE_KEY, JSON.stringify(normalized))
+}
+
+const savePendingCheckoutProgramId = (programId) => {
+  const normalizedProgramId = Number(programId)
+  if (!Number.isFinite(normalizedProgramId)) {
+    localStorage.removeItem(PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY)
+    return
+  }
+  localStorage.setItem(PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY, String(normalizedProgramId))
+}
+
+const getPendingCheckoutProgramId = () => {
+  const rawValue = localStorage.getItem(PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY)
+  const programId = Number(rawValue)
+  return Number.isFinite(programId) ? programId : null
+}
+
+const clearPendingCheckoutProgramId = () => {
+  localStorage.removeItem(PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY)
+}
+
+const getStripePublishableKey = () => String(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "").trim()
+
+const getProgramCheckoutTitle = (programDetails, programSummary, formValues) =>
+  String(
+    formValues?.title ||
+      programDetails?.title ||
+      programDetails?.name ||
+      programSummary?.title ||
+      programSummary?.name ||
+      "Program",
+  ).trim()
+
+const parseCheckoutSessionResponse = (responseData) => {
+  const payload = responseData?.data ?? responseData
+  const checkoutUrl = String(
+    payload?.checkout_url ?? payload?.checkoutUrl ?? payload?.url ?? "",
+  ).trim()
+  const sessionId = String(
+    payload?.session_id ?? payload?.sessionId ?? payload?.id ?? "",
+  ).trim()
+
+  return { checkoutUrl, sessionId }
+}
+
+const buildCheckoutReturnUrl = (type, programId) => {
+  const basePath = window.location.origin + window.location.pathname
+  console.log("Building checkout return URL with basePath:", basePath, "type:", type, "programId:", programId)
+  const query = new URLSearchParams({
+    checkout: type,
+    programId: String(programId),
+  })
+  console.log("Constructed query parameters:", query.toString())
+  return `${basePath}?${query.toString()}`
+}
 
 const getProgramImageUrl = (program) => {
   if (!program || typeof program !== "object") return ""
@@ -792,7 +921,7 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
   return [...new Set(mappedValues)]
 }
 
-function Programs() {
+function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
   const [programs, setPrograms] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
@@ -801,11 +930,11 @@ function Programs() {
   const [createFieldErrors, setCreateFieldErrors] = useState({})
   const [createErrorMessage, setCreateErrorMessage] = useState("")
   const [isCreateSubmitting, setIsCreateSubmitting] = useState(false)
-  const [exerciseLibrary, setExerciseLibrary] = useState([])
-  const [isExerciseLibraryLoading, setIsExerciseLibraryLoading] = useState(false)
-  const [exerciseLibraryError, setExerciseLibraryError] = useState("")
+  const [workouts, setWorkouts] = useState(() => getStoredWorkouts())
   const [createPlanWeek, setCreatePlanWeek] = useState(1)
-  const [createPlanExerciseId, setCreatePlanExerciseId] = useState("")
+  const [createPlanExercise, setCreatePlanExercise] = useState([])
+  const [createPlanWorkoutId, setCreatePlanWorkoutId] = useState("")
+  const [createDraggedExercise, setCreateDraggedExercise] = useState(null)
   const [searchName, setSearchName] = useState("")
   const [sortOrder, setSortOrder] = useState("asc")
   const [filters, setFilters] = useState({ difficulty: [], category: [], goal: [], equipment: [] })
@@ -821,21 +950,31 @@ function Programs() {
   const [isEditSubmitting, setIsEditSubmitting] = useState(false)
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false)
   const [isDetailsEditMode, setIsDetailsEditMode] = useState(false)
+  const [isWorkoutPlanUnlocked, setIsWorkoutPlanUnlocked] = useState(false)
+  const [isCheckoutSubmitting, setIsCheckoutSubmitting] = useState(false)
+  const [checkoutErrorMessage, setCheckoutErrorMessage] = useState("")
+  const [purchasedProgramIds, setPurchasedProgramIds] = useState(() => getPurchasedProgramIds())
   const [editImageFile, setEditImageFile] = useState(null)
   const [editImagePreview, setEditImagePreview] = useState(null)
   const editImageInputRef = useRef(null)
   const [detailWorkoutPlan, setDetailWorkoutPlan] = useState([])
   const [detailPlanWeek, setDetailPlanWeek] = useState(1)
   const [detailPlanExerciseId, setDetailPlanExerciseId] = useState("")
+  const [detailPlanWorkoutId, setDetailPlanWorkoutId] = useState("")
+  const [detailDraggedExercise, setDetailDraggedExercise] = useState(null)
   const [categoryChoices, setCategoryChoices] = useState([])
   const [goalChoices, setGoalChoices] = useState([])
   const [difficultyChoices, setDifficultyChoices] = useState([])
   const [equipmentChoices, setEquipmentChoices] = useState([])
   const [durationRange, setDurationRange] = useState({ min: DEFAULT_DURATION_MIN, max: DEFAULT_DURATION_MAX })
   const [isChoicesLoading, setIsChoicesLoading] = useState(false)
-  const [isSchedulingToCalendar, setIsSchedulingToCalendar] = useState(false)
+  // Schedule-to-calendar state
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false)
   const [scheduleStartDate, setScheduleStartDate] = useState("")
-  const [scheduleSuccessMessage, setScheduleSuccessMessage] = useState("")
+  const [scheduleError, setScheduleError] = useState("")
+  const [scheduleSuccess, setScheduleSuccess] = useState("")
+
+  const { exerciseLibrary, isExerciseLibraryLoading, exerciseLibraryError } = exerciseLibraryState
 
   useEffect(() => {
     const loadPrograms = async () => {
@@ -863,22 +1002,58 @@ function Programs() {
   }, [])
 
   useEffect(() => {
-    const loadExerciseLibrary = async () => {
-      setIsExerciseLibraryLoading(true)
-      setExerciseLibraryError("")
+    const query = new URLSearchParams(window.location.search)
+    const checkoutStatus = query.get("checkout")
+    const queryProgramIdRaw = query.get("programId")
+    const queryProgramId = queryProgramIdRaw === null ? Number.NaN : Number(queryProgramIdRaw)
+    const pendingProgramId = getPendingCheckoutProgramId()
+    const resolvedProgramId = Number.isFinite(queryProgramId) ? queryProgramId : pendingProgramId
 
-      try {
-        const response = await axios.get(EXERCISES_API_URL, buildRequestConfig())
-        setExerciseLibrary(normalizeExercisesPayload(response?.data))
-      } catch {
-        setExerciseLibrary([])
-        setExerciseLibraryError("Unable to load exercise library for workout planning.")
-      } finally {
-        setIsExerciseLibraryLoading(false)
-      }
+    if (checkoutStatus === "cancel") {
+      setCheckoutErrorMessage("Checkout was canceled. You can try again anytime.")
+      clearPendingCheckoutProgramId()
+      const nextUrl = `${window.location.origin}${window.location.pathname}`
+      window.history.replaceState({}, document.title, nextUrl)
+      return
+    }
+    if (checkoutStatus !== "success") return
+
+    if (!Number.isFinite(resolvedProgramId)) {
+      setCheckoutErrorMessage("Checkout completed. Re-open the program details to continue.")
+      const nextUrl = `${window.location.origin}${window.location.pathname}`
+      window.history.replaceState({}, document.title, nextUrl)
+      return
     }
 
-    loadExerciseLibrary()
+    setPurchasedProgramIds((prev) => {
+      const next = [...new Set([...prev, resolvedProgramId])]
+      savePurchasedProgramIds(next)
+      return next
+    })
+    clearPendingCheckoutProgramId()
+
+    if (selectedProgramId === resolvedProgramId) {
+      setIsWorkoutPlanUnlocked(true)
+      setCheckoutErrorMessage("")
+    }
+
+    const nextUrl = `${window.location.origin}${window.location.pathname}`
+    window.history.replaceState({}, document.title, nextUrl)
+  }, [selectedProgramId])
+
+  useEffect(() => {
+    const syncWorkoutsFromStorage = () => {
+      setWorkouts(getStoredWorkouts())
+    }
+
+    syncWorkoutsFromStorage()
+    window.addEventListener("storage", syncWorkoutsFromStorage)
+    document.addEventListener("visibilitychange", syncWorkoutsFromStorage)
+
+    return () => {
+      window.removeEventListener("storage", syncWorkoutsFromStorage)
+      document.removeEventListener("visibilitychange", syncWorkoutsFromStorage)
+    }
   }, [])
 
   useEffect(() => {
@@ -1057,15 +1232,19 @@ function Programs() {
   const exerciseOptions = useMemo(() => {
     return [...exerciseLibrary]
       .filter((exercise) => Number.isFinite(Number(exercise?.id)))
-      .sort((a, b) => String(a?.title ?? "").localeCompare(String(b?.title ?? "")))
+      .sort((a, b) => String(a?.title ?? a?.name ?? "").localeCompare(String(b?.title ?? b?.name ?? "")))
   }, [exerciseLibrary])
   const exerciseNameById = useMemo(
     () =>
       exerciseOptions.reduce((accumulator, exercise) => {
-        accumulator[Number(exercise.id)] = String(exercise.title || `Exercise #${exercise.id}`)
+        accumulator[Number(exercise.id)] = String(exercise.title || exercise.name || `Exercise #${exercise.id}`)
         return accumulator
       }, {}),
     [exerciseOptions],
+  )
+  const workoutById = useMemo(
+    () => new Map(workouts.map((workout) => [String(workout.id), workout])),
+    [workouts],
   )
   const detailsWorkoutPlan = Array.isArray(detailWorkoutPlan) ? detailWorkoutPlan : []
   const createEquipmentSelection = Array.isArray(createFormValues.equipment) ? createFormValues.equipment : []
@@ -1175,7 +1354,9 @@ function Programs() {
     setCreateFieldErrors({})
     setCreateErrorMessage("")
     setCreatePlanWeek(1)
-    setCreatePlanExerciseId("")
+    setCreatePlanExercise([])
+    setCreatePlanWorkoutId("")
+    setCreateDraggedExercise(null)
     setEditImageFile(null)
     setEditImagePreview("")
     if (editImageInputRef.current) {
@@ -1186,6 +1367,7 @@ function Programs() {
 
 
   const handleCloseCreateModal = () => {
+    setCreateDraggedExercise(null)
     setEditImageFile(null)
     setEditImagePreview("")
     if (editImageInputRef.current) {
@@ -1209,25 +1391,46 @@ function Programs() {
     setCreateFieldErrors((prev) => clearFormFieldError(prev, name, name === "duration_weeks"))
   }
 
-  const handleAddExerciseToWorkoutWeek = () => {
-    const weekNumber = Number(createPlanWeek)
-    const exerciseId = Number(createPlanExerciseId)
-    if (!Number.isFinite(weekNumber) || !Number.isFinite(exerciseId)) return
-
+  const handleAddWorkoutToPlanWeek = (weekNumber, selectedExerciseIds) => {
+    // TODO: Refactor exercise-list in excise component -- create a 
+    // reusable function maybe in its own function  also for programs 
+    // exercise list. see Line 964 in Exercises component.
     setCreateFormValues((prev) => {
       const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
         if (weekEntry.week_number !== weekNumber) return weekEntry
-        if (weekEntry.exercise_ids.includes(exerciseId)) return weekEntry
-        console.log(`Adding exercise ID ${exerciseId} to week ${weekNumber} of workout plan.`)
+        const nextExerciseIds = [...new Set([...weekEntry.exercise_ids, ...selectedExerciseIds])]
+        if (nextExerciseIds.length === weekEntry.exercise_ids.length) return weekEntry
         return {
           ...weekEntry,
-          exercise_ids: [...weekEntry.exercise_ids, exerciseId],
+          exercise_ids: nextExerciseIds,
         }
       })
       return { ...prev, workout_plan: nextPlan }
     })
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
-    setCreatePlanExerciseId("")
+    setCreatePlanExercise([])
+  }
+
+  const handleAddSavedWorkoutToCreateWeek = () => {
+    const weekNumber = Number(createPlanWeek)
+    const selectedWorkout = workoutById.get(String(createPlanWorkoutId))
+    const workoutExerciseIds = Array.isArray(selectedWorkout?.exercise_ids)
+      ? selectedWorkout.exercise_ids.map((exerciseId) => Number(exerciseId)).filter((exerciseId) => Number.isFinite(exerciseId))
+      : []
+    if (!Number.isFinite(weekNumber) || workoutExerciseIds.length === 0) return
+
+    setCreateFormValues((prev) => {
+      const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
+        if (weekEntry.week_number !== weekNumber) return weekEntry
+        return {
+          ...weekEntry,
+          exercise_ids: [...new Set([...weekEntry.exercise_ids, ...workoutExerciseIds])],
+        }
+      })
+      return { ...prev, workout_plan: nextPlan }
+    })
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+    setCreatePlanWorkoutId("")
   }
 
   const handleRemoveExerciseFromWorkoutWeek = (weekNumber, exerciseId) => {
@@ -1241,6 +1444,28 @@ function Programs() {
       })
       return { ...prev, workout_plan: nextPlan }
     })
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleCreateExerciseDragStart = (weekNumber, exerciseId) => {
+    setCreateDraggedExercise({ weekNumber: Number(weekNumber), exerciseId: Number(exerciseId) })
+  }
+
+  const handleCreateExerciseDrop = (targetWeekNumber, beforeExerciseId = null) => {
+    if (!createDraggedExercise) return
+
+    setCreateFormValues((prev) => {
+      const basePlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan)
+      const nextPlan = moveWorkoutPlanExercise(
+        basePlan,
+        createDraggedExercise.weekNumber,
+        Number(targetWeekNumber),
+        createDraggedExercise.exerciseId,
+        beforeExerciseId,
+      )
+      return { ...prev, workout_plan: nextPlan }
+    })
+    setCreateDraggedExercise(null)
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
@@ -1292,7 +1517,9 @@ function Programs() {
     setIsCreateSubmitting(true)
     try {
       const normalizedWorkoutPlan = buildWorkoutPlanForDuration(createFormValues.duration_weeks, workoutPlan)
+      console.log("Normalized workout plan for submission:", normalizedWorkoutPlan)
       const selectedExerciseIds = [...new Set(normalizedWorkoutPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))]
+      console.log("Selected exercise IDs for submission:", selectedExerciseIds) 
       const payload = {
         title: createFormValues.title.trim(),
         description: createFormValues.description.trim(),
@@ -1307,7 +1534,6 @@ function Programs() {
         program_image: createFormValues.program_image,
       }
       const response = await axios.post(API_URL, payload, buildRequestConfig())
-      console.log("Program creation response:", response)
       
       const createdProgram = normalizeProgramDetailPayload(response?.data)
       if (createdProgram?.id) {
@@ -1346,7 +1572,9 @@ function Programs() {
       setCreateFormValues(EMPTY_PROGRAM_FORM_VALUES)
       setCreateFieldErrors({})
       setCreatePlanWeek(1)
-      setCreatePlanExerciseId("")
+      setCreatePlanExercise([])
+      setCreatePlanWorkoutId("")
+      setCreateDraggedExercise(null)
     } catch (error) {
       const fieldErrors = {}
       const responseData = error?.response?.data
@@ -1381,12 +1609,16 @@ function Programs() {
     setSelectedProgramId(null)
     setEditFieldErrors({})
     setEditErrorMessage("")
+    setCheckoutErrorMessage("")
     setIsEditSubmitting(false)
     setIsDeleteSubmitting(false)
     setIsDetailsEditMode(false)
+    setIsWorkoutPlanUnlocked(false)
     setDetailWorkoutPlan([])
     setDetailPlanWeek(1)
     setDetailPlanExerciseId("")
+    setDetailPlanWorkoutId("")
+    setDetailDraggedExercise(null)
     setEditImageFile(null)
     setEditImagePreview("")
     setIsSchedulingToCalendar(false)
@@ -1476,6 +1708,8 @@ function Programs() {
       const nextWorkoutPlan = buildWorkoutPlanFromProgram(sourceProgram)
       setDetailWorkoutPlan(nextWorkoutPlan)
       setDetailPlanWeek(nextWorkoutPlan[0]?.week_number || 1)
+      setDetailPlanWorkoutId("")
+      setDetailDraggedExercise(null)
       setEditImageFile(null)
       setEditImagePreview(getProgramImageUrl(sourceProgram))
       if (editImageInputRef.current) {
@@ -1490,11 +1724,15 @@ function Programs() {
   const handleViewDetails = async (programId) => {
     setSelectedProgramId(programId)
     setIsDetailsEditMode(false)
+    setDetailDraggedExercise(null)
+    setIsWorkoutPlanUnlocked(purchasedProgramIds.includes(Number(programId)))
     setDetailWorkoutPlan([])
     setDetailPlanWeek(1)
     setDetailPlanExerciseId("")
+    setDetailPlanWorkoutId("")
     setEditFieldErrors({})
     setEditErrorMessage("")
+    setCheckoutErrorMessage("")
     const sourceProgramFromList = programs.find((program) => program.id === programId) ?? null
     const cachedDetail = programDetailsById[programId]
 
@@ -1795,6 +2033,64 @@ function Programs() {
     }
   }
 
+  const handleBuyProgram = async () => {
+    if (!selectedProgramId) return
+
+    setCheckoutErrorMessage("")
+    console.log("[Programs] handleBuyProgram start", { selectedProgramId, selectedProgramDetails, selectedProgram })
+    setIsCheckoutSubmitting(true)
+    console.log("[Programs] handleBuyProgram checkout submitting state set to true")
+    try {
+      console.log("[Programs] handleBuyProgram building checkout URLs and payload")
+      const successUrl = buildCheckoutReturnUrl("success", selectedProgramId)
+      const cancelUrl = buildCheckoutReturnUrl("cancel", selectedProgramId)
+      const programTitle = getProgramCheckoutTitle(selectedProgramDetails, selectedProgram, editFormValues)
+      const payload = {
+        program_id: selectedProgramId,
+        program_title: programTitle,
+        program_name: programTitle,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      }
+      const response = await axios.post(STRIPE_CHECKOUT_API_URL, payload, buildRequestConfig())
+      console.log("[Programs] handleBuyProgram received checkout session response", { response })
+      const { checkoutUrl, sessionId } = parseCheckoutSessionResponse(response?.data)
+      console.log("[Programs] handleBuyProgram parsed checkout session response", { checkoutUrl, sessionId })
+      if (checkoutUrl) {
+        savePendingCheckoutProgramId(selectedProgramId)
+        window.location.assign(checkoutUrl)
+        return
+      }
+
+      if (sessionId) {
+        const publishableKey = getStripePublishableKey()
+        if (!publishableKey) {
+          throw new Error("Missing Stripe publishable key. Set VITE_STRIPE_PUBLISHABLE_KEY.")
+        }
+        const { loadStripe } = await import("@stripe/stripe-js")
+        const stripe = await loadStripe(publishableKey)
+        if (!stripe) throw new Error("Unable to initialize Stripe checkout.")
+        savePendingCheckoutProgramId(selectedProgramId)
+        const result = await stripe.redirectToCheckout({ sessionId })
+        if (result?.error?.message) {
+          clearPendingCheckoutProgramId()
+          throw new Error(result.error.message)
+        }
+        return
+      }
+
+      throw new Error("Checkout session response did not include a redirect URL or session ID.")
+    } catch (error) {
+      setCheckoutErrorMessage(
+        error?.response?.data?.detail ||
+        error?.message ||
+        "Unable to start checkout right now. Please try again.",
+      )
+    } finally {
+      setIsCheckoutSubmitting(false)
+    }
+  }
+
   const handleAddExerciseToDetailWeek = () => {
     if (!isDetailsEditMode || !canEditSelectedProgram) return
 
@@ -1818,6 +2114,31 @@ function Programs() {
     setDetailPlanExerciseId("")
   }
 
+  const handleAddSavedWorkoutToDetailWeek = () => {
+    if (!isDetailsEditMode || !canEditSelectedProgram) return
+
+    const weekNumber = Number(detailPlanWeek)
+    const selectedWorkout = workoutById.get(String(detailPlanWorkoutId))
+    const workoutExerciseIds = Array.isArray(selectedWorkout?.exercise_ids)
+      ? selectedWorkout.exercise_ids.map((exerciseId) => Number(exerciseId)).filter((exerciseId) => Number.isFinite(exerciseId))
+      : []
+    if (!Number.isFinite(weekNumber) || workoutExerciseIds.length === 0) return
+
+    const totalWeeks = normalizeDurationWeeks(editFormValues.duration_weeks)
+    setDetailWorkoutPlan((prev) => {
+      const basePlan = totalWeeks > 0 ? buildWorkoutPlanForDuration(totalWeeks, prev) : [...prev]
+      return basePlan.map((weekEntry) => {
+        if (weekEntry.week_number !== weekNumber) return weekEntry
+        return {
+          ...weekEntry,
+          exercise_ids: [...new Set([...weekEntry.exercise_ids, ...workoutExerciseIds])],
+        }
+      })
+    })
+    setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+    setDetailPlanWorkoutId("")
+  }
+
   const handleRemoveExerciseFromDetailWeek = (weekNumber, exerciseId) => {
     if (!isDetailsEditMode || !canEditSelectedProgram) return
 
@@ -1830,6 +2151,27 @@ function Programs() {
         }
       }),
     )
+    setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleDetailExerciseDragStart = (weekNumber, exerciseId) => {
+    if (!isDetailsEditMode || !canEditSelectedProgram) return
+    setDetailDraggedExercise({ weekNumber: Number(weekNumber), exerciseId: Number(exerciseId) })
+  }
+
+  const handleDetailExerciseDrop = (targetWeekNumber, beforeExerciseId = null) => {
+    if (!isDetailsEditMode || !canEditSelectedProgram || !detailDraggedExercise) return
+
+    setDetailWorkoutPlan((prev) =>
+      moveWorkoutPlanExercise(
+        prev,
+        detailDraggedExercise.weekNumber,
+        Number(targetWeekNumber),
+        detailDraggedExercise.exerciseId,
+        beforeExerciseId,
+      ),
+    )
+    setDetailDraggedExercise(null)
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
@@ -1847,65 +2189,110 @@ function Programs() {
     return "programs-badge"
   }
 
-  const toCalendarDateKey = (dateValue) => {
-    const year = dateValue.getFullYear()
-    const month = String(dateValue.getMonth() + 1).padStart(2, "0")
-    const day = String(dateValue.getDate()).padStart(2, "0")
-    return `${year}-${month}-${day}`
+  const handleOpenScheduleModal = () => {
+    const todayStr = new Date().toISOString().slice(0, 10)
+    setScheduleStartDate(todayStr)
+    setScheduleError("")
+    setScheduleSuccess("")
+    setIsScheduleModalOpen(true)
+  }
+
+  const handleCloseScheduleModal = () => {
+    setIsScheduleModalOpen(false)
+    setScheduleError("")
+    setScheduleSuccess("")
   }
 
   const handleScheduleProgram = () => {
-    if (!selectedProgramId || !scheduleStartDate) return
+    if (!scheduleStartDate) {
+      setScheduleError("Please select a start date.")
+      return
+    }
 
     const program = programDetailsById[selectedProgramId] ?? selectedProgram
-    if (!program) return
+    if (!program) {
+      setScheduleError("Program details not available.")
+      return
+    }
 
-    const programName = program.name || program.title || "Program"
-    const workoutPlan = buildWorkoutPlanFromProgram(program)
+    const plan = Array.isArray(detailWorkoutPlan) && detailWorkoutPlan.length > 0
+      ? detailWorkoutPlan
+      : buildWorkoutPlanFromProgram(program)
 
-    if (workoutPlan.length === 0) return
+    if (plan.length === 0) {
+      setScheduleError("This program has no workout plan to schedule.")
+      return
+    }
 
-    const [year, month, day] = scheduleStartDate.split("-").map(Number)
-    const startDate = new Date(year, month - 1, day)
+    const programName = String(program?.name || program?.title || "Unnamed Program")
+    const programId = program.id
 
-    let entriesByDate = {}
+    // Parse start date without timezone shift
+    const [sy, sm, sd] = scheduleStartDate.split("-").map(Number)
+    const startDate = new Date(sy, sm - 1, sd)
+
+    const toDateKey = (d) => {
+      const year = d.getFullYear()
+      const month = String(d.getMonth() + 1).padStart(2, "0")
+      const day = String(d.getDate()).padStart(2, "0")
+      return `${year}-${month}-${day}`
+    }
+
+    const generateEntryId = () => `prog-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    const CALENDAR_KEY = "wodtrackrCalendarEntries"
+    let existingEntries = {}
     try {
-      const stored = localStorage.getItem("wodtrackrCalendarEntries")
-      if (stored) {
-        const parsed = JSON.parse(stored)
+      const raw = localStorage.getItem(CALENDAR_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw)
         if (parsed && typeof parsed === "object") {
-          entriesByDate = parsed
+          existingEntries = parsed
         }
       }
     } catch {
-      entriesByDate = {}
+      existingEntries = {}
     }
 
-    for (const weekEntry of workoutPlan) {
-      const weekNumber = weekEntry.week_number
-      const weekDate = new Date(startDate)
-      weekDate.setDate(weekDate.getDate() + (weekNumber - 1) * 7)
+    const nextEntries = { ...existingEntries }
 
-      const dateKey = toCalendarDateKey(weekDate)
-      const exerciseNames = weekEntry.exercise_ids
-        .map((id) => exerciseNameById[id] || `Exercise #${id}`)
-        .join(", ")
+    for (const weekEntry of plan) {
+      const weekNumber = Number(weekEntry?.week_number)
+      if (!Number.isFinite(weekNumber) || weekNumber < 1) continue
 
-      const entry = {
-        id: `prog-${selectedProgramId}-w${weekNumber}-${Date.now()}`,
+      const exerciseIds = Array.isArray(weekEntry?.exercise_ids)
+        ? weekEntry.exercise_ids.map(Number).filter((id) => Number.isFinite(id))
+        : []
+
+      // Place workout on Monday of that week (startDate is day 1 of week 1)
+      const weekOffset = (weekNumber - 1) * 7
+      const workoutDate = new Date(startDate)
+      workoutDate.setDate(startDate.getDate() + weekOffset)
+      const dateKey = toDateKey(workoutDate)
+
+      const newEntry = {
+        id: generateEntryId(),
         title: `${programName} – Week ${weekNumber}`,
-        notes: exerciseNames ? `Exercises: ${exerciseNames}` : "",
+        time: "",
+        notes: `Week ${weekNumber} of ${programName} (${plan.length}-week program)`,
+        programId,
+        programName,
+        weekNumber,
+        exerciseIds,
       }
 
-      if (!entriesByDate[dateKey]) {
-        entriesByDate[dateKey] = []
-      }
-      entriesByDate[dateKey].push(entry)
+      nextEntries[dateKey] = [...(nextEntries[dateKey] || []), newEntry]
     }
 
-    localStorage.setItem("wodtrackrCalendarEntries", JSON.stringify(entriesByDate))
-    setScheduleSuccessMessage(`${programName} has been added to your calendar!`)
-    setIsSchedulingToCalendar(false)
+    try {
+      localStorage.setItem(CALENDAR_KEY, JSON.stringify(nextEntries))
+    } catch {
+      setScheduleError("Unable to save to calendar. Storage may be full.")
+      return
+    }
+
+    setScheduleSuccess(`Scheduled ${plan.length} week${plan.length !== 1 ? "s" : ""} starting ${scheduleStartDate}. Check your Calendar!`)
+    setScheduleError("")
   }
 
   useEffect(() => {
@@ -1919,6 +2306,7 @@ function Programs() {
     setDetailWorkoutPlan(nextWorkoutPlan)
     setDetailPlanWeek(nextWorkoutPlan[0]?.week_number || 1)
     setDetailPlanExerciseId("")
+    setDetailPlanWorkoutId("")
   }, [selectedProgramId, programDetailsById, selectedProgram, isDetailsEditMode])
 
   return (
@@ -2114,7 +2502,7 @@ function Programs() {
             className="programs-modal custom-scroll"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="programs-modal-title"
+            aria-labelledby="create-new-program-header"
             onClick={(event) => event.stopPropagation()}
           >
             <header className="programs-modal-header">
@@ -2269,7 +2657,7 @@ function Programs() {
               <section className="programs-plan-builder" aria-label="Workout plan builder">
                 <h3>Workout Plan By Week</h3>
                 <p className="programs-plan-helper">
-                  Pick a week and add exercises from your library. The number of weeks matches Duration.
+                  Pick a week, choose all exercises for that workout, then add the full workout. The number of weeks matches Duration.
                 </p>
                 {createFieldErrors.workout_plan ? <small className="programs-modal-error">{createFieldErrors.workout_plan}</small> : null}
 
@@ -2295,17 +2683,17 @@ function Programs() {
                   </label>
 
                   <label className="programs-modal-field">
-                    <span>Exercise</span>
+                    <span>Saved Workout</span>
                     <select
-                      name="plan_exercise"
-                      value={createPlanExerciseId}
-                      onChange={(event) => setCreatePlanExerciseId(event.target.value)}
-                      disabled={exerciseOptions.length === 0 || workoutPlan.length === 0}
+                      name="plan_saved_workout"
+                      value={createPlanWorkoutId}
+                      onChange={(event) => setCreatePlanWorkoutId(event.target.value)}
+                      disabled={workouts.length === 0 || workoutPlan.length === 0}
                     >
-                      <option value="">Select exercise</option>
-                      {exerciseOptions.map((exercise) => (
-                        <option key={exercise.id} value={String(exercise.id)}>
-                          {exercise.title}
+                      <option value="">Select workout</option>
+                      {workouts.map((workout) => (
+                        <option key={workout.id} value={String(workout.id)}>
+                          {workout.title}
                         </option>
                       ))}
                     </select>
@@ -2314,10 +2702,47 @@ function Programs() {
                   <button
                     type="button"
                     className="programs-modal-secondary-btn programs-plan-add-btn"
-                    onClick={handleAddExerciseToWorkoutWeek}
-                    disabled={!createPlanExerciseId || workoutPlan.length === 0}
+                    onClick={handleAddSavedWorkoutToCreateWeek}
+                    disabled={!createPlanWorkoutId || workoutPlan.length === 0}
                   >
-                    Add Exercise
+                    Add Saved Workout
+                  </button>
+
+                  <label className="programs-modal-field">
+                    <span>Workout Exercises</span>
+                    {exerciseOptions.map((exercise) => (
+                      <label key={exercise.id} className="exercise-label">
+                        <input
+                          key={exercise.id}
+                          type="checkbox"
+                          name={"plan_exercises"}
+                          value={String(exercise.id)}
+                          checked={createPlanExercise.includes(String(exercise.id))}
+                          onChange={(event) => {
+                            const selectedIds = event.target.checked
+                              ? [...createPlanExercise, String(exercise.id)]
+                              : createPlanExercise.filter((id) => id !== String(exercise.id))
+                            setCreatePlanExercise(selectedIds)
+                          }}
+                          disabled={exerciseOptions.length === 0 || workoutPlan.length === 0}
+                        />
+                        <div className="multiselect-option">{exercise.title}</div>
+                      </label>
+                    ))}
+                  </label>
+
+                  <button
+                    type="button"
+                    className="programs-modal-secondary-btn programs-plan-add-btn"
+                    onClick={() =>
+                      handleAddWorkoutToPlanWeek(
+                        Number(createPlanWeek),
+                        createPlanExercise.map((exerciseId) => Number(exerciseId)).filter((exerciseId) => Number.isFinite(exerciseId)),
+                      )
+                    }
+                    disabled={createPlanExercise.length === 0 || workoutPlan.length === 0}
+                  >
+                    Add Workout
                   </button>
                 </div>
 
@@ -2326,15 +2751,30 @@ function Programs() {
                     <p className="programs-plan-helper">Enter duration to start building your weekly workout plan.</p>
                   ) : (
                     workoutPlan.map((weekEntry) => (
-                      <article key={weekEntry.week_number} className="programs-plan-week-card">
+                      <article
+                        key={weekEntry.week_number}
+                        className="programs-plan-week-card"
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={() => handleCreateExerciseDrop(weekEntry.week_number)}
+                      >
                         <h4>Week {weekEntry.week_number}</h4>
                         {weekEntry.exercise_ids.length === 0 ? (
-                          <p className="programs-plan-helper">No exercises added yet.</p>
+                          <p className="programs-plan-helper">No workout added yet.</p>
                         ) : (
                           <ul className="programs-plan-exercise-list">
                             {weekEntry.exercise_ids.map((exerciseId) => (
-                              console.log("Rendering exercise list item", { weekNumber: weekEntry.week_number, exerciseId }),
-                              <li key={`${weekEntry.week_number}-${exerciseId}`}>
+                              <li
+                                key={`${weekEntry.week_number}-${exerciseId}`}
+                                draggable
+                                onDragStart={() => handleCreateExerciseDragStart(weekEntry.week_number, exerciseId)}
+                                onDragEnd={() => setCreateDraggedExercise(null)}
+                                onDragOver={(event) => event.preventDefault()}
+                                onDrop={(event) => {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  handleCreateExerciseDrop(weekEntry.week_number, exerciseId)
+                                }}
+                              >
                                 <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
                                 <button
                                   type="button"
@@ -2413,6 +2853,10 @@ function Programs() {
                 <p className="programs-modal-error" role="alert">{editErrorMessage}</p>
               ) : null}
 
+              {checkoutErrorMessage ? (
+                <p className="programs-modal-error" role="alert">{checkoutErrorMessage}</p>
+              ) : null}
+
               {isDetailsEditMode ? (
                 <div className="programs-banner-upload" id="create-gym-banner-btn">
                   <input
@@ -2429,261 +2873,277 @@ function Programs() {
                 </div>
               ) : null}
 
-              <label className="programs-modal-field">
-                <span>Title</span>
-                <input
-                  type="text"
-                  name="title"
-                  value={editFormValues.title}
-                  onChange={handleEditFieldChange}
-                  placeholder="Program name"
-                  readOnly={!isDetailsEditMode}
-                  required
-                />
-                {editFieldErrors.title ? <small className="programs-modal-error">{editFieldErrors.title}</small> : null}
-              </label>
-
-              <label className="programs-modal-field">
-                <span>Description</span>
-                <textarea
-                  name="description"
-                  value={editFormValues.description}
-                  onChange={handleEditFieldChange}
-                  placeholder="What this program is for"
-                  rows={3}
-                  readOnly={!isDetailsEditMode}
-                  required
-                />
-                {editFieldErrors.description ? <small className="programs-modal-error">{editFieldErrors.description}</small> : null}
-              </label>
-
-              <div className="programs-modal-grid">
-                <label className="programs-modal-field">
-                  <span>Difficulty</span>
-                  <select
-                    name="difficulty"
-                    value={editFormValues.difficulty}
-                    onChange={handleEditFieldChange}
-                    disabled={!isDetailsEditMode}
-                    required
-                  >
-                    <option value="">Select difficulty</option>
-                    {difficulties.map((difficulty) => (
-                      <option key={difficulty.value} value={difficulty.value}>
-                        {difficulty.label}
-                      </option>
-                    ))}
-                  </select>
-                  {editFieldErrors.difficulty ? <small className="programs-modal-error">{editFieldErrors.difficulty}</small> : null}
-                </label>
-
-                <label className="programs-modal-field">
-                  <span>Duration (weeks)</span>
-                  <input
-                    type="number"
-                    min={durationRange.min}
-                    max={durationRange.max}
-                    name="duration_weeks"
-                    value={editFormValues.duration_weeks}
-                    onChange={handleEditFieldChange}
-                    placeholder="8"
-                    readOnly={!isDetailsEditMode}
-                    required
-                  />
-                  {editFieldErrors.duration_weeks ? <small className="programs-modal-error">{editFieldErrors.duration_weeks}</small> : null}
-                </label>
-
-                <label className="programs-modal-field">
-                  <span>Category</span>
-                  <select
-                    name="category"
-                    value={editFormValues.category}
-                    onChange={handleEditFieldChange}
-                    disabled={!isDetailsEditMode}
-                    required
-                  >
-                    <option value="">Select category</option>
-                    {categories.map((category) => (
-                      <option key={category.value} value={category.value}>
-                        {category.label}
-                      </option>
-                    ))}
-                  </select>
-                  {editFieldErrors.category ? <small className="programs-modal-error">{editFieldErrors.category}</small> : null}
-                </label>
-
-                <label className="programs-modal-field">
-                  <span>Goal</span>
-                  <select
-                    name="goal"
-                    value={editFormValues.goal}
-                    onChange={handleEditFieldChange}
-                    disabled={!isDetailsEditMode}
-                    required
-                  >
-                    <option value="">Select goal</option>
-                    {goals.map((goal) => (
-                      <option key={goal.value} value={goal.value}>
-                        {goal.label}
-                      </option>
-                    ))}
-                  </select>
-                  {editFieldErrors.goal ? <small className="programs-modal-error">{editFieldErrors.goal}</small> : null}
-                </label>
-
-                <label className="programs-modal-field">
-                  <span>Equipment</span>
-                  {isDetailsEditMode ? (
-                    <MultiSelect
-                      options={equipments}
-                      value={editEquipmentSelection}
-                      onChange={(selected) => {
-                        setEditFormValues((prev) => ({ ...prev, equipment: selected }))
-                        setEditFieldErrors((prev) => ({ ...prev, equipment: "" }))
-                      }}
-                      name="equipment"
-                      disabled={!isDetailsEditMode}
-                      emitOptionObjects
+              {isDetailsEditMode ? (
+                <>
+                  <label className="programs-modal-field">
+                    <span>Title</span>
+                    <input
+                      type="text"
+                      name="title"
+                      value={editFormValues.title}
+                      onChange={handleEditFieldChange}
+                      placeholder="Program name"
+                      required
                     />
-                  ) : (
-                    <ul className="equipment-list">
-                      {editEquipmentValues.map((eq) => {
-                        const normalizedEq = normalizeEquipmentEntry(eq)
-                        const normalizedEqString = String(normalizedEq)
-                        const matchedChoice = equipmentChoices.find((choice) => {
-                          const normalizedChoiceValue = normalizeEquipmentEntry(choice?.value)
-                          if (String(normalizedChoiceValue) === normalizedEqString) return true
+                    {editFieldErrors.title ? <small className="programs-modal-error">{editFieldErrors.title}</small> : null}
+                  </label>
 
-                          const normalizedChoiceSlug = normalizeEquipmentEntry(choice?.slug)
-                          if (String(normalizedChoiceSlug) === normalizedEqString) return true
+                  <label className="programs-modal-field">
+                    <span>Description</span>
+                    <textarea
+                      name="description"
+                      value={editFormValues.description}
+                      onChange={handleEditFieldChange}
+                      placeholder="What this program is for"
+                      rows={3}
+                      required
+                    />
+                    {editFieldErrors.description ? <small className="programs-modal-error">{editFieldErrors.description}</small> : null}
+                  </label>
 
-                          const normalizedChoiceLabel = normalizeEquipmentEntry(choice?.label)
-                          return String(normalizedChoiceLabel) === normalizedEqString
-                        })
-                        const matchedEquipment = equipments.find((entry) => {
-                          const normalizedEntryValue = normalizeEquipmentEntry(entry?.value)
-                          if (String(normalizedEntryValue) === normalizedEqString) return true
-
-                          const normalizedEntryLabel = normalizeEquipmentEntry(entry?.label)
-                          return String(normalizedEntryLabel) === normalizedEqString
-                        })
-                        const label = matchedChoice?.label || matchedEquipment?.label || normalizedEq
-                        return <li key={normalizedEq}>{label}</li>
-                      })}
-                    </ul>
-                  )}
-                  {editFieldErrors.equipment ? <small className="programs-modal-error">{editFieldErrors.equipment}</small> : null}
-                </label>
-
-              </div>
-
-              <label className="programs-modal-checkbox">
-                <input
-                  type="checkbox"
-                  name="is_public"
-                  checked={editFormValues.is_public}
-                  onChange={handleEditFieldChange}
-                  disabled={!isDetailsEditMode}
-                />
-                Public program
-              </label>
-
-              <p className="programs-card-detail-line">
-                <strong>Updated:</strong> {formatTimestamp(selectedProgramDetails?.updated_at || selectedProgram?.updated_at) || "N/A"}
-              </p>
-              <p className="programs-card-detail-line">
-                <strong>Exercises:</strong> {Array.isArray(selectedProgramDetails?.exercises) ? selectedProgramDetails.exercises.length : "N/A"}
-              </p>
-
-              <section className="programs-plan-builder" aria-label="Workout plan by week">
-                <h3>Workout Plan By Week</h3>
-                <p className="programs-plan-helper">
-                  {canEditSelectedProgram
-                    ? "Your plan is editable only after pressing Edit Program."
-                    : "You can view this workout plan, but only the creator can edit it."}
-                </p>
-                {editFieldErrors.workout_plan ? <small className="programs-modal-error">{editFieldErrors.workout_plan}</small> : null}
-
-                {canEditSelectedProgram && isDetailsEditMode ? (
-                  <div className="programs-plan-controls">
+                  <div className="programs-modal-grid">
                     <label className="programs-modal-field">
-                      <span>Week</span>
+                      <span>Difficulty</span>
                       <select
-                        name="details_plan_week"
-                        value={String(detailPlanWeek)}
-                        onChange={(event) => setDetailPlanWeek(Number(event.target.value) || 1)}
-                        disabled={detailsWorkoutPlan.length === 0}
+                        name="difficulty"
+                        value={editFormValues.difficulty}
+                        onChange={handleEditFieldChange}
+                        required
                       >
-                        {detailsWorkoutPlan.length === 0 ? <option value="1">No weeks available</option> : null}
-                        {detailsWorkoutPlan.map((weekEntry) => (
-                          <option key={weekEntry.week_number} value={weekEntry.week_number}>
-                            Week {weekEntry.week_number}
+                        <option value="">Select difficulty</option>
+                        {difficulties.map((difficulty) => (
+                          <option key={difficulty.value} value={difficulty.value}>
+                            {difficulty.label}
                           </option>
                         ))}
                       </select>
+                      {editFieldErrors.difficulty ? <small className="programs-modal-error">{editFieldErrors.difficulty}</small> : null}
                     </label>
 
                     <label className="programs-modal-field">
-                      <span>Exercise</span>
+                      <span>Duration (weeks)</span>
+                      <input
+                        type="number"
+                        min={durationRange.min}
+                        max={durationRange.max}
+                        name="duration_weeks"
+                        value={editFormValues.duration_weeks}
+                        onChange={handleEditFieldChange}
+                        placeholder="8"
+                        required
+                      />
+                      {editFieldErrors.duration_weeks ? <small className="programs-modal-error">{editFieldErrors.duration_weeks}</small> : null}
+                    </label>
+
+                    <label className="programs-modal-field">
+                      <span>Category</span>
                       <select
-                        name="details_plan_exercise"
-                        value={detailPlanExerciseId}
-                        onChange={(event) => setDetailPlanExerciseId(event.target.value)}
-                        disabled={exerciseOptions.length === 0 || detailsWorkoutPlan.length === 0}
+                        name="category"
+                        value={editFormValues.category}
+                        onChange={handleEditFieldChange}
+                        required
                       >
-                        <option value="">Select exercise</option>
-                        {exerciseOptions.map((exercise) => (
-                          <option key={exercise.id} value={String(exercise.id)}>
-                            {exercise.name}
+                        <option value="">Select category</option>
+                        {categories.map((category) => (
+                          <option key={category.value} value={category.value}>
+                            {category.label}
                           </option>
                         ))}
                       </select>
+                      {editFieldErrors.category ? <small className="programs-modal-error">{editFieldErrors.category}</small> : null}
                     </label>
 
-                    <button
-                      type="button"
-                      className="programs-modal-secondary-btn programs-plan-add-btn"
-                      onClick={handleAddExerciseToDetailWeek}
-                      disabled={!detailPlanExerciseId || detailsWorkoutPlan.length === 0}
-                    >
-                      Add Exercise
-                    </button>
+                    <label className="programs-modal-field">
+                      <span>Goal</span>
+                      <select
+                        name="goal"
+                        value={editFormValues.goal}
+                        onChange={handleEditFieldChange}
+                        required
+                      >
+                        <option value="">Select goal</option>
+                        {goals.map((goal) => (
+                          <option key={goal.value} value={goal.value}>
+                            {goal.label}
+                          </option>
+                        ))}
+                      </select>
+                      {editFieldErrors.goal ? <small className="programs-modal-error">{editFieldErrors.goal}</small> : null}
+                    </label>
+
+                    <label className="programs-modal-field">
+                      <span>Equipment</span>
+                      <MultiSelect
+                        options={equipments}
+                        value={editEquipmentSelection}
+                        onChange={(selected) => {
+                          setEditFormValues((prev) => ({ ...prev, equipment: selected }))
+                          setEditFieldErrors((prev) => ({ ...prev, equipment: "" }))
+                        }}
+                        name="equipment"
+                        emitOptionObjects
+                      />
+                      {editFieldErrors.equipment ? <small className="programs-modal-error">{editFieldErrors.equipment}</small> : null}
+                    </label>
+
                   </div>
-                ) : null}
 
-                <div className="programs-plan-weeks">
-                  {detailsWorkoutPlan.length === 0 ? (
-                    <p className="programs-plan-helper">No workout plan set for this program yet.</p>
-                  ) : (
-                    detailsWorkoutPlan.map((weekEntry) => (
-                      <article key={`details-week-${weekEntry.week_number}`} className="programs-plan-week-card">
-                        <h4>Week {weekEntry.week_number}</h4>
-                        {weekEntry.exercise_ids.length === 0 ? (
-                          <p className="programs-plan-helper">No exercises added yet.</p>
-                        ) : (
-                          <ul className="programs-plan-exercise-list">
-                            {weekEntry.exercise_ids.map((exerciseId) => (
-                              <li key={`details-${weekEntry.week_number}-${exerciseId}`}>
-                                <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
-                                {canEditSelectedProgram && isDetailsEditMode ? (
-                                  <button
-                                    type="button"
-                                    className="programs-plan-remove-btn"
-                                    onClick={() => handleRemoveExerciseFromDetailWeek(weekEntry.week_number, exerciseId)}
-                                    aria-label={`Remove ${exerciseNameById[exerciseId] || `exercise ${exerciseId}`} from week ${weekEntry.week_number}`}
-                                  >
-                                    Remove
-                                  </button>
-                                ) : null}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </article>
-                    ))
-                  )}
-                </div>
-              </section>
+                  <label className="programs-modal-checkbox">
+                    <input
+                      type="checkbox"
+                      name="is_public"
+                      checked={editFormValues.is_public}
+                      onChange={handleEditFieldChange}
+                    />
+                    Public program
+                  </label>
+                </>
+              ) : (
+                <section className="programs-modal-grid" aria-label="Program details summary">
+                  <p className="programs-card-detail-line"><strong>Title:</strong> {editFormValues.title || "N/A"}</p>
+                  <p className="programs-card-detail-line"><strong>Description:</strong> {editFormValues.description || "N/A"}</p>
+                  <p className="programs-card-detail-line"><strong>Difficulty:</strong> {editFormValues.difficulty || "N/A"}</p>
+                  <p className="programs-card-detail-line"><strong>Duration:</strong> {editFormValues.duration_weeks ? `${editFormValues.duration_weeks} weeks` : "N/A"}</p>
+                  <p className="programs-card-detail-line"><strong>Category:</strong> {editFormValues.category || "N/A"}</p>
+                  <p className="programs-card-detail-line">
+                    <strong>Updated:</strong> {formatTimestamp(selectedProgramDetails?.updated_at || selectedProgram?.updated_at) || "N/A"}
+                  </p>
+                </section>
+              )}
+
+              {isDetailsEditMode || isWorkoutPlanUnlocked ? (
+                <section className="programs-plan-builder" aria-label="Workout plan by week">
+                  <h3>Workout Plan By Week</h3>
+                  <p className="programs-plan-helper">
+                    {canEditSelectedProgram && isDetailsEditMode
+                      ? "Edit workouts by selecting a week and exercise."
+                      : "Purchased workout plan view."}
+                  </p>
+                  {editFieldErrors.workout_plan ? <small className="programs-modal-error">{editFieldErrors.workout_plan}</small> : null}
+
+                  {canEditSelectedProgram && isDetailsEditMode ? (
+                    <div className="programs-plan-controls">
+                      <label className="programs-modal-field">
+                        <span>Week</span>
+                        <select
+                          name="details_plan_week"
+                          value={String(detailPlanWeek)}
+                          onChange={(event) => setDetailPlanWeek(Number(event.target.value) || 1)}
+                          disabled={detailsWorkoutPlan.length === 0}
+                        >
+                          {detailsWorkoutPlan.length === 0 ? <option value="1">No weeks available</option> : null}
+                          {detailsWorkoutPlan.map((weekEntry) => (
+                            <option key={weekEntry.week_number} value={weekEntry.week_number}>
+                              Week {weekEntry.week_number}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="programs-modal-field">
+                        <span>Saved Workout</span>
+                        <select
+                          name="details_plan_saved_workout"
+                          value={detailPlanWorkoutId}
+                          onChange={(event) => setDetailPlanWorkoutId(event.target.value)}
+                          disabled={workouts.length === 0 || detailsWorkoutPlan.length === 0}
+                        >
+                          <option value="">Select workout</option>
+                          {workouts.map((workout) => (
+                            <option key={workout.id} value={String(workout.id)}>
+                              {workout.title}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <button
+                        type="button"
+                        className="programs-modal-secondary-btn programs-plan-add-btn"
+                        onClick={handleAddSavedWorkoutToDetailWeek}
+                        disabled={!detailPlanWorkoutId || detailsWorkoutPlan.length === 0}
+                      >
+                        Add Saved Workout
+                      </button>
+
+                      <label className="programs-modal-field">
+                        <span>Exercise</span>
+                        <select
+                          name="details_plan_exercise"
+                          value={detailPlanExerciseId}
+                          onChange={(event) => setDetailPlanExerciseId(event.target.value)}
+                          disabled={exerciseOptions.length === 0 || detailsWorkoutPlan.length === 0}
+                        >
+                          <option value="">Select exercise</option>
+                          {exerciseOptions.map((exercise) => (
+                            <option key={exercise.id} value={String(exercise.id)}>
+                              {exercise.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <button
+                        type="button"
+                        className="programs-modal-secondary-btn programs-plan-add-btn"
+                        onClick={handleAddExerciseToDetailWeek}
+                        disabled={!detailPlanExerciseId || detailsWorkoutPlan.length === 0}
+                      >
+                        Add Exercise
+                      </button>
+                    </div>
+                  ) : null}
+
+                  <div className="programs-plan-weeks">
+                    {detailsWorkoutPlan.length === 0 ? (
+                      <p className="programs-plan-helper">No workout plan set for this program yet.</p>
+                    ) : (
+                      detailsWorkoutPlan.map((weekEntry) => (
+                        <article
+                          key={`details-week-${weekEntry.week_number}`}
+                          className="programs-plan-week-card"
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={() => handleDetailExerciseDrop(weekEntry.week_number)}
+                        >
+                          <h4>Week {weekEntry.week_number}</h4>
+                          {weekEntry.exercise_ids.length === 0 ? (
+                            <p className="programs-plan-helper">No exercises added yet.</p>
+                          ) : (
+                            <ul className="programs-plan-exercise-list">
+                              {weekEntry.exercise_ids.map((exerciseId) => (
+                                <li
+                                  key={`details-${weekEntry.week_number}-${exerciseId}`}
+                                  draggable={canEditSelectedProgram && isDetailsEditMode}
+                                  onDragStart={() => handleDetailExerciseDragStart(weekEntry.week_number, exerciseId)}
+                                  onDragEnd={() => setDetailDraggedExercise(null)}
+                                  onDragOver={(event) => event.preventDefault()}
+                                  onDrop={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    handleDetailExerciseDrop(weekEntry.week_number, exerciseId)
+                                  }}
+                                >
+                                  <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
+                                  {canEditSelectedProgram && isDetailsEditMode ? (
+                                    <button
+                                      type="button"
+                                      className="programs-plan-remove-btn"
+                                      onClick={() => handleRemoveExerciseFromDetailWeek(weekEntry.week_number, exerciseId)}
+                                      aria-label={`Remove ${exerciseNameById[exerciseId] || `exercise ${exerciseId}`} from week ${weekEntry.week_number}`}
+                                    >
+                                      Remove
+                                    </button>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </article>
+                      ))
+                    )}
+                  </div>
+                </section>
+              ) : null}
 
               {!isDetailsEditMode && isSchedulingToCalendar ? (
                 <section className="programs-schedule-section" aria-label="Schedule to Calendar">
@@ -2724,18 +3184,14 @@ function Programs() {
               ) : null}
 
               <div className="programs-modal-actions">
-                {!isDetailsEditMode ? (
+                {!isDetailsEditMode && !isWorkoutPlanUnlocked ? (
                   <button
                     type="button"
-                    className="programs-calendar-btn"
-                    onClick={() => {
-                      setScheduleStartDate(toCalendarDateKey(new Date()))
-                      setScheduleSuccessMessage("")
-                      setIsSchedulingToCalendar((prev) => !prev)
-                    }}
-                    disabled={detailLoadingId === selectedProgramId}
+                    className="programs-modal-primary-btn"
+                    onClick={handleBuyProgram}
+                    disabled={detailLoadingId === selectedProgramId || isCheckoutSubmitting}
                   >
-                    Add to Calendar
+                    {isCheckoutSubmitting ? "Redirecting..." : "Buy Program"}
                   </button>
                 ) : null}
                 {canEditSelectedProgram && !isDetailsEditMode ? (
@@ -2746,6 +3202,16 @@ function Programs() {
                     disabled={detailLoadingId === selectedProgramId}
                   >
                     Edit Program
+                  </button>
+                ) : null}
+                {!isDetailsEditMode ? (
+                  <button
+                    type="button"
+                    className="programs-schedule-btn"
+                    onClick={handleOpenScheduleModal}
+                    disabled={detailLoadingId === selectedProgramId}
+                  >
+                    Schedule to Calendar
                   </button>
                 ) : null}
                 {canEditSelectedProgram && isDetailsEditMode ? (
@@ -2765,6 +3231,84 @@ function Programs() {
                 ) : null}
               </div>
             </form>
+          </aside>
+        </div>
+      ) : null}
+
+      {isScheduleModalOpen ? (
+        <div className="programs-modal-backdrop" role="presentation" onClick={handleCloseScheduleModal}>
+          <aside
+            className="programs-modal programs-schedule-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Schedule program to calendar"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="programs-modal-header">
+              <button type="button" className="programs-btn-base programs-modal-secondary-btn" onClick={handleCloseScheduleModal} aria-label="Close schedule modal">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+              <h2 className="programs-modal-title">Schedule to Calendar</h2>
+            </header>
+
+            <div className="programs-modal-form">
+              <p className="programs-schedule-description">
+                Choose a start date for <strong>{(programDetailsById[selectedProgramId] ?? selectedProgram)?.name || (programDetailsById[selectedProgramId] ?? selectedProgram)?.title || "this program"}</strong>.
+                One workout entry will be added to your calendar for each week of the program.
+              </p>
+
+              {scheduleError ? (
+                <p className="programs-modal-error" role="alert">{scheduleError}</p>
+              ) : null}
+
+              {scheduleSuccess ? (
+                <p className="programs-schedule-success" role="status">{scheduleSuccess}</p>
+              ) : null}
+
+              {!scheduleSuccess ? (
+                <>
+                  <label className="programs-modal-field programs-schedule-date-field">
+                    <span>Start Date</span>
+                    <input
+                      type="date"
+                      value={scheduleStartDate}
+                      onChange={(e) => {
+                        setScheduleStartDate(e.target.value)
+                        setScheduleError("")
+                      }}
+                    />
+                  </label>
+
+                  <p className="programs-plan-helper">
+                    {detailWorkoutPlan.length > 0
+                      ? `This will create ${detailWorkoutPlan.length} calendar entr${detailWorkoutPlan.length !== 1 ? "ies" : "y"} (one per week).`
+                      : "No workout plan found. Please add weeks to this program first."}
+                  </p>
+
+                  <div className="programs-modal-actions">
+                    <button
+                      type="button"
+                      className="programs-modal-primary-btn"
+                      onClick={handleScheduleProgram}
+                      disabled={detailWorkoutPlan.length === 0}
+                    >
+                      Confirm Schedule
+                    </button>
+                    <button type="button" className="programs-modal-secondary-btn" onClick={handleCloseScheduleModal}>
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="programs-modal-actions">
+                  <button type="button" className="programs-modal-primary-btn" onClick={handleCloseScheduleModal}>
+                    Done
+                  </button>
+                </div>
+              )}
+            </div>
           </aside>
         </div>
       ) : null}
