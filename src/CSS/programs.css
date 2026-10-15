@@ -397,6 +397,9 @@
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
+  position: relative;
+  left: 0.5rem;
+  bottom: 3rem;
 }
 
 .programs-banner-upload-btn:hover {
@@ -544,6 +547,12 @@
   gap: 0.35rem;
 }
 
+.programs-modal-grid label span {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #334155;
+}
+
 .programs-modal-field {
   display: grid;
   gap: 0.35rem;
@@ -588,12 +597,57 @@
   font-size: 0.92rem;
 }
 
+.programs-modal-grid label input,
+.programs-modal-grid label textarea,
+.programs-modal-grid label select {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
 .programs-modal-field input:focus,
 .programs-modal-field textarea:focus,
 .programs-modal-field select:focus {
   outline: none;
   border-color: #1d4ed8;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+.programs-modal-grid label input:focus,
+.programs-modal-grid label textarea:focus,
+.programs-modal-grid label select:focus {
+  outline: none;
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+.programs-modal-grid .multiselect-dropdown {
+  width: 100%;
+}
+
+.programs-modal-grid .multiselect-toggle {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.6rem 2rem 0.6rem 0.7rem;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
+.programs-modal-grid .multiselect-toggle:focus-visible {
+  outline: none;
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+.programs-modal-grid .multiselect-list {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  margin-top: 0.25rem;
 }
 
 .programs-modal-checkbox {
@@ -627,7 +681,7 @@
   background: transparent;
   position: absolute;
   top: 0.5rem;
-  /* left: 9rem; */
+  left: 0.5rem;
   /* z-index: 2; */
   color: #334155;
   /* width: 40px;  Set a defined width/height to make a perfect circle
@@ -646,7 +700,7 @@
   background-color: rgba(255, 255, 255, 0.15); /* Soft white tint over dark images */
   border-radius: 50%;
   opacity: 0; /* Hidden by default */
-  transform: scale(0.8); /* Slightly smaller initially */
+  transform: scale(0.5); /* Slightly smaller initially */
   transition: opacity 0.2s ease, transform 0.2s ease;
   z-index: -1; /* Keeps the overlay behind the "X" text */
 }
@@ -657,7 +711,7 @@
 }
 .programs-modal-close-btn:hover::before {
   opacity: 1; /* Fades the overlay in */
-  transform: scale(1); /* Expands the overlay to full size */
+  transform: scale(.8); /* Expands the overlay to full size */
 }
 
 
@@ -768,19 +822,62 @@
   align-items: end;
 }
 
+.programs-plan-reorder-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  width: 2rem;
+  height: 2rem;
+  padding: 0.25rem;
+  background: #ffffff;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.programs-plan-reorder-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.programs-plan-reorder-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.programs-plan-reorder-img {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+  object-fit: contain;
+}
+
 .programs-plan-add-btn {
   white-space: nowrap;
   position: relative;
   top: 0;
   border: none;
   border-radius: 10px;
-  padding: 0.55rem 0.8rem;
+  padding: .25rem .25rem;
   background: #1d4ed8;
   color: #ffffff;
+  width: 3rem;
+  height: 3rem;
+}
+
+.programs-plan-add-btn img {
+  display: inline-block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+
 }
 
 .programs-modal-secondary-btn.programs-plan-add-btn:hover {
   transform: none;
+  cursor: pointer;
+  background: #1e40af;
 }
 
 .programs-plan-weeks {
@@ -824,6 +921,26 @@
   cursor: grabbing;
 }
 
+.programs-plan-exercise-item {
+  cursor: grab;
+  opacity: 0.92;
+}
+
+.programs-plan-exercise-item:active {
+  cursor: grabbing;
+  opacity: 0.72;
+}
+
+.programs-plan-exercise-item {
+  cursor: grab;
+  opacity: 0.92;
+}
+
+.programs-plan-exercise-item:active {
+  cursor: grabbing;
+  opacity: 0.72;
+}
+
 .programs-plan-remove-btn {
   border: 1px solid #cbd5e1;
   border-radius: 8px;
@@ -836,6 +953,20 @@
 
 .programs-plan-remove-btn:hover {
   background: #f8fafc;
+}
+
+.add-WOD-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: contain;
+  cursor: pointer;
+  position: relative;
+  top: -0.25rem;
+}
+
+.add-WOD-icon:hover {
+  transform: scale(1.1);
+  cursor: pointer;
 }
 
 .programs-calendar-btn {
@@ -971,6 +1102,15 @@
   max-width: 420px;
 }
 
+.programs-schedule-inline {
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 0.9rem;
+  background: #f8fff9;
+  display: grid;
+  gap: 0.75rem;
+}
+
 .programs-schedule-description {
   margin: 0 0 0.75rem;
   color: #334155;
@@ -983,6 +1123,11 @@
   gap: 0.3rem;
 }
 
+.programs-schedule-time-field {
+  display: grid;
+  gap: 0.3rem;
+}
+
 .programs-schedule-date-field input[type="date"] {
   border: 1px solid #cbd5e1;
   border-radius: 8px;
@@ -990,6 +1135,65 @@
   font: inherit;
   width: 100%;
   box-sizing: border-box;
+}
+
+.programs-schedule-time-field input[type="time"] {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.programs-schedule-days {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.programs-schedule-days-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem 0.75rem;
+}
+
+.programs-schedule-day-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #334155;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.programs-schedule-day-pill:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.programs-schedule-day-pill.is-selected {
+  border-color: #16a34a;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.programs-schedule-day-pill-check {
+  width: 1rem;
+  text-align: center;
+  font-weight: 800;
+  color: #16a34a;
+}
+
+.programs-schedule-days-selected {
+  margin: 0;
+  color: #475569;
+  font-size: 0.85rem;
 }
 
 .programs-schedule-success {

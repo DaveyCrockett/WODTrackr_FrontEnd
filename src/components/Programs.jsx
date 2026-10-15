@@ -2,23 +2,90 @@ import "../CSS/programs.css"
 import "../CSS/multiselect.css"
 import axios from "axios"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { Link } from 'react-router-dom'
+import { useProgramForm } from "./contexts/ProgramFormContext"
 import MultiSelect from "./MultiSelect"
+import { buildRequestConfig } from "../utils/exerciseUtils"
+import ExerciseIcon from "../assets/ExerciseIcon.png"
+import addWODIcon from "../assets/add-WOD-icon.png"
+import reorderIcon from "../assets/reorder-icon.png"
 
 const API_URL = "/api/wodtrackr/exercise-programs/"
-const EQUIPMENT_API_URL = "/api/wodtrackr/equipment/"
+const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 const STRIPE_CHECKOUT_API_URL = String(
   import.meta.env.VITE_CHECKOUT_SESSION_API_URL || "/api/users/billing/stripe/checkout-session/",
 ).trim()
 const WORKOUTS_STORAGE_KEY = "wodtrackrWorkouts"
 const PURCHASED_PROGRAMS_STORAGE_KEY = "wodtrackrPurchasedProgramIds"
 const PENDING_CHECKOUT_PROGRAM_ID_STORAGE_KEY = "wodtrackrPendingCheckoutProgramId"
-const PROGRAMS_PER_PAGE = 10
+const CREATE_PROGRAM_DRAFT_STORAGE_KEY = "wodtrackrCreateProgramDraftV1"
+const PAGE_SIZE = 18
+const SKELETON_CARD_COUNT = 6
 const DEFAULT_DIFFICULTIES = ["All Levels", "Beginner", "Intermediate", "Advanced"]
 const DEFAULT_DURATION_MIN = 1
 const DEFAULT_DURATION_MAX = 12
 const PROGRAMS_CHOICES_CACHE_KEY = "wodtrackrProgramChoicesV4"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
+const WEEKDAY_OPTIONS = [
+  { value: 0, label: "Sun" },
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+]
+
+export const normalizeApiErrorMessage = (value, fallbackMessage = "") => {
+  const extractMessage = (candidate) => {
+    if (candidate === null || candidate === undefined) return ""
+    if (typeof candidate === "string") return candidate.trim()
+    if (typeof candidate === "number" || typeof candidate === "boolean") return String(candidate)
+    if (Array.isArray(candidate)) {
+      return candidate.map((entry) => extractMessage(entry)).filter(Boolean).join(" ").trim()
+    }
+    if (typeof candidate === "object") {
+      const priorityKeys = ["detail", "message", "error", "name", "non_field_errors"]
+      for (const key of priorityKeys) {
+        const nestedMessage = extractMessage(candidate[key])
+        if (nestedMessage) return nestedMessage
+      }
+      return Object.values(candidate).map((entry) => extractMessage(entry)).filter(Boolean).join(" ").trim()
+    }
+    return ""
+  }
+
+  const message = extractMessage(value)
+  return message || fallbackMessage
+}
+
+const saveCreateProgramDraft = (payload) => {
+  try {
+    sessionStorage.setItem(CREATE_PROGRAM_DRAFT_STORAGE_KEY, JSON.stringify(payload))
+  } catch {
+    // Ignore draft persistence failures.
+  }
+}
+
+const loadCreateProgramDraft = () => {
+  try {
+    const raw = sessionStorage.getItem(CREATE_PROGRAM_DRAFT_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === "object" ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+const clearCreateProgramDraft = () => {
+  try {
+    sessionStorage.removeItem(CREATE_PROGRAM_DRAFT_STORAGE_KEY)
+  } catch {
+    // Ignore draft cleanup failures.
+  }
+}
 
 const normalizeDurationWeeks = (value) => {
   const parsed = Number(value)
@@ -27,6 +94,122 @@ const normalizeDurationWeeks = (value) => {
 
 const buildProgramItemsApiUrl = (programId) => `${API_URL}${programId}/item/`
 const buildProgramItemDetailApiUrl = (programId, itemId) => `${API_URL}${programId}/item/${itemId}/`
+
+const toPositiveIntegerOrNull = (value) => {
+  const candidate = Number(value)
+  if (!Number.isFinite(candidate) || candidate <= 0) return null
+  return Math.floor(candidate)
+}
+
+const normalizePlanExerciseEntry = (entry) => {
+  const exerciseId = Number(entry?.exercise_id ?? entry?.exerciseId ?? entry?.exercise?.id ?? entry?.exercise)
+  if (!Number.isFinite(exerciseId)) return null
+
+  const setNumber = toPositiveIntegerOrNull(entry?.set_number ?? entry?.setNumber ?? entry?.sets)
+  const reps = toPositiveIntegerOrNull(entry?.reps)
+  const timeSeconds = toPositiveIntegerOrNull(
+    entry?.time_seconds ?? entry?.timeSeconds ?? entry?.time ?? entry?.duration_seconds ?? entry?.durationSeconds,
+  )
+
+  return {
+    exercise_id: exerciseId,
+    ...(setNumber ? { set_number: setNumber } : {}),
+    ...(reps ? { reps } : {}),
+    ...(timeSeconds ? { time_seconds: timeSeconds } : {}),
+  }
+}
+
+const mergePlanExerciseEntries = (entries) => {
+  const entriesByExerciseId = new Map()
+  for (const rawEntry of Array.isArray(entries) ? entries : []) {
+    const normalizedEntry = normalizePlanExerciseEntry(rawEntry)
+    if (!normalizedEntry) continue
+    const currentEntry = entriesByExerciseId.get(normalizedEntry.exercise_id)
+    entriesByExerciseId.set(normalizedEntry.exercise_id, {
+      exercise_id: normalizedEntry.exercise_id,
+      set_number: normalizedEntry.set_number ?? currentEntry?.set_number,
+      reps: normalizedEntry.reps ?? currentEntry?.reps,
+      time_seconds: normalizedEntry.time_seconds ?? currentEntry?.time_seconds,
+    })
+  }
+
+  return [...entriesByExerciseId.values()].map((entry) => ({
+    exercise_id: entry.exercise_id,
+    ...(entry.set_number ? { set_number: entry.set_number } : {}),
+    ...(entry.reps ? { reps: entry.reps } : {}),
+    ...(entry.time_seconds ? { time_seconds: entry.time_seconds } : {}),
+  }))
+}
+
+const buildDefaultWodTitle = (index) => `WOD ${index + 1}`
+
+const buildWodKey = (weekNumber, index) => `week-${weekNumber}-wod-${index + 1}`
+
+const normalizeWodEntry = (wodEntry, weekNumber, index = 0) => {
+  const titleCandidate = String(wodEntry?.title ?? wodEntry?.name ?? "").trim()
+  const isRest = Boolean(wodEntry?.is_rest ?? wodEntry?.isRest)
+  const exerciseEntries = mergePlanExerciseEntries(
+    Array.isArray(wodEntry?.exercise_entries)
+      ? wodEntry.exercise_entries
+      : Array.isArray(wodEntry?.exercises)
+        ? wodEntry.exercises
+        : [],
+  )
+
+  return {
+    key: String(wodEntry?.key ?? wodEntry?.id ?? buildWodKey(weekNumber, index)),
+    title: titleCandidate || buildDefaultWodTitle(index),
+    is_rest: isRest,
+    exercise_entries: isRest ? [] : exerciseEntries,
+  }
+}
+
+const buildWodsFromWeekEntry = (weekEntry) => {
+  const weekNumber = Number(weekEntry?.week_number)
+  const normalizedWeek = Number.isFinite(weekNumber) && weekNumber > 0 ? weekNumber : 1
+  if (Array.isArray(weekEntry?.wods) && weekEntry.wods.length > 0) {
+    return weekEntry.wods.map((wodEntry, index) => normalizeWodEntry(wodEntry, normalizedWeek, index))
+  }
+
+  const fallbackEntries = mergePlanExerciseEntries([
+    ...(Array.isArray(weekEntry?.exercise_entries) ? weekEntry.exercise_entries : []),
+    ...(Array.isArray(weekEntry?.exercise_ids) ? weekEntry.exercise_ids.map((exercise_id) => ({ exercise_id })) : []),
+  ])
+
+  if (fallbackEntries.length === 0) return []
+
+  return [normalizeWodEntry({ title: "WOD 1", exercise_entries: fallbackEntries }, normalizedWeek, 0)]
+}
+
+const deriveWeekFieldsFromWods = (weekNumber, wods) => {
+  const normalizedWods = (Array.isArray(wods) ? wods : []).map((wodEntry, index) =>
+    normalizeWodEntry(wodEntry, weekNumber, index),
+  )
+  const exerciseEntries = normalizedWods.flatMap((wodEntry) => buildExerciseEntriesFromWeekEntry(wodEntry))
+  const mergedEntries = mergePlanExerciseEntries(exerciseEntries)
+  return {
+    wods: normalizedWods,
+    exercise_entries: mergedEntries,
+    exercise_ids: mergedEntries.map((entry) => entry.exercise_id),
+  }
+}
+
+const buildExerciseEntriesFromWeekEntry = (weekEntry) => {
+  if (Array.isArray(weekEntry?.wods) && weekEntry.wods.length > 0) {
+    return mergePlanExerciseEntries(
+      weekEntry.wods.flatMap((wodEntry) =>
+        Array.isArray(wodEntry?.exercise_entries) ? wodEntry.exercise_entries : [],
+      ),
+    )
+  }
+
+  const explicitEntries = Array.isArray(weekEntry?.exercise_entries) ? weekEntry.exercise_entries : []
+  const fallbackIdEntries = (Array.isArray(weekEntry?.exercise_ids) ? weekEntry.exercise_ids : [])
+    .map((exerciseId) => normalizePlanExerciseEntry({ exercise_id: exerciseId }))
+    .filter(Boolean)
+
+  return mergePlanExerciseEntries([...explicitEntries, ...fallbackIdEntries])
+}
 
 const normalizeProgramItemsPayload = (data) => {
   if (Array.isArray(data?.data)) return data.data
@@ -44,14 +227,25 @@ const buildProgramItemsFromWorkoutPlan = (workoutPlan) => {
     const weekNumber = Number(weekEntry?.week_number)
     if (!Number.isFinite(weekNumber) || weekNumber < 1) continue
 
-    for (const exerciseId of Array.isArray(weekEntry?.exercise_ids) ? weekEntry.exercise_ids : []) {
-      const normalizedExerciseId = Number(exerciseId)
-      if (!Number.isFinite(normalizedExerciseId)) continue
+    const wods = buildWodsFromWeekEntry(weekEntry)
+    const orderedExerciseEntries =
+      wods.length > 0
+        ? wods.flatMap((wodEntry) =>
+          Array.isArray(wodEntry?.exercise_entries) ? wodEntry.exercise_entries : [],
+        )
+        : buildExerciseEntriesFromWeekEntry(weekEntry)
+
+    for (const exerciseEntry of orderedExerciseEntries) {
+      const normalizedEntry = normalizePlanExerciseEntry(exerciseEntry)
+      if (!normalizedEntry) continue
       items.push({
-        exercise: normalizedExerciseId,
+        exercise: normalizedEntry.exercise_id,
         position,
         week: weekNumber,
         day: 1,
+        ...(normalizedEntry.set_number ? { set_number: normalizedEntry.set_number } : {}),
+        ...(normalizedEntry.reps ? { reps: normalizedEntry.reps } : {}),
+        ...(normalizedEntry.time_seconds ? { time_seconds: normalizedEntry.time_seconds } : {}),
       })
       position += 1
     }
@@ -68,6 +262,11 @@ const normalizeProgramItemRecord = (item, fallbackPosition = 1) => {
   const dayCandidate = Number(item?.day)
   const positionCandidate = Number(item?.position)
   const idCandidate = Number(item?.id)
+  const setNumber = toPositiveIntegerOrNull(item?.set_number ?? item?.setNumber ?? item?.sets)
+  const reps = toPositiveIntegerOrNull(item?.reps)
+  const timeSeconds = toPositiveIntegerOrNull(
+    item?.time_seconds ?? item?.timeSeconds ?? item?.time ?? item?.duration_seconds ?? item?.durationSeconds,
+  )
 
   return {
     id: Number.isFinite(idCandidate) ? idCandidate : null,
@@ -75,6 +274,9 @@ const normalizeProgramItemRecord = (item, fallbackPosition = 1) => {
     week,
     day: Number.isFinite(dayCandidate) && dayCandidate > 0 ? dayCandidate : 1,
     position: Number.isFinite(positionCandidate) && positionCandidate > 0 ? positionCandidate : fallbackPosition,
+    ...(setNumber ? { set_number: setNumber } : {}),
+    ...(reps ? { reps } : {}),
+    ...(timeSeconds ? { time_seconds: timeSeconds } : {}),
   }
 }
 
@@ -88,7 +290,12 @@ const areProgramItemsEquivalent = (left, right) =>
   Number(left?.exercise) === Number(right?.exercise) &&
   Number(left?.week) === Number(right?.week) &&
   Number(left?.day ?? 1) === Number(right?.day ?? 1) &&
-  Number(left?.position) === Number(right?.position)
+  Number(left?.position) === Number(right?.position) &&
+  Number(left?.set_number ?? 0) === Number(right?.set_number ?? 0) &&
+  Number(left?.reps ?? 0) === Number(right?.reps ?? 0) &&
+  Number(left?.time_seconds ?? 0) === Number(right?.time_seconds ?? 0)
+
+
 
 const syncProgramItemsByItemUrl = async (programId, existingItems, nextItems) => {
   const endpoint = buildProgramItemsApiUrl(programId)
@@ -167,21 +374,26 @@ const syncProgramItems = async (programId, itemsPayload, replaceExisting = false
 
 const buildWorkoutPlanFromProgramItems = (items, durationValue) => {
   const grouped = (Array.isArray(items) ? items : []).reduce((accumulator, item) => {
-    const exerciseId = Number(item?.exercise_id ?? item?.exercise?.id ?? item?.exercise)
-    if (!Number.isFinite(exerciseId)) return accumulator
+    const normalizedExerciseEntry = normalizePlanExerciseEntry(item)
+    if (!normalizedExerciseEntry) return accumulator
 
     const weekNumber = Number(item?.week)
     const targetWeek = Number.isFinite(weekNumber) && weekNumber > 0 ? weekNumber : 1
-    if (!accumulator[targetWeek]) accumulator[targetWeek] = new Set()
-    accumulator[targetWeek].add(exerciseId)
+    if (!accumulator[targetWeek]) accumulator[targetWeek] = []
+    accumulator[targetWeek].push(normalizedExerciseEntry)
     return accumulator
   }, {})
 
   const basePlan = Object.entries(grouped)
-    .map(([weekNumber, exerciseIds]) => ({
-      week_number: Number(weekNumber),
-      exercise_ids: [...exerciseIds],
-    }))
+    .map(([weekNumber, exerciseEntries]) => {
+      const mergedEntries = mergePlanExerciseEntries(exerciseEntries)
+      return {
+        week_number: Number(weekNumber),
+        ...deriveWeekFieldsFromWods(Number(weekNumber), [
+          { key: buildWodKey(Number(weekNumber), 0), title: "WOD 1", is_rest: false, exercise_entries: mergedEntries },
+        ]),
+      }
+    })
     .sort((a, b) => a.week_number - b.week_number)
 
   return buildWorkoutPlanForDuration(durationValue, basePlan)
@@ -194,19 +406,18 @@ const buildWorkoutPlanForDuration = (durationValue, previousPlan = []) => {
   const planByWeek = new Map(
     (Array.isArray(previousPlan) ? previousPlan : []).map((entry) => [
       Number(entry?.week_number),
-      Array.isArray(entry?.exercise_ids)
-        ? entry.exercise_ids
-            .map((exerciseId) => Number(exerciseId))
-            .filter((exerciseId) => Number.isFinite(exerciseId))
-        : [],
+      buildWodsFromWeekEntry(entry),
     ]),
   )
 
   return Array.from({ length: weeks }, (_, index) => {
     const weekNumber = index + 1
+    const existingWods = planByWeek.get(weekNumber) ?? []
+    const normalizedWods = existingWods.length > 0 ? existingWods : [{ title: "WOD 1", exercise_entries: [] }]
+    const weekFields = deriveWeekFieldsFromWods(weekNumber, normalizedWods)
     return {
       week_number: weekNumber,
-      exercise_ids: [...new Set(planByWeek.get(weekNumber) ?? [])],
+      ...weekFields,
     }
   })
 }
@@ -215,13 +426,18 @@ const getWorkoutPlanValidationMessage = (durationValue, workoutPlan) => {
   const normalizedWorkoutPlan = buildWorkoutPlanForDuration(durationValue, workoutPlan)
   if (normalizedWorkoutPlan.length === 0) return ""
 
-  const weeksWithExercises = normalizedWorkoutPlan.filter((weekEntry) => weekEntry.exercise_ids.length > 0)
-  if (weeksWithExercises.length === 0) {
-    return "Add at least 1 workout to your program."
+  const hasConfiguredWod = (weekEntry) =>
+    buildWodsFromWeekEntry(weekEntry).some(
+      (wodEntry) => Boolean(wodEntry.is_rest) || (Array.isArray(wodEntry.exercise_entries) && wodEntry.exercise_entries.length > 0),
+    )
+
+  const weeksWithWods = normalizedWorkoutPlan.filter((weekEntry) => hasConfiguredWod(weekEntry))
+  if (weeksWithWods.length === 0) {
+    return "Add at least 1 WOD to your program."
   }
 
-  if (weeksWithExercises.length !== normalizedWorkoutPlan.length) {
-    return "Each week in the workout plan must include at least 1 workout."
+  if (weeksWithWods.length !== normalizedWorkoutPlan.length) {
+    return "Each week in the workout plan must include at least 1 WOD."
   }
 
   return ""
@@ -232,9 +448,16 @@ const areWorkoutPlansEqual = (leftPlan, rightPlan) => {
     (Array.isArray(plan) ? plan : [])
       .map((weekEntry) => ({
         week_number: Number(weekEntry?.week_number),
-        exercise_ids: [...new Set((Array.isArray(weekEntry?.exercise_ids) ? weekEntry.exercise_ids : [])
-          .map((exerciseId) => Number(exerciseId))
-          .filter((exerciseId) => Number.isFinite(exerciseId)))].sort((a, b) => a - b),
+        wods: buildWodsFromWeekEntry(weekEntry).map((wodEntry) => ({
+          title: String(wodEntry.title || "").trim(),
+          is_rest: Boolean(wodEntry.is_rest),
+          exercise_entries: mergePlanExerciseEntries(wodEntry.exercise_entries).map((entry) => ({
+            exercise_id: entry.exercise_id,
+            set_number: entry.set_number ?? null,
+            reps: entry.reps ?? null,
+            time_seconds: entry.time_seconds ?? null,
+          })),
+        })),
       }))
       .filter((weekEntry) => Number.isFinite(weekEntry.week_number) && weekEntry.week_number > 0)
       .sort((a, b) => a.week_number - b.week_number)
@@ -247,8 +470,349 @@ const areWorkoutPlansEqual = (leftPlan, rightPlan) => {
     const rightWeekEntry = right[index]
     if (!rightWeekEntry) return false
     if (weekEntry.week_number !== rightWeekEntry.week_number) return false
-    if (weekEntry.exercise_ids.length !== rightWeekEntry.exercise_ids.length) return false
-    return weekEntry.exercise_ids.every((exerciseId, exerciseIndex) => exerciseId === rightWeekEntry.exercise_ids[exerciseIndex])
+    if (weekEntry.wods.length !== rightWeekEntry.wods.length) return false
+    return weekEntry.wods.every((wodEntry, wodIndex) => {
+      const rightWod = rightWeekEntry.wods[wodIndex]
+      if (!rightWod) return false
+      if (wodEntry.title !== rightWod.title || wodEntry.is_rest !== rightWod.is_rest) return false
+      if (wodEntry.exercise_entries.length !== rightWod.exercise_entries.length) return false
+      return wodEntry.exercise_entries.every((entry, exerciseIndex) => {
+        const rightEntry = rightWod.exercise_entries[exerciseIndex]
+        if (!rightEntry) return false
+        return (
+          Number(entry.exercise_id) === Number(rightEntry.exercise_id) &&
+          Number(entry.set_number ?? 0) === Number(rightEntry.set_number ?? 0) &&
+          Number(entry.reps ?? 0) === Number(rightEntry.reps ?? 0) &&
+          Number(entry.time_seconds ?? 0) === Number(rightEntry.time_seconds ?? 0)
+        )
+      })
+    })
+  })
+}
+
+const addWodToWeekPlan = (durationValue, currentPlan, weekNumber, wodPayload) => {
+  const normalizedWeek = Number(weekNumber)
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  const nextWod = normalizeWodEntry(
+    {
+      key: wodPayload?.key ?? `wod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      title: wodPayload?.title,
+      is_rest: wodPayload?.is_rest,
+      exercise_entries: [],
+    },
+    normalizedWeek,
+    999,
+  )
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const nextWods = [...buildWodsFromWeekEntry(weekEntry), nextWod]
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
+    }
+  })
+}
+
+const updateWodInWeekPlan = (durationValue, currentPlan, weekNumber, wodKey, updates) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedWodKey = String(wodKey || "")
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const nextWods = buildWodsFromWeekEntry(weekEntry).map((wodEntry) => {
+      if (String(wodEntry.key) !== normalizedWodKey) return wodEntry
+      const title = updates?.title === undefined ? wodEntry.title : String(updates.title || "").trim()
+      const isRest = updates?.is_rest === undefined ? wodEntry.is_rest : Boolean(updates.is_rest)
+      return normalizeWodEntry(
+        {
+          ...wodEntry,
+          title: title || wodEntry.title,
+          is_rest: isRest,
+          exercise_entries: isRest ? [] : wodEntry.exercise_entries,
+        },
+        weekEntry.week_number,
+        0,
+      )
+    })
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
+    }
+  })
+}
+
+const reorderWodInWeekPlan = (durationValue, currentPlan, weekNumber, wodKey, direction) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedWodKey = String(wodKey || "")
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  const offset = direction === "up" ? -1 : direction === "down" ? 1 : 0
+  if (offset === 0) return buildWorkoutPlanForDuration(durationValue, currentPlan)
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const nextWods = [...buildWodsFromWeekEntry(weekEntry)]
+    const currentIndex = nextWods.findIndex((wodEntry) => String(wodEntry.key) === normalizedWodKey)
+    if (currentIndex < 0) return weekEntry
+    const targetIndex = currentIndex + offset
+    if (targetIndex < 0 || targetIndex >= nextWods.length) return weekEntry
+    const [movedWod] = nextWods.splice(currentIndex, 1)
+    nextWods.splice(targetIndex, 0, movedWod)
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
+    }
+  })
+}
+
+const removeWodFromWeekPlan = (durationValue, currentPlan, weekNumber, wodKey) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedWodKey = String(wodKey || "")
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const nextWods = buildWodsFromWeekEntry(weekEntry).filter((wodEntry) => String(wodEntry.key) !== normalizedWodKey)
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
+    }
+  })
+}
+
+const addExerciseIdsToWeekPlan = (durationValue, currentPlan, weekNumber, exerciseIdsToAdd, targetWodKey = "") => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedTargetWodKey = String(targetWodKey || "")
+  const normalizedIds = (Array.isArray(exerciseIdsToAdd) ? exerciseIdsToAdd : [])
+    .map((exerciseId) => Number(exerciseId))
+    .filter((exerciseId) => Number.isFinite(exerciseId))
+
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || normalizedIds.length === 0) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const existingWods = buildWodsFromWeekEntry(weekEntry)
+    const fallbackWod = normalizeWodEntry({ key: buildWodKey(weekEntry.week_number, 0), title: "WOD 1" }, weekEntry.week_number, 0)
+    const targetWod = existingWods.find((wodEntry) => String(wodEntry.key) === normalizedTargetWodKey) ?? existingWods[0] ?? fallbackWod
+    const nextWods = (existingWods.length > 0 ? existingWods : [fallbackWod]).map((wodEntry) => {
+      if (String(wodEntry.key) !== String(targetWod.key)) return wodEntry
+      const nextEntries = mergePlanExerciseEntries([
+        ...wodEntry.exercise_entries,
+        ...normalizedIds.map((exercise_id) => ({ exercise_id })),
+      ])
+      return normalizeWodEntry({ ...wodEntry, exercise_entries: nextEntries, is_rest: false }, weekEntry.week_number, 0)
+    })
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
+    }
+  })
+}
+
+const removeExerciseIdFromWeekPlan = (durationValue, currentPlan, weekNumber, wodKey, exerciseIdToRemove) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedWodKey = String(wodKey || "")
+  const normalizedExerciseId = Number(exerciseIdToRemove)
+
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey || !Number.isFinite(normalizedExerciseId)) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const nextWods = buildWodsFromWeekEntry(weekEntry).map((wodEntry) => {
+      if (String(wodEntry.key) !== normalizedWodKey) return wodEntry
+      return normalizeWodEntry(
+        {
+          ...wodEntry,
+          exercise_entries: wodEntry.exercise_entries.filter(
+            (entry) => Number(entry.exercise_id) !== normalizedExerciseId,
+          ),
+        },
+        weekEntry.week_number,
+        0,
+      )
+    })
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
+    }
+  })
+}
+
+const reorderExerciseInWeekPlan = (durationValue, currentPlan, weekNumber, wodKey, exerciseId, direction) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedWodKey = String(wodKey || "")
+  const normalizedExerciseId = Number(exerciseId)
+  const offset = direction === "up" ? -1 : direction === "down" ? 1 : 0
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey || !Number.isFinite(normalizedExerciseId) || offset === 0) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+    const nextWods = buildWodsFromWeekEntry(weekEntry).map((wodEntry) => {
+      if (String(wodEntry.key) !== normalizedWodKey) return wodEntry
+      const entries = [...wodEntry.exercise_entries]
+      const currentIndex = entries.findIndex((entry) => Number(entry.exercise_id) === normalizedExerciseId)
+      if (currentIndex < 0) return wodEntry
+      const targetIndex = currentIndex + offset
+      if (targetIndex < 0 || targetIndex >= entries.length) return wodEntry
+      const [movedEntry] = entries.splice(currentIndex, 1)
+      entries.splice(targetIndex, 0, movedEntry)
+      return normalizeWodEntry({ ...wodEntry, exercise_entries: entries }, weekEntry.week_number, 0)
+    })
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
+    }
+  })
+}
+
+const reorderExerciseInWeekPlanToTarget = (
+  durationValue,
+  currentPlan,
+  sourceWeekNumber,
+  sourceWodKey,
+  sourceExerciseId,
+  targetWeekNumber,
+  targetWodKey,
+  targetExerciseId = null,
+) => {
+  const normalizedSourceWeek = Number(sourceWeekNumber)
+  const normalizedSourceWodKey = String(sourceWodKey || "")
+  const normalizedSourceExerciseId = Number(sourceExerciseId)
+  const normalizedTargetWeek = Number(targetWeekNumber)
+  const normalizedTargetWodKey = String(targetWodKey || "")
+  const normalizedTargetExerciseId =
+    targetExerciseId === null || targetExerciseId === undefined ? null : Number(targetExerciseId)
+
+  if (
+    !Number.isFinite(normalizedSourceWeek) ||
+    normalizedSourceWeek < 1 ||
+    !normalizedSourceWodKey ||
+    !Number.isFinite(normalizedSourceExerciseId) ||
+    !Number.isFinite(normalizedTargetWeek) ||
+    normalizedTargetWeek < 1 ||
+    !normalizedTargetWodKey ||
+    (normalizedTargetExerciseId !== null && !Number.isFinite(normalizedTargetExerciseId))
+  ) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  const normalizedPlan = buildWorkoutPlanForDuration(durationValue, currentPlan)
+  const weekToWods = new Map(
+    normalizedPlan.map((weekEntry) => [Number(weekEntry.week_number), buildWodsFromWeekEntry(weekEntry)]),
+  )
+
+  const sourceWods = weekToWods.get(normalizedSourceWeek)
+  const targetWods = weekToWods.get(normalizedTargetWeek)
+  if (!sourceWods || !targetWods) return normalizedPlan
+
+  const sourceWodIndex = sourceWods.findIndex((wodEntry) => String(wodEntry.key) === normalizedSourceWodKey)
+  const targetWodIndex = targetWods.findIndex((wodEntry) => String(wodEntry.key) === normalizedTargetWodKey)
+  if (sourceWodIndex < 0 || targetWodIndex < 0) return normalizedPlan
+
+  const sourceWodEntries = [...sourceWods[sourceWodIndex].exercise_entries]
+  const sourceExerciseIndex = sourceWodEntries.findIndex(
+    (entry) => Number(entry.exercise_id) === normalizedSourceExerciseId,
+  )
+  if (sourceExerciseIndex < 0) return normalizedPlan
+
+  const [movedEntry] = sourceWodEntries.splice(sourceExerciseIndex, 1)
+  sourceWods[sourceWodIndex] = normalizeWodEntry(
+    { ...sourceWods[sourceWodIndex], exercise_entries: sourceWodEntries },
+    normalizedSourceWeek,
+    sourceWodIndex,
+  )
+
+  const targetWodEntries =
+    normalizedSourceWeek === normalizedTargetWeek && sourceWodIndex === targetWodIndex
+      ? [...sourceWodEntries]
+      : [...targetWods[targetWodIndex].exercise_entries]
+
+  let nextTargetIndex = targetWodEntries.length
+  if (normalizedTargetExerciseId !== null) {
+    const targetExerciseIndex = targetWodEntries.findIndex(
+      (entry) => Number(entry.exercise_id) === normalizedTargetExerciseId,
+    )
+    if (targetExerciseIndex >= 0) {
+      nextTargetIndex = targetExerciseIndex
+    }
+  }
+  targetWodEntries.splice(Math.max(0, Math.min(nextTargetIndex, targetWodEntries.length)), 0, movedEntry)
+  targetWods[targetWodIndex] = normalizeWodEntry(
+    { ...targetWods[targetWodIndex], exercise_entries: targetWodEntries, is_rest: false },
+    normalizedTargetWeek,
+    targetWodIndex,
+  )
+
+  return normalizedPlan.map((weekEntry) => {
+    const weekNumber = Number(weekEntry.week_number)
+    const updatedWods = weekToWods.get(weekNumber)
+    if (!updatedWods) return weekEntry
+    const weekFields = deriveWeekFieldsFromWods(weekNumber, updatedWods)
+    return { ...weekEntry, ...weekFields }
+  })
+}
+
+const updateExerciseEntryInWeekPlan = (durationValue, currentPlan, weekNumber, wodKey, exerciseId, fieldName, fieldValue) => {
+  const normalizedWeek = Number(weekNumber)
+  const normalizedWodKey = String(wodKey || "")
+  const normalizedExerciseId = Number(exerciseId)
+  if (!["set_number", "reps", "time_seconds"].includes(fieldName)) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  if (!Number.isFinite(normalizedWeek) || normalizedWeek < 1 || !normalizedWodKey || !Number.isFinite(normalizedExerciseId)) {
+    return buildWorkoutPlanForDuration(durationValue, currentPlan)
+  }
+
+  const normalizedFieldValue = toPositiveIntegerOrNull(fieldValue)
+
+  return buildWorkoutPlanForDuration(durationValue, currentPlan).map((weekEntry) => {
+    if (weekEntry.week_number !== normalizedWeek) return weekEntry
+
+    const nextWods = buildWodsFromWeekEntry(weekEntry).map((wodEntry) => {
+      if (String(wodEntry.key) !== normalizedWodKey) return wodEntry
+      const nextEntries = wodEntry.exercise_entries.map((entry) => {
+        if (Number(entry.exercise_id) !== normalizedExerciseId) return entry
+        const nextEntry = { ...entry }
+        if (normalizedFieldValue) {
+          nextEntry[fieldName] = normalizedFieldValue
+        } else {
+          delete nextEntry[fieldName]
+        }
+        return nextEntry
+      })
+      return normalizeWodEntry({ ...wodEntry, exercise_entries: nextEntries }, weekEntry.week_number, 0)
+    })
+
+    const weekFields = deriveWeekFieldsFromWods(weekEntry.week_number, nextWods)
+    return {
+      ...weekEntry,
+      ...weekFields,
+    }
   })
 }
 
@@ -320,57 +884,87 @@ const buildWorkoutPlanFromProgram = (program) => {
 
   const mappedFromWorkoutPlan = Array.isArray(candidateWorkoutPlan)
     ? candidateWorkoutPlan
-        .map((entry) => {
-          const weekNumber = Number(entry?.week_number ?? entry?.week ?? entry?.weekNumber)
-          if (!Number.isFinite(weekNumber) || weekNumber < 1) return null
+      .map((entry) => {
+        const weekNumber = Number(entry?.week_number ?? entry?.week ?? entry?.weekNumber)
+        if (!Number.isFinite(weekNumber) || weekNumber < 1) return null
 
-          const explicitIds = extractExerciseIds(entry?.exercise_ids)
-          const fromExercises = extractExerciseIds(entry?.exercises)
-          return {
-            week_number: weekNumber,
-            exercise_ids: [...new Set([...explicitIds, ...fromExercises])],
-          }
-        })
-        .filter(Boolean)
+        const mappedWods = Array.isArray(entry?.wods)
+          ? entry.wods.map((wodEntry, index) => normalizeWodEntry(wodEntry, weekNumber, index))
+          : []
+        const explicitEntries = mergePlanExerciseEntries(
+          mappedWods.length > 0
+            ? mappedWods.flatMap((wodEntry) => wodEntry.exercise_entries)
+            : [
+              ...(Array.isArray(entry?.exercise_entries) ? entry.exercise_entries : []),
+              ...(Array.isArray(entry?.exercises) ? entry.exercises : []),
+            ],
+        )
+        const explicitIds = extractExerciseIds(entry?.exercise_ids)
+        const fromExercises = extractExerciseIds(entry?.exercises)
+        const fallbackEntries = [...new Set([...explicitIds, ...fromExercises])]
+          .map((exerciseId) => normalizePlanExerciseEntry({ exercise_id: exerciseId }))
+          .filter(Boolean)
+        const exerciseEntries = mergePlanExerciseEntries([...explicitEntries, ...fallbackEntries])
+        const nextWods =
+          mappedWods.length > 0
+            ? mappedWods
+            : [normalizeWodEntry({ title: "WOD 1", exercise_entries: exerciseEntries }, weekNumber, 0)]
+        const weekFields = deriveWeekFieldsFromWods(weekNumber, nextWods)
+        return {
+          week_number: weekNumber,
+          ...weekFields,
+        }
+      })
+      .filter(Boolean)
     : []
 
   const mappedFromExercises = Array.isArray(program.exercises)
     ? program.exercises.reduce((accumulator, entry) => {
-        const exerciseId = toExerciseId(entry?.id ?? entry?.exercise_id ?? entry)
-        if (!exerciseId) return accumulator
-        const weekNumber = Number(entry?.week_number ?? entry?.week ?? entry?.weekNumber)
-        const targetWeek = Number.isFinite(weekNumber) && weekNumber > 0 ? weekNumber : 1
-        if (!accumulator[targetWeek]) {
-          accumulator[targetWeek] = new Set()
-        }
-        accumulator[targetWeek].add(exerciseId)
-        return accumulator
-      }, {})
+      const normalizedEntry = normalizePlanExerciseEntry(entry)
+      const exerciseId = normalizedEntry?.exercise_id ?? toExerciseId(entry?.id ?? entry?.exercise_id ?? entry)
+      if (!exerciseId) return accumulator
+      const weekNumber = Number(entry?.week_number ?? entry?.week ?? entry?.weekNumber)
+      const targetWeek = Number.isFinite(weekNumber) && weekNumber > 0 ? weekNumber : 1
+      if (!accumulator[targetWeek]) {
+        accumulator[targetWeek] = []
+      }
+      accumulator[targetWeek].push(normalizedEntry ?? { exercise_id: exerciseId })
+      return accumulator
+    }, {})
     : {}
 
-  const mappedFromExercisesList = Object.entries(mappedFromExercises).map(([week, ids]) => ({
-    week_number: Number(week),
-    exercise_ids: [...ids],
-  }))
+  const mappedFromExercisesList = Object.entries(mappedFromExercises).map(([week, entries]) => {
+    const weekNumber = Number(week)
+    const exerciseEntries = mergePlanExerciseEntries(entries)
+    const weekFields = deriveWeekFieldsFromWods(weekNumber, [
+      { key: buildWodKey(weekNumber, 0), title: "WOD 1", exercise_entries: exerciseEntries, is_rest: false },
+    ])
+    return {
+      week_number: weekNumber,
+      ...weekFields,
+    }
+  })
 
   const mergedPlan = [...mappedFromWorkoutPlan, ...mappedFromExercisesList]
   if (mergedPlan.length === 0) return []
 
   const mergedByWeek = mergedPlan.reduce((accumulator, entry) => {
     if (!accumulator[entry.week_number]) {
-      accumulator[entry.week_number] = new Set()
+      accumulator[entry.week_number] = []
     }
-    for (const exerciseId of entry.exercise_ids) {
-      accumulator[entry.week_number].add(exerciseId)
-    }
+    accumulator[entry.week_number].push(...buildWodsFromWeekEntry(entry))
     return accumulator
   }, {})
 
   const normalizedPlan = Object.entries(mergedByWeek)
-    .map(([week, ids]) => ({
-      week_number: Number(week),
-      exercise_ids: [...ids],
-    }))
+    .map(([week, wods]) => {
+      const weekNumber = Number(week)
+      const weekFields = deriveWeekFieldsFromWods(weekNumber, wods)
+      return {
+        week_number: weekNumber,
+        ...weekFields,
+      }
+    })
     .sort((a, b) => a.week_number - b.week_number)
 
   const durationWeeks = normalizeDurationWeeks(program.duration_weeks)
@@ -379,6 +973,21 @@ const buildWorkoutPlanFromProgram = (program) => {
   }
 
   return normalizedPlan
+}
+
+const formatExercisePlanMeta = (exerciseEntry) => {
+  if (!exerciseEntry || typeof exerciseEntry !== "object") return ""
+
+  const setNumber = toPositiveIntegerOrNull(exerciseEntry.set_number)
+  const reps = toPositiveIntegerOrNull(exerciseEntry.reps)
+  const timeSeconds = toPositiveIntegerOrNull(exerciseEntry.time_seconds)
+  const parts = []
+
+  if (setNumber) parts.push(`${setNumber} set${setNumber === 1 ? "" : "s"}`)
+  if (reps) parts.push(`${reps} rep${reps === 1 ? "" : "s"}`)
+  if (timeSeconds) parts.push(`${timeSeconds}s`)
+  if (parts.length === 0) return ""
+  return ` (${parts.join(" • ")})`
 }
 
 const EMPTY_PROGRAM_FORM_VALUES = {
@@ -394,7 +1003,7 @@ const EMPTY_PROGRAM_FORM_VALUES = {
 }
 
 const buildProgramFormValues = (program) => ({
-  title: String(program?.title ?? ""),
+  title: String(program?.title ?? program?.name ?? ""),
   description: String(program?.description ?? ""),
   difficulty: program?.difficulty ?? "",
   duration_weeks:
@@ -408,56 +1017,37 @@ const buildProgramFormValues = (program) => ({
   program_default_image_url: String(program?.image ?? ""),
 })
 
-const getAuthToken = () => {
-  const directToken = localStorage.getItem("wodtrackrAuthToken")
-  if (directToken) {
-    return directToken
-  }
-
-  try {
-    const rawValue = localStorage.getItem("wodtrackrUser")
-    const userData = rawValue ? JSON.parse(rawValue) : null
-    return userData?.authToken || ""
-  } catch {
-    return ""
-  }
-}
-
-const getStoredUserInfo = () => {
-  try {
-    const rawValue = localStorage.getItem("wodtrackrUser")
-    const userData = rawValue ? JSON.parse(rawValue) : null
+const normalizeExerciseEntry = (entry) => {
+  if (!entry) return null
+  if (typeof entry === "object" && !Array.isArray(entry)) {
     return {
-      username: String(userData?.username ?? "").trim(),
-      userId: userData?.id ?? userData?.user_id ?? userData?.userId ?? null,
+      id: entry.id ?? entry.exercise_id ?? entry.pk ?? null,
+      name: String(entry.name ?? entry.title ?? "").trim(),
     }
-  } catch {
-    return { username: "", userId: null }
   }
+  return { id: null, name: String(entry ?? "").trim() }
 }
 
-const buildRequestConfig = (overrides = {}) => {
-  const authToken = getAuthToken()
-  return {
-    ...(authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}),
-    ...overrides,
+const normalizeExercisesPayload = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeExerciseEntry(entry)).filter(Boolean)
   }
-}
-
-const normalizeProgramsPayload = (data) => {
-  if (Array.isArray(data?.data)) {
-    return data.data
-  }
-
-  if (Array.isArray(data?.results)) {
-    return data.results
-  }
-
-  if (Array.isArray(data)) {
-    return data
+  if (value && typeof value === "object") {
+    const nestedCandidates = [
+      value.value,
+      value.target?.value,
+      value.exercise,
+      value.exercises,
+      value.exercise_ids,
+      value.exercise_values,
+      value.exercise_required,
+    ]
+      .filter((entry) => entry !== undefined && entry !== null)
+      .flatMap((entry) => normalizeExercisesPayload(entry))
+    return nestedCandidates
   }
 
-  return []
+  return normalizeExerciseEntry(value)
 }
 
 const normalizeProgramDetailPayload = (data) => {
@@ -689,11 +1279,11 @@ const getStripePublishableKey = () => String(import.meta.env.VITE_STRIPE_PUBLISH
 const getProgramCheckoutTitle = (programDetails, programSummary, formValues) =>
   String(
     formValues?.title ||
-      programDetails?.title ||
-      programDetails?.name ||
-      programSummary?.title ||
-      programSummary?.name ||
-      "Program",
+    programDetails?.title ||
+    programDetails?.name ||
+    programSummary?.title ||
+    programSummary?.name ||
+    "Program",
   ).trim()
 
 const parseCheckoutSessionResponse = (responseData) => {
@@ -710,12 +1300,10 @@ const parseCheckoutSessionResponse = (responseData) => {
 
 const buildCheckoutReturnUrl = (type, programId) => {
   const basePath = window.location.origin + window.location.pathname
-  console.log("Building checkout return URL with basePath:", basePath, "type:", type, "programId:", programId)
   const query = new URLSearchParams({
     checkout: type,
     programId: String(programId),
   })
-  console.log("Constructed query parameters:", query.toString())
   return `${basePath}?${query.toString()}`
 }
 
@@ -724,14 +1312,21 @@ const getProgramImageUrl = (program) => {
 
   return String(
     program?.image ??
-      program?.program_image ??
-      program?.banner ??
-      program?.banner_image ??
-      program?.image_url ??
-      program?.imageUrl ??
-      "",
+    program?.program_image ??
+    program?.banner ??
+    program?.banner_image ??
+    program?.image_url ??
+    program?.imageUrl ??
+    "",
   ).trim()
 }
+
+function capitalizeFirstLetter(str) {
+  if (!str) return ''; // Handle empty strings safely
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+
 const normalizeEquipmentEntry = (value) => {
   const normalizeScalar = (entry) => {
     if (entry === null || entry === undefined) return ""
@@ -764,7 +1359,7 @@ const normalizeEquipmentEntry = (value) => {
       value.label ??
       value.equipment_name ??
       value.equipmentName ??
-      value.equipment 
+      value.equipment
 
     if (candidate === null || candidate === undefined) return ""
     if (typeof candidate === "object") {
@@ -794,7 +1389,7 @@ const normalizeEquipmentEntry = (value) => {
     return normalizeScalar(candidate)
   }
 
-   return normalizeScalar(value)
+  return normalizeScalar(value)
 }
 
 const normalizeEquipmentValues = (value) => {
@@ -802,7 +1397,7 @@ const normalizeEquipmentValues = (value) => {
     return value
       .map((entry) => normalizeEquipmentEntry(entry))
       .filter(Boolean)
-  } 
+  }
   if (value && typeof value === "object") {
     const nestedCandidates = [
       value.value,
@@ -921,17 +1516,64 @@ const canonicalizeEquipmentValues = (value, equipmentChoices = []) => {
   return [...new Set(mappedValues)]
 }
 
-function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
-  const [programs, setPrograms] = useState([])
-  const [isLoading, setIsLoading] = useState(false)
+function Programs({
+  programs = [],
+  setPrograms = () => { },
+  userSession,
+  handleFilterChange = () => { },
+  isChoicesLoading = false,
+  exerciseLibraryState,
+  setExerciseLibraryState = () => { },
+  filters,
+  setFilters = () => { },
+  currentPage = 1,
+  setCurrentPage = () => { },
+  sortOrder = "asc",
+  goalChoices = [],
+  difficultyChoices = [],
+  categoryChoices = [],
+  equipmentChoices = [],
+  muscleChoices = [],
+  setIsChoicesLoading = () => { },
+  isProgramsLoading,
+  programsErrorMessage,
+  programExercises,
+  isCreateModalOpen,
+  searchParams,
+  setSearchParams,
+  exerciseIsAdded = [],
+  setExerciseIsAdded = () => { },
+}) {
+  const currentUsername = userSession?.username ?? ""
+  const currentUserId = userSession?.userId ?? null
+  const [searchName, setSearchName] = useState("")
   const [errorMessage, setErrorMessage] = useState("")
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const resolvedFilters = filters ?? { difficulty: [], category: [], equipment: [] }
+  const resolvedExerciseLibraryState = exerciseLibraryState ?? {
+    exerciseLibrary: [],
+    isExerciseLibraryLoading: false,
+    exerciseLibraryError: "",
+  }
+  const {
+    exerciseLibrary = [],
+    isExerciseLibraryLoading = false,
+    exerciseLibraryError = "",
+  } = resolvedExerciseLibraryState
+
+  const programFormContext = useProgramForm()
+  const {
+    clearDraft = () => { },
+  } = programFormContext ?? {}
+  const [successMessage, setSuccessMessage] = useState("")
   const [createFormValues, setCreateFormValues] = useState(EMPTY_PROGRAM_FORM_VALUES)
   const [createFieldErrors, setCreateFieldErrors] = useState({})
   const [createErrorMessage, setCreateErrorMessage] = useState("")
   const [isCreateSubmitting, setIsCreateSubmitting] = useState(false)
   const [workouts, setWorkouts] = useState(() => getStoredWorkouts())
   const [createPlanWeek, setCreatePlanWeek] = useState(1)
+  const [createPlanWodKey, setCreatePlanWodKey] = useState("")
+  const [createPlanWodTitle, setCreatePlanWodTitle] = useState("")
+  const [createPlanWodIsRest, setCreatePlanWodIsRest] = useState(false)
   const [createPlanExercise, setCreatePlanExercise] = useState([])
   const [createPlanWorkoutId, setCreatePlanWorkoutId] = useState("")
   const [createDraggedExercise, setCreateDraggedExercise] = useState(null)
@@ -959,7 +1601,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
   const editImageInputRef = useRef(null)
   const [detailWorkoutPlan, setDetailWorkoutPlan] = useState([])
   const [detailPlanWeek, setDetailPlanWeek] = useState(1)
-  const [detailPlanExerciseId, setDetailPlanExerciseId] = useState("")
+  const [detailPlanWodKey, setDetailPlanWodKey] = useState("")
   const [detailPlanWorkoutId, setDetailPlanWorkoutId] = useState("")
   const [detailDraggedExercise, setDetailDraggedExercise] = useState(null)
   const [categoryChoices, setCategoryChoices] = useState([])
@@ -967,39 +1609,56 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
   const [difficultyChoices, setDifficultyChoices] = useState([])
   const [equipmentChoices, setEquipmentChoices] = useState([])
   const [durationRange, setDurationRange] = useState({ min: DEFAULT_DURATION_MIN, max: DEFAULT_DURATION_MAX })
-  const [isChoicesLoading, setIsChoicesLoading] = useState(false)
   // Schedule-to-calendar state
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false)
   const [scheduleStartDate, setScheduleStartDate] = useState("")
+  const [scheduleDaysOfWeek, setScheduleDaysOfWeek] = useState([])
   const [scheduleError, setScheduleError] = useState("")
   const [scheduleSuccess, setScheduleSuccess] = useState("")
+  const [visibleProgramsCount, setVisibleProgramsCount] = useState(PAGE_SIZE)
+  const [hasHydratedCreateDraft, setHasHydratedCreateDraft] = useState(false)
 
-  const { exerciseLibrary, isExerciseLibraryLoading, exerciseLibraryError } = exerciseLibraryState
+
+  const openCreateModal = () => setSearchParams({ newProgram: "true" })
+
+  const closeCreateModal = () => {
+    setSearchParams({})
+    clearDraft()
+  }
 
   useEffect(() => {
-    const loadPrograms = async () => {
-      setIsLoading(true)
-      setErrorMessage("")
-
+    const loadExerciseLibrary = async () => {
+      const config = buildRequestConfig()
+      setExerciseLibraryState((prevState) => ({
+        ...prevState,
+        isExerciseLibraryLoading: true,
+        exerciseLibraryError: '',
+      }))
       try {
-        const response = await axios.get(API_URL, buildRequestConfig())
-        console.log("Raw programs response:", response)
-        setPrograms(normalizeProgramsPayload(response?.data))
+        const response = await axios.get(EXERCISES_API_URL, config)
+        const nextNode = response?.data?.next
+        setExerciseLibraryState((prevState) => ({
+          ...prevState,
+          isExerciseLibraryLoading: false,
+          exerciseLibraryError: '',
+          exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || []),
+          hasMoreExercises: nextNode !== null,
+        }))
       } catch (error) {
-        if (error?.response?.status === 401 || error?.response?.status === 403) {
-          setErrorMessage("Please log in to load training programs.")
-        } else {
-          const message = error?.response?.data?.detail || "Unable to load programs. Please try again."
-          setErrorMessage(message)
-        }
-        setPrograms([])
-      } finally {
-        setIsLoading(false)
+        console.error('API or Normalization Error:', error?.response || error?.message || error)
+        setExerciseLibraryState((prevState) => ({
+          ...prevState,
+          isExerciseLibraryLoading: false,
+          exerciseLibrary: [],
+          exerciseLibraryError: 'Unable to load exercise library for workout planning.',
+        }))
       }
     }
+    loadExerciseLibrary()
+  }, [searchName, sortOrder, filters])
 
-    loadPrograms()
-  }, [])
+
+
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search)
@@ -1056,110 +1715,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     }
   }, [])
 
-  useEffect(() => {
-    const loadChoices = async () => {
-      setIsChoicesLoading(true)
-
-      try {
-        const cachedRaw = localStorage.getItem(PROGRAMS_CHOICES_CACHE_KEY)
-        if (cachedRaw) {
-          const parsed = JSON.parse(cachedRaw)
-          const isFresh = Date.now() - (parsed?.cachedAt || 0) < CHOICES_CACHE_TTL_MS
-          if (
-            isFresh &&
-            (parsed?.categoryChoices?.length ||
-              parsed?.goalChoices?.length ||
-              parsed?.difficultyChoices?.length ||
-              parsed?.equipmentChoices?.length)
-          ) {
-            setCategoryChoices(parsed.categoryChoices || [])
-            setGoalChoices(parsed.goalChoices || [])
-            setDifficultyChoices(parsed.difficultyChoices || [])
-            setEquipmentChoices(parsed.equipmentChoices || [])
-            if (parsed?.durationRange?.min && parsed?.durationRange?.max) {
-              setDurationRange(parsed.durationRange)
-            }
-          }
-        }
-      } catch {
-        localStorage.removeItem(PROGRAMS_CHOICES_CACHE_KEY)
-      }
-
-      try {
-        const requestConfig = buildRequestConfig()
-        const [choicesResult, equipmentResult] = await Promise.allSettled([
-          axios.get(`${API_URL}choices/`, requestConfig),
-          axios.get(EQUIPMENT_API_URL, requestConfig),
-        ])
-    
-        const data = choicesResult.status === "fulfilled" ? choicesResult.value?.data ?? {} : {}
-        const equipmentData = equipmentResult.status === "fulfilled" ? equipmentResult.value?.data : null
-        const directCategoryChoices = normalizeChoices(data.category ?? data.categories ?? [])
-        const directGoalChoices = normalizeChoices(data.goal ?? data.goals ?? [])
-        const directDifficultyChoices = normalizeChoices(data.difficulty ?? data.difficulties ?? [])
-        const directEquipmentChoices = normalizeEquipmentChoices(data.equipment ?? data.equipments ?? [])
-        const equipmentChoicesFromEndpoint = normalizeEquipmentChoices(normalizeEquipmentPayload(equipmentData))
-
-        const category =
-          directCategoryChoices.length > 0 ? directCategoryChoices : getChoicesFromMetadata(data, ["category", "categories"])
-        const goal = directGoalChoices.length > 0 ? directGoalChoices : getChoicesFromMetadata(data, ["goal", "goals"])
-        const difficulty =
-          directDifficultyChoices.length > 0
-            ? directDifficultyChoices
-            : getChoicesFromMetadata(data, ["difficulty", "difficulties"])
-        const equipment =
-          equipmentChoicesFromEndpoint.length > 0
-            ? equipmentChoicesFromEndpoint
-            : directEquipmentChoices.length > 0
-            ? directEquipmentChoices
-            : getChoicesFromMetadata(data, ["equipment", "equipments"])
-        const durationConfig =
-          data.duration_weeks ??
-          data.durationWeeks ??
-          data.fields?.duration_weeks ??
-          data.properties?.duration_weeks ??
-          {}
-
-        const minDurationCandidate = Number(
-          durationConfig.min ?? durationConfig.minimum ?? durationConfig.min_value ?? durationConfig.minValue,
-        )
-        const maxDurationCandidate = Number(
-          durationConfig.max ?? durationConfig.maximum ?? durationConfig.max_value ?? durationConfig.maxValue,
-        )
-
-        const minDuration = Number.isFinite(minDurationCandidate) ? minDurationCandidate : DEFAULT_DURATION_MIN
-        const maxDuration = Number.isFinite(maxDurationCandidate) ? maxDurationCandidate : DEFAULT_DURATION_MAX
-        const nextDurationRange =
-          maxDuration >= minDuration
-            ? { min: minDuration, max: maxDuration }
-            : { min: DEFAULT_DURATION_MIN, max: DEFAULT_DURATION_MAX }
-
-        setCategoryChoices(category)
-        setGoalChoices(goal)
-        setDifficultyChoices(difficulty)
-        setEquipmentChoices(equipment)
-        setDurationRange(nextDurationRange)
-        localStorage.setItem(
-          PROGRAMS_CHOICES_CACHE_KEY,
-          JSON.stringify({
-            categoryChoices: category,
-            goalChoices: goal,
-            difficultyChoices: difficulty,
-            equipmentChoices: equipment,
-            durationRange: nextDurationRange,
-            cachedAt: Date.now(),
-          }),
-        )
-      } catch {
-        // Non-critical — filters will still work from loaded program data.
-      } finally {
-        setIsChoicesLoading(false)
-      }
-    }
-
-    loadChoices()
-  }, [])
-
   const selectedProgram = useMemo(
     () => {
       const found = programs.find((program) => program.id === selectedProgramId)
@@ -1212,7 +1767,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     const fromPrograms = programs.map((p) => p?.goal).filter(Boolean)
     return [...new Set(fromPrograms)].sort().map((v) => ({ value: v, label: v }))
   }, [programs, goalChoices])
-  const goalFilterOptions = goals
 
   const equipments = useMemo(() => {
     if (equipmentChoices.length > 0) {
@@ -1229,6 +1783,8 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
 
 
   const workoutPlan = Array.isArray(createFormValues.workout_plan) ? createFormValues.workout_plan : []
+  const selectedCreateWeekEntry = workoutPlan.find((entry) => Number(entry.week_number) === Number(createPlanWeek)) ?? null
+  const selectedCreateWeekWods = selectedCreateWeekEntry ? buildWodsFromWeekEntry(selectedCreateWeekEntry) : []
   const exerciseOptions = useMemo(() => {
     return [...exerciseLibrary]
       .filter((exercise) => Number.isFinite(Number(exercise?.id)))
@@ -1247,56 +1803,92 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     [workouts],
   )
   const detailsWorkoutPlan = Array.isArray(detailWorkoutPlan) ? detailWorkoutPlan : []
+  const selectedDetailWeekEntry = detailsWorkoutPlan.find((entry) => Number(entry.week_number) === Number(detailPlanWeek)) ?? null
+  const selectedDetailWeekWods = selectedDetailWeekEntry ? buildWodsFromWeekEntry(selectedDetailWeekEntry) : []
   const createEquipmentSelection = Array.isArray(createFormValues.equipment) ? createFormValues.equipment : []
   const editEquipmentSelection = Array.isArray(editFormValues.equipment) ? editFormValues.equipment : []
   const createEquipmentValues = normalizeEquipmentValues(createFormValues.equipment)
   const editEquipmentValues = normalizeEquipmentValues(editFormValues.equipment)
-  const filterCategoryValues = Array.isArray(filters.category) ? filters.category : []
-  const filterGoalValues = Array.isArray(filters.goal) ? filters.goal : []
-  const filterEquipmentValues = Array.isArray(filters.equipment) ? filters.equipment : []
+  const filterCategoryValues = Array.isArray(resolvedFilters.category) ? resolvedFilters.category : []
+  const filterEquipmentValues = Array.isArray(resolvedFilters.equipment) ? resolvedFilters.equipment : []
+  const filterDifficultyValues = Array.isArray(resolvedFilters.difficulty) ? resolvedFilters.difficulty : []
 
-  const filteredAndSortedPrograms = useMemo(() => {
+  useEffect(() => {
+    if (selectedCreateWeekWods.length === 0) {
+      setCreatePlanWodKey("")
+      return
+    }
+    if (selectedCreateWeekWods.some((wodEntry) => String(wodEntry.key) === String(createPlanWodKey))) {
+      return
+    }
+    setCreatePlanWodKey(String(selectedCreateWeekWods[0].key))
+  }, [selectedCreateWeekWods, createPlanWodKey])
+
+  useEffect(() => {
+    if (selectedDetailWeekWods.length === 0) {
+      setDetailPlanWodKey("")
+      return
+    }
+    if (selectedDetailWeekWods.some((wodEntry) => String(wodEntry.key) === String(detailPlanWodKey))) {
+      return
+    }
+    setDetailPlanWodKey(String(selectedDetailWeekWods[0].key))
+  }, [selectedDetailWeekWods, detailPlanWodKey])
+
+  const filteredAndSortedProgramsLibrary = useMemo(() => {
     let result = [...programs]
 
     if (searchName.trim()) {
       const query = searchName.trim().toLowerCase()
-      result = result.filter(
-        (p) =>
-          String(p?.name || "").toLowerCase().includes(query) ||
-          String(p?.description || "").toLowerCase().includes(query),
-      )
-    }
-
-    if (filters.difficulty.length > 0) {
-      result = result.filter((p) => filters.difficulty.includes(p.difficulty))
-    }
-    if (Array.isArray(filters.category) && filters.category.length > 0) {
-      result = result.filter((p) => filters.category.includes(p.category))
-    }
-    if (Array.isArray(filters.goal) && filters.goal.length > 0) {
-      result = result.filter((p) => filters.goal.includes(p.goal))
-    }
-    if (Array.isArray(filters.equipment) && filters.equipment.length > 0) {
-      result = result.filter((p) => {
-        const programEquipment = getProgramEquipmentValues(p)
-        return filters.equipment.some((selectedValue) => programEquipment.includes(normalizeEquipmentEntry(selectedValue)))
+      result = result.filter((program) => {
+        const name = String(program?.name ?? program?.title ?? "").toLowerCase()
+        const description = String(program?.description ?? "").toLowerCase()
+        return name.includes(query) || description.includes(query)
       })
     }
 
-    result.sort((a, b) => {
-      const cmp = String(a?.name || "").localeCompare(String(b?.name || ""))
-      return sortOrder === "asc" ? cmp : -cmp
+    if (filterDifficultyValues.length > 0) {
+      result = result.filter((program) => filterDifficultyValues.includes(program?.difficulty))
+    }
+
+    if (filterCategoryValues.length > 0) {
+      result = result.filter((program) => filterCategoryValues.includes(program?.category))
+    }
+
+    if (filterEquipmentValues.length > 0) {
+      result = result.filter((program) => {
+        const values = canonicalizeEquipmentValues(getProgramEquipmentValues(program), equipmentChoices)
+        return filterEquipmentValues.some((equipmentValue) => values.includes(equipmentValue))
+      })
+    }
+
+    result.sort((left, right) => {
+      const leftName = String(left?.name ?? left?.title ?? "").toLowerCase()
+      const rightName = String(right?.name ?? right?.title ?? "").toLowerCase()
+      return sortOrder === "desc" ? rightName.localeCompare(leftName) : leftName.localeCompare(rightName)
     })
 
     return result
-  }, [programs, searchName, sortOrder, filters])
+  }, [programs, searchName, sortOrder, filterDifficultyValues, filterCategoryValues, filterEquipmentValues, equipmentChoices])
 
-  const totalPages = Math.max(1, Math.ceil(filteredAndSortedPrograms.length / PROGRAMS_PER_PAGE))
-  const safePage = Math.min(currentPage, totalPages)
-  const pagedPrograms = filteredAndSortedPrograms.slice(
-    (safePage - 1) * PROGRAMS_PER_PAGE,
-    safePage * PROGRAMS_PER_PAGE,
+  useEffect(() => {
+    setVisibleProgramsCount(PAGE_SIZE)
+  }, [filteredAndSortedProgramsLibrary.length, sortOrder, resolvedFilters.searchName, resolvedFilters.category, resolvedFilters.equipment, resolvedFilters.difficulty, resolvedFilters.target])
+
+  const visiblePrograms = useMemo(
+    () => filteredAndSortedProgramsLibrary.slice(0, visibleProgramsCount),
+    [filteredAndSortedProgramsLibrary, visibleProgramsCount],
   )
+
+  const hasMoreVisiblePrograms = visibleProgramsCount < filteredAndSortedProgramsLibrary.length
+
+  const handleLoadMorePrograms = () => {
+    setVisibleProgramsCount((previousCount) => previousCount + PAGE_SIZE)
+  }
+
+
+  const filterEquipmentOptions = equipments
+  const filterCategoryOptions = categories
   const selectedProgramDetails = selectedProgramId ? programDetailsById[selectedProgramId] : null
   const selectedProgramOwner =
     selectedProgramDetails?.created_by_username ||
@@ -1306,7 +1898,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     selectedProgram?.username ||
     selectedProgram?.created_by ||
     ""
-  const { username: currentUsername, userId: currentUserId } = getStoredUserInfo()
   const selectedProgramOwnerId =
     selectedProgramDetails?.created_by_id ??
     selectedProgramDetails?.created_by_user_id ??
@@ -1325,12 +1916,9 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     selectedProgramOwnerId !== undefined &&
     String(currentUserId) === String(selectedProgramOwnerId)
   const canEditSelectedProgram = Boolean(selectedProgramId && currentUsername && (ownerMissing || ownerMatchesByUsername || ownerMatchesById))
+  const canScheduleSelectedProgram = Boolean(selectedProgramId && (canEditSelectedProgram || isWorkoutPlanUnlocked))
   const createProgramImageUrl = editImagePreview || getDefaultProgramImageUrl()
   const selectedProgramImageUrl = getProgramImageUrl(selectedProgramDetails) || getProgramImageUrl(selectedProgram) || editImagePreview || getDefaultProgramImageUrl()
-  const handleFilterChange = (key, value) => {
-    setFilters((prev) => ({ ...prev, [key]: value }))
-    setCurrentPage(1)
-  }
 
   const handleSearchChange = (event) => {
     setSearchName(event.target.value)
@@ -1345,15 +1933,20 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
   const handleClearFilters = () => {
     setSearchName("")
     setSortOrder("asc")
-    setFilters({ difficulty: [], category: [], goal: [], equipment: [] })
+    setFilters({ difficulty: [], category: [], equipment: [] })
     setCurrentPage(1)
   }
 
   const handleOpenCreateModal = () => {
+    clearCreateProgramDraft()
     setCreateFormValues(EMPTY_PROGRAM_FORM_VALUES)
     setCreateFieldErrors({})
     setCreateErrorMessage("")
+    setExerciseIsAdded([])
     setCreatePlanWeek(1)
+    setCreatePlanWodKey("")
+    setCreatePlanWodTitle("")
+    setCreatePlanWodIsRest(false)
     setCreatePlanExercise([])
     setCreatePlanWorkoutId("")
     setCreateDraggedExercise(null)
@@ -1362,19 +1955,109 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     if (editImageInputRef.current) {
       editImageInputRef.current.value = ""
     }
-    setIsCreateModalOpen(true)
+    setHasHydratedCreateDraft(true)
+    openCreateModal()
   }
 
 
   const handleCloseCreateModal = () => {
+    clearCreateProgramDraft()
     setCreateDraggedExercise(null)
     setEditImageFile(null)
     setEditImagePreview("")
+    setExerciseIsAdded([])
+    setCreatePlanWodKey("")
+    setCreatePlanWodTitle("")
+    setCreatePlanWodIsRest(false)
     if (editImageInputRef.current) {
       editImageInputRef.current.value = ""
     }
-    setIsCreateModalOpen(false)
+    setHasHydratedCreateDraft(false)
+    closeCreateModal()
   }
+
+  useEffect(() => {
+    if (!isCreateModalOpen || hasHydratedCreateDraft) {
+      return
+    }
+
+    const storedDraft = loadCreateProgramDraft()
+    if (storedDraft?.createFormValues && typeof storedDraft.createFormValues === "object") {
+      setCreateFormValues((previousValues) => ({
+        ...previousValues,
+        ...storedDraft.createFormValues,
+      }))
+    }
+    if (Number.isFinite(Number(storedDraft?.createPlanWeek))) {
+      setCreatePlanWeek(Number(storedDraft.createPlanWeek))
+    }
+    if (typeof storedDraft?.createPlanWodKey === "string") {
+      setCreatePlanWodKey(storedDraft.createPlanWodKey)
+    }
+
+    setHasHydratedCreateDraft(true)
+  }, [isCreateModalOpen, hasHydratedCreateDraft])
+
+  useEffect(() => {
+    if (!isCreateModalOpen || !hasHydratedCreateDraft) {
+      return
+    }
+
+    saveCreateProgramDraft({
+      createFormValues,
+      createPlanWeek,
+      createPlanWodKey,
+    })
+  }, [isCreateModalOpen, hasHydratedCreateDraft, createFormValues, createPlanWeek, createPlanWodKey])
+
+  const handleOpenExercisePicker = () => {
+    saveCreateProgramDraft({
+      createFormValues,
+      createPlanWeek,
+      createPlanWodKey,
+    })
+  }
+
+  useEffect(() => {
+    if (!isCreateModalOpen) {
+      return
+    }
+
+    const selectedIds = Array.isArray(exerciseIsAdded)
+      ? exerciseIsAdded
+        .map((exerciseId) => Number(exerciseId))
+        .filter((exerciseId) => Number.isFinite(exerciseId))
+      : []
+    if (selectedIds.length === 0) {
+      return
+    }
+
+    const rawWeek = Number(searchParams?.get("planWeek") || createPlanWeek || 1)
+    const weekNumber = Number.isFinite(rawWeek) && rawWeek > 0 ? rawWeek : 1
+
+    setCreateFormValues((prev) => {
+      const searchParamWodKey = String(searchParams?.get("planWodKey") || "")
+      const selectedCreateWodKey = String(createPlanWodKey || "")
+      const normalizedPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan)
+      const targetWeekEntry = normalizedPlan.find((entry) => Number(entry.week_number) === weekNumber) ?? null
+      const existingWodKeys = new Set(
+        targetWeekEntry ? buildWodsFromWeekEntry(targetWeekEntry).map((wodEntry) => String(wodEntry.key)) : [],
+      )
+      const targetWodKey =
+        [searchParamWodKey, selectedCreateWodKey].find((wodKey) => wodKey && existingWodKeys.has(wodKey)) ??
+        selectedCreateWodKey ??
+        searchParamWodKey
+      const nextPlan = addExerciseIdsToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, selectedIds, targetWodKey)
+      return { ...prev, workout_plan: nextPlan }
+    })
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+    setCreatePlanWeek(weekNumber)
+    setExerciseIsAdded([])
+
+    if (searchParams?.get("applyAddedExercises") === "true" || searchParams?.get("planWeek") || searchParams?.get("planWodKey")) {
+      setSearchParams({ newProgram: "true" })
+    }
+  }, [isCreateModalOpen, searchParams, setSearchParams, exerciseIsAdded, setExerciseIsAdded, createPlanWeek, createPlanWodKey])
 
   const handleCreateFieldChange = (event) => {
     const { name, type, checked, value } = event.target
@@ -1382,7 +2065,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
 
     setCreateFormValues((prev) => {
       const nextFormValues = { ...prev, [name]: nextValue }
-      console.log(`Updated create form field "${name}" to value:`, nextValue)
       if (name === "duration_weeks") {
         nextFormValues.workout_plan = buildWorkoutPlanForDuration(nextValue, prev.workout_plan)
       }
@@ -1391,59 +2073,85 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     setCreateFieldErrors((prev) => clearFormFieldError(prev, name, name === "duration_weeks"))
   }
 
-  const handleAddWorkoutToPlanWeek = (weekNumber, selectedExerciseIds) => {
-    // TODO: Refactor exercise-list in excise component -- create a 
-    // reusable function maybe in its own function  also for programs 
-    // exercise list. see Line 964 in Exercises component.
-    setCreateFormValues((prev) => {
-      const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        const nextExerciseIds = [...new Set([...weekEntry.exercise_ids, ...selectedExerciseIds])]
-        if (nextExerciseIds.length === weekEntry.exercise_ids.length) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: nextExerciseIds,
-        }
-      })
-      return { ...prev, workout_plan: nextPlan }
-    })
+  const handleUpdateCreateWeekExerciseMeta = (weekNumber, wodKey, exerciseId, fieldName, value) => {
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: updateExerciseEntryInWeekPlan(
+        prev.duration_weeks,
+        prev.workout_plan,
+        weekNumber,
+        wodKey,
+        exerciseId,
+        fieldName,
+        value,
+      ),
+    }))
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleAddWodToCreateWeek = (targetWeekNumber = createPlanWeek) => {
+    const weekNumber = Number(targetWeekNumber)
+    if (!Number.isFinite(weekNumber) || weekNumber < 1) return
+    const newWodKey = `wod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: addWodToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, {
+        key: newWodKey,
+        title: createPlanWodTitle,
+        is_rest: createPlanWodIsRest,
+      }),
+    }))
+    setCreatePlanWeek(weekNumber)
+    setCreatePlanWodKey(newWodKey)
+    setCreatePlanWodTitle("")
+    setCreatePlanWodIsRest(false)
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
     setCreatePlanExercise([])
   }
 
-  const handleAddSavedWorkoutToCreateWeek = () => {
-    const weekNumber = Number(createPlanWeek)
-    const selectedWorkout = workoutById.get(String(createPlanWorkoutId))
-    const workoutExerciseIds = Array.isArray(selectedWorkout?.exercise_ids)
-      ? selectedWorkout.exercise_ids.map((exerciseId) => Number(exerciseId)).filter((exerciseId) => Number.isFinite(exerciseId))
-      : []
-    if (!Number.isFinite(weekNumber) || workoutExerciseIds.length === 0) return
-
-    setCreateFormValues((prev) => {
-      const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: [...new Set([...weekEntry.exercise_ids, ...workoutExerciseIds])],
-        }
-      })
-      return { ...prev, workout_plan: nextPlan }
-    })
+  const handleUpdateCreateWod = (weekNumber, wodKey, updates) => {
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: updateWodInWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, wodKey, updates),
+    }))
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
-    setCreatePlanWorkoutId("")
   }
 
-  const handleRemoveExerciseFromWorkoutWeek = (weekNumber, exerciseId) => {
+  const handleReorderCreateWod = (weekNumber, wodKey, direction) => {
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: reorderWodInWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, wodKey, direction),
+    }))
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleRemoveWodFromCreateWeek = (weekNumber, wodKey) => {
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: removeWodFromWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, wodKey),
+    }))
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleCreateExerciseDragStart = (weekNumber, exerciseId) => {
+    setCreateDraggedExercise({ weekNumber: Number(weekNumber), exerciseId: Number(exerciseId) })
+  }
+
+  const handleCreateExerciseDrop = (targetWeekNumber, beforeExerciseId = null) => {
+    if (!createDraggedExercise) return
+
     setCreateFormValues((prev) => {
-      const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: weekEntry.exercise_ids.filter((candidateId) => candidateId !== exerciseId),
-        }
-      })
+      const basePlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan)
+      const nextPlan = moveWorkoutPlanExercise(
+        basePlan,
+        createDraggedExercise.weekNumber,
+        Number(targetWeekNumber),
+        createDraggedExercise.exerciseId,
+        beforeExerciseId,
+      )
       return { ...prev, workout_plan: nextPlan }
     })
+    setCreateDraggedExercise(null)
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
@@ -1481,16 +2189,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     if (!createFormValues.difficulty) {
       nextErrors.difficulty = "Difficulty is required."
     }
-    if (!createFormValues.category.trim()) {
-      nextErrors.category = "Category is required."
-    }
-    if (!createFormValues.goal.trim()) {
-      nextErrors.goal = "Goal is required."
-    }
-    if (!Array.isArray(createFormValues.equipment) || createFormValues.equipment.length === 0) {
-      nextErrors.equipment = "Equipment is required."
-    }
-
     const durationValue = Number(createFormValues.duration_weeks)
     if (!Number.isFinite(durationValue) || durationValue < durationRange.min || durationValue > durationRange.max) {
       nextErrors.duration_weeks = `Duration must be between ${durationRange.min} and ${durationRange.max} weeks.`
@@ -1517,24 +2215,18 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     setIsCreateSubmitting(true)
     try {
       const normalizedWorkoutPlan = buildWorkoutPlanForDuration(createFormValues.duration_weeks, workoutPlan)
-      console.log("Normalized workout plan for submission:", normalizedWorkoutPlan)
       const selectedExerciseIds = [...new Set(normalizedWorkoutPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))]
-      console.log("Selected exercise IDs for submission:", selectedExerciseIds) 
       const payload = {
-        title: createFormValues.title.trim(),
+        name: createFormValues.title.trim(),
         description: createFormValues.description.trim(),
         difficulty: createFormValues.difficulty,
         duration_weeks: Number(createFormValues.duration_weeks),
-        category: createFormValues.category.trim(),
-        goal: createFormValues.goal.trim(),
-        equipment: canonicalizeEquipmentValues(createFormValues.equipment, equipmentChoices),
         is_public: Boolean(createFormValues.is_public),
         exercises: selectedExerciseIds,
-        workout_plan: normalizedWorkoutPlan,
-        program_image: createFormValues.program_image,
+        items: buildProgramItemsFromWorkoutPlan(normalizedWorkoutPlan),
       }
       const response = await axios.post(API_URL, payload, buildRequestConfig())
-      
+
       const createdProgram = normalizeProgramDetailPayload(response?.data)
       if (createdProgram?.id) {
         const itemsPayload = buildProgramItemsFromWorkoutPlan(normalizedWorkoutPlan)
@@ -1548,20 +2240,20 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
       }
       const createdProgramWithPlan = createdProgram
         ? {
-            ...createdProgram,
-            workout_plan:
-              Array.isArray(createdProgram.workout_plan) && createdProgram.workout_plan.length > 0
-                ? createdProgram.workout_plan
-                : normalizedWorkoutPlan,
-            exercises:
-              Array.isArray(createdProgram.exercises) && createdProgram.exercises.length > 0
-                ? createdProgram.exercises
-                : selectedExerciseIds,
-            equipment:
-              canonicalizeEquipmentValues(getProgramEquipmentValues(createdProgram), equipmentChoices).length > 0
-                ? canonicalizeEquipmentValues(getProgramEquipmentValues(createdProgram), equipmentChoices)
-                : payload.equipment,
-          }
+          ...createdProgram,
+          workout_plan:
+            Array.isArray(createdProgram.workout_plan) && createdProgram.workout_plan.length > 0
+              ? createdProgram.workout_plan
+              : normalizedWorkoutPlan,
+          exercises:
+            Array.isArray(createdProgram.exercises) && createdProgram.exercises.length > 0
+              ? createdProgram.exercises
+              : selectedExerciseIds,
+          equipment:
+            canonicalizeEquipmentValues(getProgramEquipmentValues(createdProgram), equipmentChoices).length > 0
+              ? canonicalizeEquipmentValues(getProgramEquipmentValues(createdProgram), equipmentChoices)
+              : canonicalizeEquipmentValues(createFormValues.equipment, equipmentChoices),
+        }
         : null
 
       if (createdProgramWithPlan && createdProgramWithPlan.id) {
@@ -1569,37 +2261,45 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
       }
 
       setIsCreateModalOpen(false)
+      clearCreateProgramDraft()
       setCreateFormValues(EMPTY_PROGRAM_FORM_VALUES)
       setCreateFieldErrors({})
       setCreatePlanWeek(1)
       setCreatePlanExercise([])
       setCreatePlanWorkoutId("")
       setCreateDraggedExercise(null)
+      setCreatePlanWodKey("")
+      setCreatePlanWodTitle("")
+      setCreatePlanWodIsRest(false)
+      setHasHydratedCreateDraft(false)
     } catch (error) {
       const fieldErrors = {}
       const responseData = error?.response?.data
       if (responseData && typeof responseData === "object") {
         const knownFields = [
-          "title",
+          "name",
           "description",
           "difficulty",
           "duration_weeks",
-          "category",
-          "goal",
-          "equipment",
           "is_public",
+          "items",
         ]
         for (const fieldName of knownFields) {
           const rawValue = responseData[fieldName]
           if (!rawValue) {
             continue
           }
-          fieldErrors[fieldName] = Array.isArray(rawValue) ? rawValue.join(" ") : String(rawValue)
+          fieldErrors[fieldName] = normalizeApiErrorMessage(rawValue)
         }
       }
 
       setCreateFieldErrors(fieldErrors)
-      setCreateErrorMessage(error?.response?.data?.detail || "Unable to create program. Please review your inputs.")
+      setCreateErrorMessage(
+        normalizeApiErrorMessage(
+          error?.response?.data?.detail ?? error?.response?.data,
+          "Unable to create program. Please review your inputs.",
+        ),
+      )
     } finally {
       setIsCreateSubmitting(false)
     }
@@ -1616,9 +2316,14 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     setIsWorkoutPlanUnlocked(false)
     setDetailWorkoutPlan([])
     setDetailPlanWeek(1)
-    setDetailPlanExerciseId("")
+    setDetailPlanWodKey("")
     setDetailPlanWorkoutId("")
     setDetailDraggedExercise(null)
+    setIsScheduleModalOpen(false)
+    setScheduleStartDate("")
+    setScheduleDaysOfWeek([])
+    setScheduleError("")
+    setScheduleSuccess("")
     setEditImageFile(null)
     setEditImagePreview("")
     setIsSchedulingToCalendar(false)
@@ -1641,16 +2346,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     if (!editFormValues.difficulty) {
       nextErrors.difficulty = "Difficulty is required."
     }
-    if (!editFormValues.category.trim()) {
-      nextErrors.category = "Category is required."
-    }
-    if (!editFormValues.goal.trim()) {
-      nextErrors.goal = "Goal is required."
-    }
-    if (!Array.isArray(editFormValues.equipment) || editFormValues.equipment.length === 0) {
-      nextErrors.equipment = "Equipment is required."
-    }
-
     const durationValue = Number(editFormValues.duration_weeks)
     if (!Number.isFinite(durationValue) || durationValue < durationRange.min || durationValue > durationRange.max) {
       nextErrors.duration_weeks = `Duration must be between ${durationRange.min} and ${durationRange.max} weeks.`
@@ -1673,19 +2368,13 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     if (name === "duration_weeks") {
       setDetailWorkoutPlan((prev) => buildWorkoutPlanForDuration(nextValue, prev))
       setDetailPlanWeek(1)
-      setDetailPlanExerciseId("")
+      setDetailPlanWodKey("")
     }
     setEditFieldErrors((prev) => clearFormFieldError(prev, name, name === "duration_weeks"))
   }
 
   const handleEditImageChange = (event) => {
     const file = event.target.files?.[0] ?? null
-    console.log("[Programs] handleEditImageChange", {
-      hasFile: Boolean(file),
-      fileName: file?.name,
-      fileType: file?.type,
-      fileSize: file?.size,
-    })
     setEditImageFile(file)
     if (file) {
       const objectUrl = URL.createObjectURL(file)
@@ -1708,6 +2397,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
       const nextWorkoutPlan = buildWorkoutPlanFromProgram(sourceProgram)
       setDetailWorkoutPlan(nextWorkoutPlan)
       setDetailPlanWeek(nextWorkoutPlan[0]?.week_number || 1)
+      setDetailPlanWodKey("")
       setDetailPlanWorkoutId("")
       setDetailDraggedExercise(null)
       setEditImageFile(null)
@@ -1728,7 +2418,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     setIsWorkoutPlanUnlocked(purchasedProgramIds.includes(Number(programId)))
     setDetailWorkoutPlan([])
     setDetailPlanWeek(1)
-    setDetailPlanExerciseId("")
+    setDetailPlanWodKey("")
     setDetailPlanWorkoutId("")
     setEditFieldErrors({})
     setEditErrorMessage("")
@@ -1768,10 +2458,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
         axios.get(`${API_URL}${programId}/`, buildRequestConfig()),
         axios.get(buildProgramItemsApiUrl(programId), buildRequestConfig()).catch(() => null),
       ])
-      console.log("[Programs] Loaded program detail and items", {
-        detailResponse,
-        itemsResponse,
-      })
       const detail = normalizeProgramDetailPayload(detailResponse?.data)
       if (!detail) {
         throw new Error("No detail payload")
@@ -1789,19 +2475,22 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
             : canonicalizeEquipmentValues(getProgramEquipmentValues(sourceProgramFromList), equipmentChoices),
         ...(itemsPlan.length > 0
           ? {
-              workout_plan: itemsPlan,
-              exercises: [...new Set(itemsPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))],
-            }
+            workout_plan: itemsPlan,
+            exercises: [...new Set(itemsPlan.flatMap((weekEntry) => weekEntry.exercise_ids || []))],
+          }
           : !detailHasPlan && sourceHasPlan
             ? {
-                workout_plan: sourceProgramFromList?.workout_plan ?? detail.workout_plan,
-                exercises: sourceProgramFromList?.exercises ?? detail.exercises,
-              }
+              workout_plan: sourceProgramFromList?.workout_plan ?? detail.workout_plan,
+              exercises: sourceProgramFromList?.exercises ?? detail.exercises,
+            }
             : {}),
       }
       setProgramDetailsById((prev) => ({ ...prev, [programId]: mergedDetail }))
     } catch (error) {
-      const message = error?.response?.data?.detail || "Unable to load program details."
+      const message = normalizeApiErrorMessage(
+        error?.response?.data?.detail ?? error?.response?.data,
+        "Unable to load program details.",
+      )
       setDetailErrorById((prev) => ({ ...prev, [programId]: message }))
     } finally {
       setDetailLoadingId(null)
@@ -1810,11 +2499,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
 
   const handleUpdateProgram = async (event) => {
     event.preventDefault()
-    console.log("[Programs] handleUpdateProgram start", {
-      selectedProgramId,
-      isDetailsEditMode,
-      canEditSelectedProgram,
-    })
     if (!selectedProgramId) return
 
     setEditErrorMessage("")
@@ -1842,17 +2526,13 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
       }
       const existingWorkoutPlan = buildWorkoutPlanFromProgram(currentProgram)
       const payload = {
-        title: editFormValues.title.trim(),
+        name: editFormValues.title.trim(),
         description: editFormValues.description.trim(),
         difficulty: editFormValues.difficulty,
         duration_weeks: Number(editFormValues.duration_weeks),
-        category: editFormValues.category.trim(),
-        goal: editFormValues.goal.trim(),
-        equipment: canonicalizeEquipmentValues(editFormValues.equipment, equipmentChoices),
         is_public: Boolean(editFormValues.is_public),
         exercises: selectedExerciseIds,
-        workout_plan: normalizedDetailWorkoutPlan,
-        program_image: editFormValues.program_image,
+        items: buildProgramItemsFromWorkoutPlan(normalizedDetailWorkoutPlan),
       }
       const response = await axios.put(`${API_URL}${selectedProgramId}/`, payload, buildRequestConfig())
       if (!areWorkoutPlansEqual(normalizedDetailWorkoutPlan, existingWorkoutPlan)) {
@@ -1867,12 +2547,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
         }
       }
       const pendingImageFile = editImageInputRef.current?.files?.[0] ?? editImageFile
-      console.log("[Programs] pendingImageFile check", {
-        hasPendingImageFile: Boolean(pendingImageFile),
-        fromInputRef: Boolean(editImageInputRef.current?.files?.[0]),
-        fromState: Boolean(editImageFile),
-        pendingFileName: pendingImageFile?.name,
-      })
       if (pendingImageFile) {
         const authToken = getAuthToken()
         const imageRequestConfig = authToken
@@ -1882,14 +2556,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
           const imageUploadUrl = `${API_URL}${selectedProgramId}/`
           const imageFormData = new FormData()
           imageFormData.append("program_image", pendingImageFile)
-          console.log("[Programs] Uploading banner image", {
-            url: imageUploadUrl,
-            programId: selectedProgramId,
-            fileName: pendingImageFile?.name,
-            fileType: pendingImageFile?.type,
-            fileSize: pendingImageFile?.size,
-            fieldName: "program_image",
-          })
           let imageUploadResponse
           try {
             imageUploadResponse = await axios.patch(imageUploadUrl, imageFormData, imageRequestConfig)
@@ -1902,7 +2568,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
             })
             imageUploadResponse = await axios.patch(imageUploadUrl, fallbackFormData, imageRequestConfig)
           }
-          
+
           // Immediately update the cache with the image URL from the PATCH response
           // so the banner shows correctly when the details modal is re-opened.
           const patchedDetail = normalizeProgramDetailPayload(imageUploadResponse?.data)
@@ -1929,10 +2595,13 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
             message: imageError?.message,
           })
           const imageErrorMessage =
-            imageError?.response?.data?.program_image?.[0] ||
-            imageError?.response?.data?.image?.[0] ||
-            imageError?.response?.data?.detail ||
-            "Image upload failed. Other changes were saved."
+            normalizeApiErrorMessage(
+              imageError?.response?.data?.program_image ??
+              imageError?.response?.data?.image ??
+              imageError?.response?.data?.detail ??
+              imageError?.response?.data,
+              "Image upload failed. Other changes were saved.",
+            )
           setEditErrorMessage(imageErrorMessage)
           setIsEditSubmitting(false)
           return
@@ -1955,14 +2624,14 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
         prev.map((program) =>
           program.id === selectedProgramId
             ? {
-                ...program,
-                ...updatedProgram,
+              ...program,
+              ...updatedProgram,
 
-                equipment:
-                  canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices).length > 0
-                    ? canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices)
-                    : payload.equipment,
-              }
+              equipment:
+                canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices).length > 0
+                  ? canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices)
+                  : canonicalizeEquipmentValues(editFormValues.equipment, equipmentChoices),
+            }
             : program,
         ),
       )
@@ -1976,7 +2645,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
           equipment:
             canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices).length > 0
               ? canonicalizeEquipmentValues(getProgramEquipmentValues(updatedProgram), equipmentChoices)
-              : payload.equipment,
+              : canonicalizeEquipmentValues(editFormValues.equipment, equipmentChoices),
         },
       }))
       handleCloseDetailsModal()
@@ -1985,23 +2654,26 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
       const responseData = error?.response?.data
       if (responseData && typeof responseData === "object") {
         const knownFields = [
-          "title",
+          "name",
           "description",
           "difficulty",
           "duration_weeks",
-          "category",
-          "goal",
-          "equipment",
           "is_public",
+          "items",
         ]
         for (const fieldName of knownFields) {
           const rawValue = responseData[fieldName]
           if (!rawValue) continue
-          fieldErrors[fieldName] = Array.isArray(rawValue) ? rawValue.join(" ") : String(rawValue)
+          fieldErrors[fieldName] = normalizeApiErrorMessage(rawValue)
         }
       }
       setEditFieldErrors(fieldErrors)
-      setEditErrorMessage(error?.response?.data?.detail || "Unable to update program. Please review your inputs.")
+      setEditErrorMessage(
+        normalizeApiErrorMessage(
+          error?.response?.data?.detail ?? error?.response?.data,
+          "Unable to update program. Please review your inputs.",
+        ),
+      )
     } finally {
       setIsEditSubmitting(false)
     }
@@ -2027,7 +2699,12 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
       })
       handleCloseDetailsModal()
     } catch (error) {
-      setEditErrorMessage(error?.response?.data?.detail || "Unable to delete program. Please try again.")
+      setEditErrorMessage(
+        normalizeApiErrorMessage(
+          error?.response?.data?.detail ?? error?.response?.data,
+          "Unable to delete program. Please try again.",
+        ),
+      )
     } finally {
       setIsDeleteSubmitting(false)
     }
@@ -2037,11 +2714,8 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     if (!selectedProgramId) return
 
     setCheckoutErrorMessage("")
-    console.log("[Programs] handleBuyProgram start", { selectedProgramId, selectedProgramDetails, selectedProgram })
     setIsCheckoutSubmitting(true)
-    console.log("[Programs] handleBuyProgram checkout submitting state set to true")
     try {
-      console.log("[Programs] handleBuyProgram building checkout URLs and payload")
       const successUrl = buildCheckoutReturnUrl("success", selectedProgramId)
       const cancelUrl = buildCheckoutReturnUrl("cancel", selectedProgramId)
       const programTitle = getProgramCheckoutTitle(selectedProgramDetails, selectedProgram, editFormValues)
@@ -2053,9 +2727,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
         cancel_url: cancelUrl,
       }
       const response = await axios.post(STRIPE_CHECKOUT_API_URL, payload, buildRequestConfig())
-      console.log("[Programs] handleBuyProgram received checkout session response", { response })
       const { checkoutUrl, sessionId } = parseCheckoutSessionResponse(response?.data)
-      console.log("[Programs] handleBuyProgram parsed checkout session response", { checkoutUrl, sessionId })
       if (checkoutUrl) {
         savePendingCheckoutProgramId(selectedProgramId)
         window.location.assign(checkoutUrl)
@@ -2082,36 +2754,62 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
       throw new Error("Checkout session response did not include a redirect URL or session ID.")
     } catch (error) {
       setCheckoutErrorMessage(
-        error?.response?.data?.detail ||
-        error?.message ||
-        "Unable to start checkout right now. Please try again.",
+        normalizeApiErrorMessage(
+          error?.response?.data?.detail ?? error?.response?.data ?? error?.message,
+          "Unable to start checkout right now. Please try again.",
+        ),
       )
     } finally {
       setIsCheckoutSubmitting(false)
     }
   }
 
-  const handleAddExerciseToDetailWeek = () => {
-    if (!isDetailsEditMode || !canEditSelectedProgram) return
-
-    const weekNumber = Number(detailPlanWeek)
-    const exerciseId = Number(detailPlanExerciseId)
-    if (!Number.isFinite(weekNumber) || !Number.isFinite(exerciseId)) return
-
-    const totalWeeks = normalizeDurationWeeks(editFormValues.duration_weeks)
-    setDetailWorkoutPlan((prev) => {
-      const basePlan = totalWeeks > 0 ? buildWorkoutPlanForDuration(totalWeeks, prev) : [...prev]
-      return basePlan.map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        if (weekEntry.exercise_ids.includes(exerciseId)) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: [...weekEntry.exercise_ids, exerciseId],
-        }
-      })
-    })
+  const handleUpdateDetailWeekExerciseMeta = (weekNumber, wodKey, exerciseId, fieldName, value) => {
+    setDetailWorkoutPlan((prev) =>
+      updateExerciseEntryInWeekPlan(editFormValues.duration_weeks, prev, weekNumber, wodKey, exerciseId, fieldName, value),
+    )
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
-    setDetailPlanExerciseId("")
+  }
+
+  const handleReorderDetailWod = (weekNumber, wodKey, direction) => {
+    if (!isDetailsEditMode || !canEditSelectedProgram) return
+    setDetailWorkoutPlan((prev) =>
+      reorderWodInWeekPlan(editFormValues.duration_weeks, prev, weekNumber, wodKey, direction),
+    )
+    setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleReorderDetailExercise = (weekNumber, wodKey, exerciseId, direction) => {
+    if (!isDetailsEditMode || !canEditSelectedProgram) return
+    setDetailWorkoutPlan((prev) =>
+      reorderExerciseInWeekPlan(editFormValues.duration_weeks, prev, weekNumber, wodKey, exerciseId, direction),
+    )
+    setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleDragReorderDetailExercise = (
+    sourceWeekNumber,
+    sourceWodKey,
+    sourceExerciseId,
+    targetWeekNumber,
+    targetWodKey,
+    targetExerciseId = null,
+  ) => {
+    if (!isDetailsEditMode || !canEditSelectedProgram) return
+    if (!sourceExerciseId) return
+    setDetailWorkoutPlan((prev) =>
+      reorderExerciseInWeekPlanToTarget(
+        editFormValues.duration_weeks,
+        prev,
+        sourceWeekNumber,
+        sourceWodKey,
+        sourceExerciseId,
+        targetWeekNumber,
+        targetWodKey,
+        targetExerciseId,
+      ),
+    )
+    setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
   const handleAddSavedWorkoutToDetailWeek = () => {
@@ -2126,31 +2824,40 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
 
     const totalWeeks = normalizeDurationWeeks(editFormValues.duration_weeks)
     setDetailWorkoutPlan((prev) => {
-      const basePlan = totalWeeks > 0 ? buildWorkoutPlanForDuration(totalWeeks, prev) : [...prev]
-      return basePlan.map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: [...new Set([...weekEntry.exercise_ids, ...workoutExerciseIds])],
-        }
-      })
+      const durationValue = totalWeeks > 0 ? totalWeeks : prev.length
+      return addExerciseIdsToWeekPlan(durationValue, prev, weekNumber, workoutExerciseIds, detailPlanWodKey)
     })
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
     setDetailPlanWorkoutId("")
   }
 
-  const handleRemoveExerciseFromDetailWeek = (weekNumber, exerciseId) => {
+  const handleRemoveExerciseFromDetailWeek = (weekNumber, wodKey, exerciseId) => {
     if (!isDetailsEditMode || !canEditSelectedProgram) return
 
     setDetailWorkoutPlan((prev) =>
-      prev.map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: weekEntry.exercise_ids.filter((candidateId) => candidateId !== exerciseId),
-        }
-      }),
+      removeExerciseIdFromWeekPlan(editFormValues.duration_weeks, prev, weekNumber, wodKey, exerciseId),
     )
+    setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleDetailExerciseDragStart = (weekNumber, exerciseId) => {
+    if (!isDetailsEditMode || !canEditSelectedProgram) return
+    setDetailDraggedExercise({ weekNumber: Number(weekNumber), exerciseId: Number(exerciseId) })
+  }
+
+  const handleDetailExerciseDrop = (targetWeekNumber, beforeExerciseId = null) => {
+    if (!isDetailsEditMode || !canEditSelectedProgram || !detailDraggedExercise) return
+
+    setDetailWorkoutPlan((prev) =>
+      moveWorkoutPlanExercise(
+        prev,
+        detailDraggedExercise.weekNumber,
+        Number(targetWeekNumber),
+        detailDraggedExercise.exerciseId,
+        beforeExerciseId,
+      ),
+    )
+    setDetailDraggedExercise(null)
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
@@ -2190,8 +2897,14 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
   }
 
   const handleOpenScheduleModal = () => {
-    const todayStr = new Date().toISOString().slice(0, 10)
+    if (!canScheduleSelectedProgram) {
+      setScheduleError("Only program owners or users who purchased this program can schedule it.")
+      return
+    }
+    const today = new Date()
+    const todayStr = today.toISOString().slice(0, 10)
     setScheduleStartDate(todayStr)
+    setScheduleDaysOfWeek([today.getDay()])
     setScheduleError("")
     setScheduleSuccess("")
     setIsScheduleModalOpen(true)
@@ -2201,13 +2914,34 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     setIsScheduleModalOpen(false)
     setScheduleError("")
     setScheduleSuccess("")
+    setScheduleDaysOfWeek([])
+  }
+
+  const toggleScheduleDayOfWeek = (dayValue) => {
+    const normalizedDay = Number(dayValue)
+    if (!Number.isFinite(normalizedDay) || normalizedDay < 0 || normalizedDay > 6) return
+    setScheduleDaysOfWeek((prev) => {
+      const exists = prev.includes(normalizedDay)
+      const next = exists ? prev.filter((entry) => entry !== normalizedDay) : [...prev, normalizedDay]
+      return [...new Set(next)].sort((a, b) => a - b)
+    })
+    setScheduleError("")
   }
 
   const handleScheduleProgram = () => {
+    if (!canScheduleSelectedProgram) {
+      setScheduleError("Only program owners or users who purchased this program can schedule it.")
+      return
+    }
     if (!scheduleStartDate) {
       setScheduleError("Please select a start date.")
       return
     }
+    if (!Array.isArray(scheduleDaysOfWeek) || scheduleDaysOfWeek.length === 0) {
+      setScheduleError("Please select at least one day to schedule this program.")
+      return
+    }
+
 
     const program = programDetailsById[selectedProgramId] ?? selectedProgram
     if (!program) {
@@ -2256,32 +2990,55 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
 
     const nextEntries = { ...existingEntries }
 
+    const sortedScheduleDays = [...new Set(scheduleDaysOfWeek)]
+      .map((entry) => Number(entry))
+      .filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6)
+      .sort((a, b) => a - b)
+    if (sortedScheduleDays.length === 0) {
+      setScheduleError("Please select at least one day to schedule this program.")
+      return
+    }
     for (const weekEntry of plan) {
       const weekNumber = Number(weekEntry?.week_number)
       if (!Number.isFinite(weekNumber) || weekNumber < 1) continue
 
-      const exerciseIds = Array.isArray(weekEntry?.exercise_ids)
-        ? weekEntry.exercise_ids.map(Number).filter((id) => Number.isFinite(id))
-        : []
-
-      // Place workout on Monday of that week (startDate is day 1 of week 1)
+      const wods = buildWodsFromWeekEntry(weekEntry).filter((wodEntry) => !wodEntry.is_rest)
+      const normalizedWods = wods.length > 0 ? wods : [{ key: `week-${weekNumber}-summary`, title: `Week ${weekNumber}`, exercise_entries: [] }]
       const weekOffset = (weekNumber - 1) * 7
-      const workoutDate = new Date(startDate)
-      workoutDate.setDate(startDate.getDate() + weekOffset)
-      const dateKey = toDateKey(workoutDate)
+      const weekStartDate = new Date(startDate)
+      weekStartDate.setDate(startDate.getDate() + weekOffset)
+      const weekStartDay = weekStartDate.getDay()
+      const daySlotsForWeek = sortedScheduleDays.map((dayValue) => ({
+        dayValue,
+        offset: (dayValue - weekStartDay + 7) % 7,
+      }))
 
-      const newEntry = {
-        id: generateEntryId(),
-        title: `${programName} – Week ${weekNumber}`,
-        time: "",
-        notes: `Week ${weekNumber} of ${programName} (${plan.length}-week program)`,
-        programId,
-        programName,
-        weekNumber,
-        exerciseIds,
+      for (let wodIndex = 0; wodIndex < normalizedWods.length; wodIndex += 1) {
+        const wodEntry = normalizedWods[wodIndex]
+        const daySlot = daySlotsForWeek[wodIndex % daySlotsForWeek.length]
+        const workoutDate = new Date(weekStartDate)
+        workoutDate.setDate(weekStartDate.getDate() + daySlot.offset)
+        const dateKey = toDateKey(workoutDate)
+        const exerciseIds = Array.isArray(wodEntry?.exercise_entries)
+          ? wodEntry.exercise_entries
+            .map((entry) => Number(entry?.exercise_id))
+            .filter((id) => Number.isFinite(id))
+          : []
+        const wodTitle = String(wodEntry?.title || `WOD ${wodIndex + 1}`)
+        const newEntry = {
+          id: generateEntryId(),
+          title: `${programName} – Week ${weekNumber} – ${wodTitle}`,
+          time: "",
+          notes: `${wodTitle} • Week ${weekNumber} of ${programName} (${plan.length}-week program)`,
+          programId,
+          programName,
+          weekNumber,
+          exerciseIds,
+          wodKey: wodEntry?.key ? String(wodEntry.key) : "",
+        }
+
+        nextEntries[dateKey] = [...(nextEntries[dateKey] || []), newEntry]
       }
-
-      nextEntries[dateKey] = [...(nextEntries[dateKey] || []), newEntry]
     }
 
     try {
@@ -2291,7 +3048,13 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
       return
     }
 
-    setScheduleSuccess(`Scheduled ${plan.length} week${plan.length !== 1 ? "s" : ""} starting ${scheduleStartDate}. Check your Calendar!`)
+    const selectedDayLabels = WEEKDAY_OPTIONS
+      .filter((entry) => sortedScheduleDays.includes(entry.value))
+      .map((entry) => entry.label)
+      .join(", ")
+    setScheduleSuccess(
+      `Scheduled ${plan.length} week${plan.length !== 1 ? "s" : ""} starting ${scheduleStartDate} on ${selectedDayLabels}. Check your Calendar!`,
+    )
     setScheduleError("")
   }
 
@@ -2305,7 +3068,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     const nextWorkoutPlan = buildWorkoutPlanFromProgram(sourceProgram)
     setDetailWorkoutPlan(nextWorkoutPlan)
     setDetailPlanWeek(nextWorkoutPlan[0]?.week_number || 1)
-    setDetailPlanExerciseId("")
+    setDetailPlanWodKey("")
     setDetailPlanWorkoutId("")
   }, [selectedProgramId, programDetailsById, selectedProgram, isDetailsEditMode])
 
@@ -2363,11 +3126,11 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                   <input
                     type="checkbox"
                     value={d.value}
-                    checked={filters.difficulty.includes(d.value)}
+                    checked={filterDifficultyValues.includes(d.value)}
                     onChange={(e) => {
                       const next = e.target.checked
-                        ? [...filters.difficulty, d.value]
-                        : filters.difficulty.filter((v) => v !== d.value)
+                        ? [...filterDifficultyValues, d.value]
+                        : filterDifficultyValues.filter((v) => v !== d.value)
                       handleFilterChange("difficulty", next)
                     }}
                   />
@@ -2380,7 +3143,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
           <div className="programs-filter-group">
             <span className="programs-filter-label">Category</span>
             <MultiSelect
-              options={categoryFilterOptions}
+              options={filterCategoryOptions}
               value={filterCategoryValues}
               onChange={(selected) => handleFilterChange("category", selected)}
               name="filter-category"
@@ -2388,19 +3151,9 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
           </div>
 
           <div className="programs-filter-group">
-            <span className="programs-filter-label">Goal</span>
-            <MultiSelect
-              options={goalFilterOptions}
-              value={filterGoalValues}
-              onChange={(selected) => handleFilterChange("goal", selected)}
-              name="filter-goal"
-            />
-          </div>
-
-          <div className="programs-filter-group">
             <span className="programs-filter-label">Equipment</span>
             <MultiSelect
-              options={equipments}
+              options={filterEquipmentOptions}
               value={filterEquipmentValues}
               onChange={(selected) => handleFilterChange("equipment", selected)}
               name="filter-equipment"
@@ -2411,87 +3164,90 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
 
 
           <p className="programs-results-count" aria-live="polite">
-            {filteredAndSortedPrograms.length} program{filteredAndSortedPrograms.length !== 1 ? "s" : ""} found
+            {filteredAndSortedProgramsLibrary.length} program{filteredAndSortedProgramsLibrary.length !== 1 ? "s" : ""} found
           </p>
         </aside>
 
         <section className="programs-main">
-          {isLoading ? (
-            <p className="programs-empty" role="status">
-              Loading programs...
-            </p>
-          ) : errorMessage ? (
-            <p className="programs-empty" role="alert">
-              {errorMessage}
-            </p>
-          ) : pagedPrograms.length === 0 ? (
-            <p className="programs-empty" role="status">
-              No programs match your filters.
-            </p>
-          ) : (
-            <div className="programs-grid">
-              {pagedPrograms.map((program) => (
-                <article key={program.id} className="programs-card">
-                  <div className="programs-card-header">
-                    <h3 className="programs-card-title">{program.name}</h3>
-                    <span className={getDifficultyClass(program.difficulty)}>{getDifficultyLabel(program.difficulty)}</span>
-                  </div>
-                  <p className="programs-card-description">{program.description}</p>
-                  <div className="programs-card-tags">
-                    <span className="programs-card-tag">{program.category}</span>
-                    <span className="programs-card-tag">{program.duration_weeks ?? "?"} weeks</span>
-                  </div>
-                  <p className="programs-card-goal"><strong>Goal:</strong> {program.goal || "N/A"}</p>
-                  <p className="programs-card-creator">By {program.created_by_username || program.created_by || "Unknown"}</p>
+          {isProgramsLoading ? (
+            <p className="exercise-loading-note" role="status">Still loading programs. Thanks for hanging tight.</p>
+          ) : null}
+          {programsErrorMessage ? <p className="exercise-error" role="alert">{programsErrorMessage}</p> : null}
+          {successMessage ? <p className="exercise-success" role="status">{successMessage}</p> : null}
 
-                  <div className="programs-card-actions">
-                    <button
-                      type="button"
-                      className="programs-card-action-btn"
-                      onClick={() => handleViewDetails(program.id)}
-                      disabled={detailLoadingId === program.id}
-                    >
-                      {detailLoadingId === program.id ? "Loading..." : "View Details"}
-                    </button>
-                  </div>
-                </article>
-              ))}
+          <div
+            className="exercise-list"
+            role={!isProgramsLoading && filteredAndSortedProgramsLibrary.length > 0 ? "listbox" : undefined}
+            aria-label={!isProgramsLoading && filteredAndSortedProgramsLibrary.length > 0 ? "Programs" : undefined}
+            aria-busy={isProgramsLoading}
+          >
+            {isProgramsLoading ? (
+              Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (
+                <div className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`} aria-hidden="true">
+                  <div className="exercise-skeleton exercise-skeleton-title" />
+                  <div className="exercise-skeleton exercise-skeleton-line" />
+                  <div className="exercise-skeleton exercise-skeleton-line exercise-skeleton-line-short" />
+                  <div className="exercise-skeleton exercise-skeleton-line" />
+                </div>
+              ))
+            ) : filteredAndSortedProgramsLibrary.length === 0 ? (
+              <p className="exercise-empty" role="status">No programs found.</p>
+            ) : (
+              visiblePrograms.map((program, index) => {
+                const programImageUrl = String(getProgramImageUrl(program))
+                return (
+                  <article
+                    className={`exercise-item ${(program.id ?? null) === selectedProgramId ? "exercise-item-selected" : ""}`}
+                    key={program.id ?? index}
+                    id={program.id ? `exercise-option-${program.id}` : undefined}
+                    role="option"
+                    aria-selected={(program.id ?? null) === selectedProgramId}
+                    tabIndex={(program.id ?? null) === selectedProgramId ? 0 : -1}
+                    onClick={() => handleViewDetails(program.id ?? null)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        handleViewDetails(program.id ?? null)
+                      }
+                    }}
+                  >
+                    {programImageUrl ? (
+                      <div className="exercise-card-image-wrap" aria-hidden="true">
+                        <img
+                          src={programImageUrl}
+                          alt=""
+                          loading="lazy"
+                          className="exercise-card-image"
+                          onError={(event) => {
+                            event.currentTarget.style.display = "none"
+                          }}
+                        />
+                      </div>
+                    ) : null}
+                    <div className="exercise-item-content">
+                      <h3 className="exercise-header-title">{(program.title || program.name || "Program").toUpperCase()}</h3>
+                      <div className="exercise-header">
+                        <p className="exercise-meta"><strong>Visibility:</strong> {capitalizeFirstLetter(program.is_public ? "Public" : "Private")}</p>
+                        <p className="exercise-meta"><strong>Category:</strong> {capitalizeFirstLetter(program.category)}</p>
+                        <p className="exercise-meta">
+                          <strong>Primary Muscle:</strong> {capitalizeFirstLetter(program.primary_muscle_group)}
+                        </p>
+                        <p className="exercise-meta">
+                          <strong>Created by:</strong> {program.created_by_username || program.username || program.created_by || "Unknown"}
+                        </p>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })
+            )}
+          </div>
+          {!isProgramsLoading && hasMoreVisiblePrograms ? (
+            <div className="exercise-search-actions">
+              <button type="button" className="exercise-secondary-btn" onClick={handleLoadMorePrograms}>
+                Load More
+              </button>
             </div>
-          )}
-
-          {totalPages > 1 ? (
-            <nav className="programs-pagination" aria-label="Program pages">
-              <button
-                type="button"
-                className="programs-page-btn"
-                onClick={() => setCurrentPage((p) => p - 1)}
-                disabled={safePage === 1}
-                aria-label="Previous page"
-              >
-                ‹
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <button
-                  key={page}
-                  type="button"
-                  className={`programs-page-btn${page === safePage ? " programs-page-btn-active" : ""}`}
-                  onClick={() => setCurrentPage(page)}
-                  aria-label={`Page ${page}`}
-                  aria-current={page === safePage ? "page" : undefined}
-                >
-                  {page}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="programs-page-btn"
-                onClick={() => setCurrentPage((p) => p + 1)}
-                disabled={safePage === totalPages}
-                aria-label="Next page"
-              >
-                ›
-              </button>
-            </nav>
           ) : null}
         </section>
       </div>
@@ -2508,7 +3264,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
             <header className="programs-modal-header">
               <button type="button" className="programs-btn-base programs-modal-close-btn" onClick={handleCloseCreateModal} aria-label="Close create program">
                 <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </button>
               <h2 className="programs-modal-title" id="create-new-program-header">Create New Program</h2>
@@ -2521,9 +3277,9 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
 
               <div className="programs-banner-upload">
                 {createProgramImageUrl ? (
-                <div className="programs-banner-preview">
-                  <img src={createProgramImageUrl} alt="Program banner" className="programs-banner-img" />
-                </div>
+                  <div className="programs-banner-preview">
+                    <img src={createProgramImageUrl} alt="Program banner" className="programs-banner-img" />
+                  </div>
                 ) : null}
                 <input
                   id="edit-banner-input"
@@ -2537,35 +3293,35 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                   {editImagePreview ? "+ Upload" : "+ Upload"}
                 </label>
               </div>
-              <div className="programs-modal-field">  
-              <label id="program-title-label">
-                <span>Title</span>
-                <input
-                  type="text"
-                  name="title"
-                  value={createFormValues.title}
-                  onChange={handleCreateFieldChange}
-                  placeholder="Program name"
-                  required
-                />
-                {createFieldErrors.title ? <small className="programs-modal-error">{createFieldErrors.title}</small> : null}
-              </label>
+              <div className="programs-modal-field">
+                <label id="program-title-label">
+                  <span>Title</span>
+                  <input
+                    type="text"
+                    name="title"
+                    value={createFormValues.title}
+                    onChange={handleCreateFieldChange}
+                    placeholder="Program name"
+                    required
+                  />
+                  {createFieldErrors.title ? <small className="programs-modal-error">{createFieldErrors.title}</small> : null}
+                </label>
 
-              <label id="program-description-label">
-                <span>Description</span>
-                <textarea
-                  name="description"
-                  value={createFormValues.description}
-                  onChange={handleCreateFieldChange}
-                  placeholder="What this program is for"
-                  maxLength={500}
-                  rows={3}
-                  style={{ resize: "none", width: "500px", minHeight: "100px", boxSizing: "border-box" }}
-                  required
-                />
-              
-                {createFieldErrors.description ? <small className="programs-modal-error">{createFieldErrors.description}</small> : null}
-              </label>
+                <label id="program-description-label">
+                  <span>Description</span>
+                  <textarea
+                    name="description"
+                    value={createFormValues.description}
+                    onChange={handleCreateFieldChange}
+                    placeholder="What this program is for"
+                    maxLength={500}
+                    rows={3}
+                    style={{ resize: "none", width: "500px", minHeight: "100px", boxSizing: "border-box" }}
+                    required
+                  />
+
+                  {createFieldErrors.description ? <small className="programs-modal-error">{createFieldErrors.description}</small> : null}
+                </label>
               </div>
               <div className="programs-modal-grid">
                 <label>
@@ -2657,7 +3413,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
               <section className="programs-plan-builder" aria-label="Workout plan builder">
                 <h3>Workout Plan By Week</h3>
                 <p className="programs-plan-helper">
-                  Pick a week, choose all exercises for that workout, then add the full workout. The number of weeks matches Duration.
+                  Create WODs per week, mark rest WODs when needed, then browse and add exercises to the selected WOD.
                 </p>
                 {createFieldErrors.workout_plan ? <small className="programs-modal-error">{createFieldErrors.workout_plan}</small> : null}
 
@@ -2668,14 +3424,14 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                   <label className="programs-modal-field">
                     <span>Week</span>
                     <select
-                      name="plan_week"
+                      name="create_plan_week"
                       value={String(createPlanWeek)}
                       onChange={(event) => setCreatePlanWeek(Number(event.target.value) || 1)}
                       disabled={workoutPlan.length === 0}
                     >
-                      {workoutPlan.length === 0 ? <option value="1">Set duration first</option> : null}
+                      {workoutPlan.length === 0 ? <option value="1">No weeks available</option> : null}
                       {workoutPlan.map((weekEntry) => (
-                        <option key={weekEntry.week_number} value={weekEntry.week_number}>
+                        <option key={`create-week-${weekEntry.week_number}`} value={weekEntry.week_number}>
                           Week {weekEntry.week_number}
                         </option>
                       ))}
@@ -2683,24 +3439,23 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                   </label>
 
                   <label className="programs-modal-field">
-                    <span>Saved Workout</span>
+                    <span>WOD</span>
                     <select
-                      name="plan_saved_workout"
-                      value={createPlanWorkoutId}
-                      onChange={(event) => setCreatePlanWorkoutId(event.target.value)}
-                      disabled={workouts.length === 0 || workoutPlan.length === 0}
+                      name="create_plan_wod"
+                      value={createPlanWodKey}
+                      onChange={(event) => setCreatePlanWodKey(event.target.value)}
+                      disabled={selectedCreateWeekWods.length === 0}
                     >
-                      <option value="">Select workout</option>
-                      {workouts.map((workout) => (
-                        <option key={workout.id} value={String(workout.id)}>
-                          {workout.title}
+                      {selectedCreateWeekWods.length === 0 ? <option value="">No WODs in this week</option> : null}
+                      {selectedCreateWeekWods.map((wodEntry) => (
+                        <option key={wodEntry.key} value={String(wodEntry.key)}>
+                          {wodEntry.title}{wodEntry.is_rest ? " (Rest)" : ""}
                         </option>
                       ))}
                     </select>
                   </label>
-
-                  <button
-                    type="button"
+                  <Link
+                    to={`/exercises?source=new-program&newProgram=true&planWeek=${createPlanWeek}&planWodKey=${createPlanWodKey}`}
                     className="programs-modal-secondary-btn programs-plan-add-btn"
                     onClick={handleAddSavedWorkoutToCreateWeek}
                     disabled={!createPlanWorkoutId || workoutPlan.length === 0}
@@ -2744,6 +3499,27 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                   >
                     Add Workout
                   </button>
+                    onClick={(event) => {
+                      if (!createPlanWodKey) {
+                        event.preventDefault()
+                        return
+                      }
+                      handleOpenExercisePicker()
+                    }}
+                    aria-disabled={!createPlanWodKey}
+                  >
+                    <img src={ExerciseIcon} alt="Exercise Icon" />
+                  </Link>
+
+                  <label className="programs-modal-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={createPlanWodIsRest}
+                      onChange={(event) => setCreatePlanWodIsRest(event.target.checked)}
+                      disabled={workoutPlan.length === 0}
+                    />
+                    Rest WOD
+                  </label>
                 </div>
 
                 <div className="programs-plan-weeks">
@@ -2758,9 +3534,22 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                         onDrop={() => handleCreateExerciseDrop(weekEntry.week_number)}
                       >
                         <h4>Week {weekEntry.week_number}</h4>
-                        {weekEntry.exercise_ids.length === 0 ? (
-                          <p className="programs-plan-helper">No workout added yet.</p>
+                        {buildWodsFromWeekEntry(weekEntry).length === 0 ? (
+                          <p className="programs-plan-helper">No WODs added yet.</p>
                         ) : (
+                          buildWodsFromWeekEntry(weekEntry).map((wodEntry, wodIndex) => (
+                            <article key={`${weekEntry.week_number}-${wodEntry.key}`} className="programs-plan-week-card">
+                              <div className="programs-plan-controls">
+                                <label className="programs-modal-field">
+                                  <span>WOD Title</span>
+                                  <input
+                                    type="text"
+                                    value={wodEntry.title}
+                                    onChange={(event) =>
+                                      handleUpdateCreateWod(weekEntry.week_number, wodEntry.key, { title: event.target.value })}
+                                  />
+                                </label>
+                               <img className="add-WOD-icon" src={addWODIcon} alt="Add WOD Icon" onClick={() => handleAddWodToCreateWeek(weekEntry.week_number)} />
                           <ul className="programs-plan-exercise-list">
                             {weekEntry.exercise_ids.map((exerciseId) => (
                               <li
@@ -2779,14 +3568,185 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                                 <button
                                   type="button"
                                   className="programs-plan-remove-btn"
-                                  onClick={() => handleRemoveExerciseFromWorkoutWeek(weekEntry.week_number, exerciseId)}
-                                  aria-label={`Remove ${exerciseNameById[exerciseId] || `exercise ${exerciseId}`} from week ${weekEntry.week_number}`}
+                                  onClick={() => handleRemoveWodFromCreateWeek(weekEntry.week_number, wodEntry.key)}
                                 >
-                                  Remove
+                                  Remove WOD
                                 </button>
-                              </li>
-                            ))}
-                          </ul>
+                              </div>
+
+                              {wodEntry.is_rest ? (
+                                <p className="programs-plan-helper">Rest day WOD</p>
+                              ) : wodEntry.exercise_entries.length === 0 ? (
+                                <p
+                                  className="programs-plan-helper"
+                                  onDragOver={(event) => {
+                                    event.preventDefault()
+                                    event.dataTransfer.dropEffect = "move"
+                                  }}
+                                  onDrop={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    try {
+                                      const dragPayload = JSON.parse(event.dataTransfer.getData("text/plain") || "null")
+                                      if (!dragPayload) return
+                                      handleDragReorderCreateExercise(
+                                        dragPayload.weekNumber,
+                                        dragPayload.wodKey,
+                                        dragPayload.exerciseId,
+                                        weekEntry.week_number,
+                                        wodEntry.key,
+                                        null,
+                                      )
+                                    } catch {
+                                      return
+                                    }
+                                  }}
+                                >
+                                  No exercises in this WOD yet. Drag an exercise here.
+                                </p>
+                              ) : (
+                                <ul
+                                  className="programs-plan-exercise-list"
+                                  onDragOver={(event) => {
+                                    event.preventDefault()
+                                    event.dataTransfer.dropEffect = "move"
+                                  }}
+                                  onDrop={(event) => {
+                                    event.preventDefault()
+                                    try {
+                                      const dragPayload = JSON.parse(event.dataTransfer.getData("text/plain") || "null")
+                                      if (!dragPayload) return
+                                      handleDragReorderCreateExercise(
+                                        dragPayload.weekNumber,
+                                        dragPayload.wodKey,
+                                        dragPayload.exerciseId,
+                                        weekEntry.week_number,
+                                        wodEntry.key,
+                                        null,
+                                      )
+                                    } catch {
+                                      return
+                                    }
+                                  }}
+                                >
+                                  {wodEntry.exercise_entries.map((exerciseEntry, exerciseIndex) => (
+                                    <li
+                                      key={`${weekEntry.week_number}-${wodEntry.key}-${exerciseEntry.exercise_id}`}
+                                      className="programs-plan-exercise-item"
+                                      draggable
+                                      onDragStart={(event) => {
+                                        event.dataTransfer.effectAllowed = "move"
+                                        event.dataTransfer.setData(
+                                          "text/plain",
+                                          JSON.stringify({
+                                            weekNumber: weekEntry.week_number,
+                                            wodKey: wodEntry.key,
+                                            exerciseId: exerciseEntry.exercise_id,
+                                          }),
+                                        )
+                                      }}
+                                      onDragOver={(event) => {
+                                        event.preventDefault()
+                                        event.dataTransfer.dropEffect = "move"
+                                      }}
+                                      onDrop={(event) => {
+                                        event.preventDefault()
+                                        try {
+                                          const dragPayload = JSON.parse(event.dataTransfer.getData("text/plain") || "null")
+                                          if (!dragPayload) return
+                                          if (
+                                            Number(dragPayload.weekNumber) === Number(weekEntry.week_number) &&
+                                            String(dragPayload.wodKey) === String(wodEntry.key) &&
+                                            Number(dragPayload.exerciseId) === Number(exerciseEntry.exercise_id)
+                                          ) {
+                                            return
+                                          }
+                                          handleDragReorderCreateExercise(
+                                            dragPayload.weekNumber,
+                                            dragPayload.wodKey,
+                                            dragPayload.exerciseId,
+                                            weekEntry.week_number,
+                                            wodEntry.key,
+                                            exerciseEntry.exercise_id,
+                                          )
+                                        } catch {
+                                          return
+                                        }
+                                      }}
+                                    >
+                                      <img src={reorderIcon} className="programs-plan-reorder-img" alt="" aria-hidden="true" />
+                                      <span>{exerciseNameById[exerciseEntry.exercise_id] || `Exercise #${exerciseEntry.exercise_id}`}</span>
+                                      <label className="programs-modal-field">
+                                        <span>Sets</span>
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          value={exerciseEntry.set_number ?? ""}
+                                          onChange={(event) =>
+                                            handleUpdateCreateWeekExerciseMeta(
+                                              weekEntry.week_number,
+                                              wodEntry.key,
+                                              exerciseEntry.exercise_id,
+                                              "set_number",
+                                              event.target.value,
+                                            )}
+                                          placeholder="Optional"
+                                        />
+                                      </label>
+                                      <label className="programs-modal-field">
+                                        <span>Reps</span>
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          value={exerciseEntry.reps ?? ""}
+                                          onChange={(event) =>
+                                            handleUpdateCreateWeekExerciseMeta(
+                                              weekEntry.week_number,
+                                              wodEntry.key,
+                                              exerciseEntry.exercise_id,
+                                              "reps",
+                                              event.target.value,
+                                            )}
+                                          placeholder="Optional"
+                                        />
+                                      </label>
+                                      <label className="programs-modal-field">
+                                        <span>Time (sec)</span>
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          value={exerciseEntry.time_seconds ?? ""}
+                                          onChange={(event) =>
+                                            handleUpdateCreateWeekExerciseMeta(
+                                              weekEntry.week_number,
+                                              wodEntry.key,
+                                              exerciseEntry.exercise_id,
+                                              "time_seconds",
+                                              event.target.value,
+                                            )}
+                                          placeholder="Optional"
+                                        />
+                                      </label>
+                                      <button
+                                        type="button"
+                                        className="programs-plan-remove-btn"
+                                        onClick={() =>
+                                          handleRemoveExerciseFromWorkoutWeek(
+                                            weekEntry.week_number,
+                                            wodEntry.key,
+                                            exerciseEntry.exercise_id,
+                                          )}
+                                        aria-label={`Remove ${exerciseNameById[exerciseEntry.exercise_id] || `exercise ${exerciseEntry.exercise_id}`} from week ${weekEntry.week_number}`}
+                                      >
+                                        Remove
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                                
+                              )}
+                            </article>
+                          ))
                         )}
                       </article>
                     ))
@@ -2806,7 +3766,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
 
               <div className="programs-modal-actions">
                 <button type="submit" className="programs-modal-primary-btn" disabled={isCreateSubmitting}>
-                  {isCreateSubmitting ? "Creating..." : "Create Program"}
+                  {isCreateSubmitting ? "Creating..." : "Create"}
                 </button>
               </div>
             </form>
@@ -2826,11 +3786,10 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
             <header className="programs-modal-header">
               <button type="button" className="programs-btn-base programs-modal-secondary-btn" onClick={handleCloseDetailsModal}>
                 <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </button>
-              {console.log("Selected Program Image URL", {selectedProgramImageUrl})}
-               {selectedProgramImageUrl ? (
+              {selectedProgramImageUrl ? (
                 <div className="programs-banner-preview">
                   <img src={selectedProgramImageUrl} alt="Program banner" className="programs-banner-img" />
                 </div>
@@ -3010,13 +3969,20 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                   </p>
                 </section>
               )}
+              {!isProgramsLoading && hasMoreVisiblePrograms ? (
+                <div className="exercise-search-actions">
+                  <button type="button" className="exercise-secondary-btn" onClick={handleLoadMorePrograms}>
+                    Load More
+                  </button>
+                </div>
+              ) : null}
 
               {isDetailsEditMode || isWorkoutPlanUnlocked ? (
                 <section className="programs-plan-builder" aria-label="Workout plan by week">
                   <h3>Workout Plan By Week</h3>
                   <p className="programs-plan-helper">
                     {canEditSelectedProgram && isDetailsEditMode
-                      ? "Edit workouts by selecting a week and exercise."
+                      ? "Edit workouts by week and update set/rep/time details for each exercise."
                       : "Purchased workout plan view."}
                   </p>
                   {editFieldErrors.workout_plan ? <small className="programs-modal-error">{editFieldErrors.workout_plan}</small> : null}
@@ -3057,27 +4023,18 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                         </select>
                       </label>
 
-                      <button
-                        type="button"
-                        className="programs-modal-secondary-btn programs-plan-add-btn"
-                        onClick={handleAddSavedWorkoutToDetailWeek}
-                        disabled={!detailPlanWorkoutId || detailsWorkoutPlan.length === 0}
-                      >
-                        Add Saved Workout
-                      </button>
-
                       <label className="programs-modal-field">
-                        <span>Exercise</span>
+                        <span>WOD</span>
                         <select
-                          name="details_plan_exercise"
-                          value={detailPlanExerciseId}
-                          onChange={(event) => setDetailPlanExerciseId(event.target.value)}
-                          disabled={exerciseOptions.length === 0 || detailsWorkoutPlan.length === 0}
+                          name="details_plan_wod"
+                          value={detailPlanWodKey}
+                          onChange={(event) => setDetailPlanWodKey(event.target.value)}
+                          disabled={selectedDetailWeekWods.length === 0}
                         >
-                          <option value="">Select exercise</option>
-                          {exerciseOptions.map((exercise) => (
-                            <option key={exercise.id} value={String(exercise.id)}>
-                              {exercise.name}
+                          {selectedDetailWeekWods.length === 0 ? <option value="">No WODs in this week</option> : null}
+                          {selectedDetailWeekWods.map((wodEntry) => (
+                            <option key={wodEntry.key} value={String(wodEntry.key)}>
+                              {wodEntry.title}{wodEntry.is_rest ? " (Rest)" : ""}
                             </option>
                           ))}
                         </select>
@@ -3086,10 +4043,10 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                       <button
                         type="button"
                         className="programs-modal-secondary-btn programs-plan-add-btn"
-                        onClick={handleAddExerciseToDetailWeek}
-                        disabled={!detailPlanExerciseId || detailsWorkoutPlan.length === 0}
+                        onClick={handleAddSavedWorkoutToDetailWeek}
+                        disabled={!detailPlanWorkoutId || !detailPlanWodKey || detailsWorkoutPlan.length === 0}
                       >
-                        Add Exercise
+                        Add Saved Workout
                       </button>
                     </div>
                   ) : null}
@@ -3106,8 +4063,8 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                           onDrop={() => handleDetailExerciseDrop(weekEntry.week_number)}
                         >
                           <h4>Week {weekEntry.week_number}</h4>
-                          {weekEntry.exercise_ids.length === 0 ? (
-                            <p className="programs-plan-helper">No exercises added yet.</p>
+                          {buildWodsFromWeekEntry(weekEntry).length === 0 ? (
+                            <p className="programs-plan-helper">No WODs added yet.</p>
                           ) : (
                             <ul className="programs-plan-exercise-list">
                               {weekEntry.exercise_ids.map((exerciseId) => (
@@ -3125,13 +4082,19 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                                 >
                                   <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
                                   {canEditSelectedProgram && isDetailsEditMode ? (
+                            buildWodsFromWeekEntry(weekEntry).map((wodEntry, wodIndex) => (
+                              <article key={`details-${weekEntry.week_number}-${wodEntry.key}`} className="programs-plan-week-card">
+                                <h5>{wodEntry.title}{wodEntry.is_rest ? " (Rest)" : ""}</h5>
+                                {canEditSelectedProgram && isDetailsEditMode ? (
+                                  <div className="programs-plan-controls">
                                     <button
                                       type="button"
-                                      className="programs-plan-remove-btn"
-                                      onClick={() => handleRemoveExerciseFromDetailWeek(weekEntry.week_number, exerciseId)}
-                                      aria-label={`Remove ${exerciseNameById[exerciseId] || `exercise ${exerciseId}`} from week ${weekEntry.week_number}`}
+                                      className="programs-plan-reorder-btn"
+                                      onClick={() => handleReorderDetailWod(weekEntry.week_number, wodEntry.key, "up")}
+                                      disabled={wodIndex === 0}
+                                      aria-label={`Move WOD ${wodEntry.title || "entry"} up`}
                                     >
-                                      Remove
+                                      <img src={reorderIcon} alt="" aria-hidden="true" />
                                     </button>
                                   ) : null}
                                 </li>
@@ -3143,44 +4106,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                     )}
                   </div>
                 </section>
-              ) : null}
-
-              {!isDetailsEditMode && isSchedulingToCalendar ? (
-                <section className="programs-schedule-section" aria-label="Schedule to Calendar">
-                  <h3>Schedule to Calendar</h3>
-                  <p className="programs-plan-helper">
-                    Choose a start date. Each week of the program will be added as a separate calendar entry.
-                  </p>
-                  <label className="programs-modal-field">
-                    <span>Start Date</span>
-                    <input
-                      type="date"
-                      value={scheduleStartDate}
-                      onChange={(e) => setScheduleStartDate(e.target.value)}
-                    />
-                  </label>
-                  <div className="programs-schedule-actions">
-                    <button
-                      type="button"
-                      className="programs-modal-primary-btn"
-                      onClick={handleScheduleProgram}
-                      disabled={!scheduleStartDate}
-                    >
-                      Schedule Program
-                    </button>
-                    <button
-                      type="button"
-                      className="programs-calendar-cancel-btn"
-                      onClick={() => setIsSchedulingToCalendar(false)}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </section>
-              ) : null}
-
-              {scheduleSuccessMessage ? (
-                <p className="programs-schedule-success" role="status">{scheduleSuccessMessage}</p>
               ) : null}
 
               <div className="programs-modal-actions">
@@ -3235,83 +4160,156 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
         </div>
       ) : null}
 
-      {isScheduleModalOpen ? (
-        <div className="programs-modal-backdrop" role="presentation" onClick={handleCloseScheduleModal}>
-          <aside
-            className="programs-modal programs-schedule-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Schedule program to calendar"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="programs-modal-header">
-              <button type="button" className="programs-btn-base programs-modal-secondary-btn" onClick={handleCloseScheduleModal} aria-label="Close schedule modal">
-                <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </button>
-              <h2 className="programs-modal-title">Schedule to Calendar</h2>
-            </header>
-
-            <div className="programs-modal-form">
-              <p className="programs-schedule-description">
-                Choose a start date for <strong>{(programDetailsById[selectedProgramId] ?? selectedProgram)?.name || (programDetailsById[selectedProgramId] ?? selectedProgram)?.title || "this program"}</strong>.
-                One workout entry will be added to your calendar for each week of the program.
-              </p>
-
-              {scheduleError ? (
-                <p className="programs-modal-error" role="alert">{scheduleError}</p>
-              ) : null}
-
-              {scheduleSuccess ? (
-                <p className="programs-schedule-success" role="status">{scheduleSuccess}</p>
-              ) : null}
-
-              {!scheduleSuccess ? (
-                <>
-                  <label className="programs-modal-field programs-schedule-date-field">
-                    <span>Start Date</span>
-                    <input
-                      type="date"
-                      value={scheduleStartDate}
-                      onChange={(e) => {
-                        setScheduleStartDate(e.target.value)
-                        setScheduleError("")
-                      }}
-                    />
-                  </label>
-
-                  <p className="programs-plan-helper">
-                    {detailWorkoutPlan.length > 0
-                      ? `This will create ${detailWorkoutPlan.length} calendar entr${detailWorkoutPlan.length !== 1 ? "ies" : "y"} (one per week).`
-                      : "No workout plan found. Please add weeks to this program first."}
+              {!isDetailsEditMode && canScheduleSelectedProgram && isScheduleModalOpen ? (
+                <section className="programs-schedule-inline" aria-label="Schedule program to calendar">
+                  <h3 className="programs-modal-title">Schedule to Calendar</h3>
+                  <p className="programs-schedule-description">
+                    Choose a start date for <strong>{(programDetailsById[selectedProgramId] ?? selectedProgram)?.name || (programDetailsById[selectedProgramId] ?? selectedProgram)?.title || "this program"}</strong>.
+                    Checkmark the day(s) you want workouts on each week.
                   </p>
 
-                  <div className="programs-modal-actions">
-                    <button
-                      type="button"
-                      className="programs-modal-primary-btn"
-                      onClick={handleScheduleProgram}
-                      disabled={detailWorkoutPlan.length === 0}
-                    >
-                      Confirm Schedule
-                    </button>
-                    <button type="button" className="programs-modal-secondary-btn" onClick={handleCloseScheduleModal}>
-                      Cancel
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="programs-modal-actions">
-                  <button type="button" className="programs-modal-primary-btn" onClick={handleCloseScheduleModal}>
-                    Done
+                  {scheduleError ? (
+                    <p className="programs-modal-error" role="alert">{scheduleError}</p>
+                  ) : null}
+
+                  {scheduleSuccess ? (
+                    <p className="programs-schedule-success" role="status">{scheduleSuccess}</p>
+                  ) : null}
+
+                  {!scheduleSuccess ? (
+                    <>
+                      <label className="programs-modal-field programs-schedule-date-field">
+                        <span>Start Date</span>
+                        <input
+                          type="date"
+                          value={scheduleStartDate}
+                          onChange={(e) => {
+                            setScheduleStartDate(e.target.value)
+                            setScheduleError("")
+                            if (!Array.isArray(scheduleDaysOfWeek) || scheduleDaysOfWeek.length === 0) {
+                              const [year, month, day] = String(e.target.value || "").split("-").map(Number)
+                              if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+                                const nextDate = new Date(year, month - 1, day)
+                                setScheduleDaysOfWeek([nextDate.getDay()])
+                              }
+                            }
+                          }}
+                        />
+                      </label>
+
+                      <div className="programs-schedule-days">
+                        <span className="programs-field-label">Workout Days</span>
+                        <div className="programs-schedule-days-grid">
+                          {WEEKDAY_OPTIONS.map((dayOption) => (
+                            <button
+                              key={dayOption.value}
+                              type="button"
+                              className={`programs-schedule-day-pill${scheduleDaysOfWeek.includes(dayOption.value) ? " is-selected" : ""}`}
+                              onClick={() => toggleScheduleDayOfWeek(dayOption.value)}
+                              aria-pressed={scheduleDaysOfWeek.includes(dayOption.value)}
+                            >
+                              <span className="programs-schedule-day-pill-check" aria-hidden="true">
+                                {scheduleDaysOfWeek.includes(dayOption.value) ? "✓" : ""}
+                              </span>
+                              <span>{dayOption.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                        <p className="programs-schedule-days-selected">
+                          {scheduleDaysOfWeek.length > 0
+                            ? `Selected: ${WEEKDAY_OPTIONS.filter((entry) => scheduleDaysOfWeek.includes(entry.value)).map((entry) => entry.label).join(", ")}`
+                            : "No days selected."}
+                        </p>
+                      </div>
+
+                      <p className="programs-plan-helper">
+                        {detailWorkoutPlan.length > 0
+                          ? "This will create calendar entries for each selected day and WOD in every program week."
+                          : "No workout plan found. Please add weeks to this program first."}
+                      </p>
+
+                      <div className="programs-modal-actions">
+                        <button
+                          type="button"
+                          className="programs-modal-primary-btn"
+                          onClick={handleScheduleProgram}
+                          disabled={detailWorkoutPlan.length === 0}
+                        >
+                          Confirm Schedule
+                        </button>
+                        <button type="button" className="programs-modal-secondary-btn" onClick={handleCloseScheduleModal}>
+                          Cancel
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="programs-modal-actions">
+                      <button type="button" className="programs-modal-primary-btn" onClick={handleCloseScheduleModal}>
+                        Done
+                      </button>
+                    </div>
+                  )}
+                </section>
+              ) : null}
+
+              <div className="programs-modal-actions">
+                {!isDetailsEditMode && !isWorkoutPlanUnlocked ? (
+                  <button
+                    type="button"
+                    className="programs-modal-primary-btn"
+                    onClick={handleBuyProgram}
+                    disabled={detailLoadingId === selectedProgramId || isCheckoutSubmitting}
+                  >
+                    {isCheckoutSubmitting ? "Redirecting..." : "Buy Program"}
                   </button>
-                </div>
-              )}
-            </div>
+                ) : null}
+                {canEditSelectedProgram && !isDetailsEditMode ? (
+                  <button
+                    type="button"
+                    className="programs-modal-primary-btn"
+                    onClick={handleStartEditProgram}
+                    disabled={detailLoadingId === selectedProgramId}
+                  >
+                    Edit Program
+                  </button>
+                ) : null}
+                {!isDetailsEditMode && canScheduleSelectedProgram ? (
+                  <button
+                    type="button"
+                    className="programs-schedule-btn"
+                    onClick={() => {
+                      if (isScheduleModalOpen) {
+                        handleCloseScheduleModal()
+                        return
+                      }
+                      handleOpenScheduleModal()
+                    }}
+                    disabled={detailLoadingId === selectedProgramId}
+                  >
+                    {isScheduleModalOpen ? "Hide Schedule" : "Schedule to Calendar"}
+                  </button>
+                ) : null}
+                {canEditSelectedProgram && isDetailsEditMode ? (
+                  <button
+                    type="button"
+                    className="programs-modal-danger-btn"
+                    onClick={handleDeleteProgram}
+                    disabled={isDeleteSubmitting || isEditSubmitting}
+                  >
+                    {isDeleteSubmitting ? "Deleting..." : "Delete Program"}
+                  </button>
+                ) : null}
+                {canEditSelectedProgram && isDetailsEditMode ? (
+                  <button type="submit" className="programs-modal-primary-btn" disabled={isEditSubmitting || isDeleteSubmitting}>
+                    {isEditSubmitting ? "Saving..." : "Save Changes"}
+                  </button>
+                ) : null}
+              </div>
+            </form>
           </aside>
         </div>
       ) : null}
+
     </main>
   )
 }

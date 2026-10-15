@@ -1,14 +1,21 @@
 import "../CSS/exercises.css"
 import axios from "axios"
+import AddToProgram from "./AddToProgram"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { validateExerciseForm } from "../utils/exerciseUtils"
+import FilterIcon from "../assets/filter.png"
+import MultiSelect from "./MultiSelect"
+import ExerciseSteps from "./ExerciseSteps"
+import WODTrackrLogo from "../assets/WODTrackr_Logo.png"
+import CheckMarkIcon from "../assets/checkMark_Icon.png"
+import AddIcon from "../assets/add-icon.png"
+import AddExercise from "../assets/add-exercise.png"
 
 const API_URL = "/api/wodtrackr/exercises/"
+const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 const CUSTOM_EXERCISES_API_URL = "/api/wodtrackr/custom-exercises/"
-const CHOICES_API_URL = "/api/wodtrackr/exercises/choices/"
-const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
-const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
-const PAGE_SIZE = 12
+const PAGE_SIZE = 18
 const SKELETON_CARD_COUNT = 6
 const buildApiUrl = (path = "") => `${API_URL}${String(path).replace(/^\/+/, "")}`
 const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
@@ -19,13 +26,23 @@ const EMPTY_EXERCISE_FORM_VALUES = {
   equipment: "",
   primary_muscle_group: "",
   created_by: "",
+  difficulty: "",
+  image: null,
   is_public: false,
+  image_url: "",
+  image_upload: null,
+  gif_upload: null,
+  gif_url: "",
+  detail: {
+    instruction_steps: { en: [""] },
+  },
 }
 
 const getDefaultExerciseFormValues = (username = "") => ({
   ...EMPTY_EXERCISE_FORM_VALUES,
   created_by: username || "",
 })
+
 
 const getAuthToken = () => {
   const directToken = localStorage.getItem("wodtrackrAuthToken")
@@ -42,16 +59,6 @@ const getAuthToken = () => {
   }
 }
 
-const getStoredUsername = () => {
-  try {
-    const rawValue = localStorage.getItem("wodtrackrUser")
-    const userData = rawValue ? JSON.parse(rawValue) : null
-    return userData?.username || ""
-  } catch {
-    return ""
-  }
-}
-
 const buildRequestConfig = (overrides = {}) => {
   const authToken = getAuthToken()
   return {
@@ -62,10 +69,31 @@ const buildRequestConfig = (overrides = {}) => {
 
 const normalizeChoices = (choices) => {
   if (choices && typeof choices === "object" && !Array.isArray(choices)) {
-    choices[Object.keys(choices)[0]].map((choice) => {
-        return choice
-      })
+    return Object.entries(choices)
+      .map(([value, label]) => ({ value, label: String(label) }))
+      .filter((choice) => choice.value !== "" && choice.value !== null && choice.value !== undefined)
   }
+
+  if (!Array.isArray(choices)) {
+    return []
+  }
+
+  return choices
+    .map((choice) => {
+      if (Array.isArray(choice)) {
+        const [value, label] = choice
+        return { value, label: label ?? String(value ?? "") }
+      }
+
+      if (choice && typeof choice === "object") {
+        const value = choice.value ?? choice.id ?? choice.key ?? ""
+        const label = choice.label ?? choice.name ?? choice.display_name ?? String(value)
+        return { value, label }
+      }
+
+      return { value: choice, label: String(choice) }
+    })
+    .filter((choice) => choice.value !== "" && choice.value !== null && choice.value !== undefined)
 }
 
 const normalizeSchemaChoices = (fieldConfig) => {
@@ -173,9 +201,100 @@ const getChoicesFromMetadata = (metadata, fieldNames) => {
 
 const formatTimestamp = (value) => {
   if (!value) return ""
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleString()
+  const usFormatter = new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
+  return usFormatter.format(new Date(value))
+}
+
+const getExerciseGifUrl = (exercise) => {
+  if (!exercise || typeof exercise !== "object") {
+    return ""
+  }
+
+  const videoValue =
+    exercise?.gif_absolute_url ??
+    exercise?.gif_url ??
+    exercise?.gifUrl ??
+    exercise?.exercise_gif ??
+    exercise?.exerciseGif ??
+    ""
+
+  return typeof videoValue === "string" ? videoValue.trim() : ""
+}
+
+const normalizeMediaUrlForFrontend = (urlValue) => {
+  const trimmedUrl = typeof urlValue === "string" ? urlValue.trim() : null
+  const relativeTrimmedUrl = trimmedUrl?.replace(/^https?:\/\/[^/]+/i, "")
+  if (!relativeTrimmedUrl) {
+    return null
+  }
+
+  if (!import.meta.env.DEV) {
+    return relativeTrimmedUrl
+  }
+
+  if (relativeTrimmedUrl.startsWith("/media/")) {
+    return relativeTrimmedUrl
+  }
+
+  if (relativeTrimmedUrl.startsWith("media/")) {
+    return `/${relativeTrimmedUrl}`
+  }
+
+  if (relativeTrimmedUrl.startsWith("exercise_dataset/")) {
+    return `/media/${relativeTrimmedUrl}`
+  }
+
+  const hostlessMediaMatch = relativeTrimmedUrl.match(/^[^\s/]+:\d+\/(media\/.*)$/i)
+  if (hostlessMediaMatch?.[1]) {
+    return `/${hostlessMediaMatch[1]}`
+  }
+
+  try {
+    const candidateUrl = /^https?:\/\//i.test(relativeTrimmedUrl) ? relativeTrimmedUrl : `http://${relativeTrimmedUrl}`
+    if (candidateUrl.startsWith("/media/")) {
+      return candidateUrl
+    }
+  } catch {
+    return relativeTrimmedUrl
+  }
+
+  return relativeTrimmedUrl
+}
+
+const getExerciseImageUrl = (exercise) => {
+  if (!exercise || typeof exercise !== "object") {
+    return ""
+  }
+
+  const uploadedData = exercise?.image_upload ?? ""
+  const imageUploadValue = typeof uploadedData === "string" && uploadedData !== null ? (uploadedData?.url || uploadedData || uploadedData.path) : uploadedData
+
+  const imageValue =
+    imageUploadValue ??
+    exercise?.image ??
+    exercise?.imageAbsoluteUrl ??
+    exercise?.image_url ??
+    exercise?.imageUrl ??
+    exercise?.exercise_image_url ??
+    exercise?.exerciseImageUrl ??
+    exercise?.exercise_image ??
+    exercise?.exerciseImage ??
+    exercise?.thumbnail_url ??
+    exercise?.thumbnailUrl ??
+    ""
+  return normalizeMediaUrlForFrontend(imageValue)
+}
+
+
+
+const canonicalizeEquipmentValue = (value) => {
+  const normalized = String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ")
+  if (normalized === "bodyweight") return "body weight"
+  return normalized
 }
 
 const getFieldErrorsFromResponse = (data) => {
@@ -183,7 +302,7 @@ const getFieldErrorsFromResponse = (data) => {
     return {}
   }
 
-  const possibleFields = ["name", "description", "category", "equipment", "primary_muscle_group", "created_by", "is_public"]
+  const possibleFields = ["name", "instruction_steps", "category", "equipment", "primary_muscle_group", "secondary_muscle_group", "gif_url", "image_upload", "image_url", "created_by", "is_public"]
   return possibleFields.reduce((accumulator, fieldName) => {
     const rawValue = data[fieldName]
     if (!rawValue) {
@@ -197,42 +316,70 @@ const getFieldErrorsFromResponse = (data) => {
 
 const getExerciseFormValues = (exercise) => ({
   name: exercise?.name || "",
-  description: exercise?.description || "",
+  instruction_steps: { en: exercise?.detail?.instruction_steps.en || [] },
   category: exercise?.category || "",
   equipment: exercise?.equipment || "",
+  secondary_muscle_group: exercise?.secondary_muscle_group || "",
+  gif_upload: exercise?.gif_upload || "",
+  gif_url: exercise?.gif_url || "",
+  image: exercise?.image || "",
+  image_upload: exercise?.image_upload || "",
   primary_muscle_group: exercise?.primary_muscle_group || "",
   created_by: exercise?.created_by_username || exercise?.username || exercise?.created_by || "",
   is_public: Boolean(exercise?.is_public),
 })
 
 
-function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseLibrary}) {
-  const [searchName, setSearchName] = useState("")
-  const [ordering, setOrdering] = useState("name")
-  const [filters, setFilters] = useState({
-    category: "",
-    equipment: "",
-    muscle: "",
-  })
+function Exercises({
+  handleFilterChange = () => { },
+  isChoicesLoading = false,
+  categoryChoices = [],
+  equipmentChoices = [],
+  muscleChoices = [],
+  bodyPartChoices = [],
+  targetChoices = [],
+  exerciseLibraryState,
+  setExerciseLibraryState = () => { },
+  handleSearchChange = () => { },
+  handleSortChange = () => { },
+  handleClearFilters = () => { },
+  sortOrder = "asc",
+  setSortOrder = () => { },
+  filters,
+  setFilters = () => { },
+  setIsChoicesLoading = () => { },
+  userSession,
+  addExerciseToProgram,
+  programExercises,
+  isCreateModalOpen,
+  exerciseIsAdded,
+  setExerciseIsAdded,
+}) {
+  const navigate = useNavigate()
+  const [routeSearchParams] = useSearchParams()
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isLibraryModalOpen, setIsLibraryModalOpen] = useState(true)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
-  const [isChoicesLoading, setIsChoicesLoading] = useState(false)
-  const [errorMessage, setErrorMessage] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
+  const [errorMessage, setErrorMessage] = useState("")
   const [fieldErrors, setFieldErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [editErrorMessage, setEditErrorMessage] = useState("")
   const [editFieldErrors, setEditFieldErrors] = useState({})
   const [isEditSubmitting, setIsEditSubmitting] = useState(false)
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false)
-  const [formValues, setFormValues] = useState(() => getDefaultExerciseFormValues(getStoredUsername()))
+  const [formValues, setFormValues] = useState(() => getDefaultExerciseFormValues(userSession.username))
   const [editFormValues, setEditFormValues] = useState(EMPTY_EXERCISE_FORM_VALUES)
-  const [categoryChoices, setCategoryChoices] = useState([])
-  const [equipmentChoices, setEquipmentChoices] = useState([])
-  const [muscleChoices, setMuscleChoices] = useState([])
+  const [exercisesErrorMessage, setExercisesErrorMessage] = useState("")
+  const [visibleExerciseCount, setVisibleExerciseCount] = useState(PAGE_SIZE)
+  const [activeCardId, setActiveCardId] = useState(null)
+  const isProgramAddMode =
+    routeSearchParams.get("source") === "new-program" && routeSearchParams.get("newProgram") === "true"
+  const requestedPlanWeek = Number(routeSearchParams.get("planWeek") || 1)
+  const targetPlanWeek = Number.isFinite(requestedPlanWeek) && requestedPlanWeek > 0 ? requestedPlanWeek : 1
+  const targetPlanWodKey = String(routeSearchParams.get("planWodKey") || "")
 
   // Refs for modal focus management
   const addModalRef = useRef(null)
@@ -242,10 +389,26 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
   const addModalPreviouslyOpen = useRef(false)
   const editModalPreviouslyOpen = useRef(false)
 
-  const { exerciseLibrary, 
-          isExerciseLibraryLoading, 
-          exerciseLibraryError 
-        } = exerciseLibraryState
+  const resolvedExerciseLibraryState = exerciseLibraryState ?? {
+    exerciseLibrary: [],
+    isExerciseLibraryLoading: false,
+    exerciseLibraryError: "",
+  }
+  const resolvedFilters = filters ?? {
+    searchName: "",
+    category: [],
+    equipment: [],
+    muscle: [],
+    bodyPart: [],
+    target: [],
+  }
+  const {
+    exerciseLibrary = [],
+    isExerciseLibraryLoading = false,
+    exerciseLibraryError = "",
+  } = resolvedExerciseLibraryState
+
+
 
   useEffect(() => {
     if (!successMessage) {
@@ -259,77 +422,207 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
     return () => clearTimeout(timer)
   }, [successMessage])
 
-  useEffect(() => {
-    loadExerciseLibrary(getAuthToken())
-  }, [])
+  const filteredAndSortedLibrary = useMemo(() => {
+    const library = exerciseLibrary || []
+    let result = [...library]
 
- useEffect(() => {
-  const loadChoices = async () => {
-    setIsChoicesLoading(true)
-    setErrorMessage("")
-    
     try {
-      const cachedRawValue = localStorage.getItem(CHOICES_CACHE_KEY)
-      if (cachedRawValue) {
-        const parsedCache = JSON.parse(cachedRawValue)
-        const isCacheFresh = Date.now() - (parsedCache?.cachedAt || 0) < CHOICES_CACHE_TTL_MS
-        
-        if (isCacheFresh && parsedCache?.categoryChoices?.length > 0 && parsedCache?.equipmentChoices?.length > 0 && parsedCache?.muscleChoices?.length > 0) {
-          setCategoryChoices(parsedCache.categoryChoices)
-          setEquipmentChoices(parsedCache.equipmentChoices)
-          setMuscleChoices(parsedCache.muscleChoices)
-          setIsChoicesLoading(false)
-          return
-        }
+      if (resolvedFilters.searchName.trim()) {
+        const query = resolvedFilters.searchName.trim().toLowerCase()
+        result = result.filter(
+          (p) =>
+            String(p?.title || p?.name || "").toLowerCase().includes(query) ||
+            String(p?.detail?.instruction_steps.en || "").toLowerCase().includes(query) ||
+            String(p?.category || "").toLowerCase().includes(query) ||
+            String(p?.equipment || "").toLowerCase().includes(query) ||
+            String(p?.body_part || "").toLowerCase().includes(query) ||
+            String(p?.primary_muscle_group || p?.muscle_group || "").toLowerCase().includes(query) ||
+            String(p?.target || p?.target_muscle || "").toLowerCase().includes(query),
+        )
       }
-    } catch {
-      localStorage.removeItem(CHOICES_CACHE_KEY)
-    } 
+
+      if (Array.isArray(resolvedFilters.category) && resolvedFilters.category.length > 0) {
+        result = result.filter((p) => resolvedFilters.category.includes(p.category))
+      }
+      if (Array.isArray(resolvedFilters.equipment) && resolvedFilters.equipment.length > 0) {
+        const selectedEquipment = new Set(resolvedFilters.equipment.map((entry) => canonicalizeEquipmentValue(entry)))
+        result = result.filter((p) => selectedEquipment.has(canonicalizeEquipmentValue(p.equipment)))
+      }
+      if (Array.isArray(resolvedFilters.muscle) && resolvedFilters.muscle.length > 0) {
+        result = result.filter((p) =>
+          resolvedFilters.muscle.includes(p.primary_muscle_group || p.muscle_group || ""),
+        )
+      }
+      if (Array.isArray(resolvedFilters.bodyPart) && resolvedFilters.bodyPart.length > 0) {
+        result = result.filter((p) => resolvedFilters.bodyPart.includes(p.body_part))
+      }
+      if (Array.isArray(resolvedFilters.target) && resolvedFilters.target.length > 0) {
+        result = result.filter((p) => resolvedFilters.target.includes(p.target || p.target_muscle))
+      }
+      result.sort((a, b) => {
+        const aName = String(a?.title || a?.name || "")
+        const bName = String(b?.title || b?.name || "")
+        const aCreated = new Date(a?.created_at || 0).getTime()
+        const bCreated = new Date(b?.created_at || 0).getTime()
+        const aUpdated = new Date(a?.updated_at || 0).getTime()
+        const bUpdated = new Date(b?.updated_at || 0).getTime()
+
+        if (sortOrder === "-name" || sortOrder === "desc") {
+          return bName.localeCompare(aName)
+        }
+        if (sortOrder === "created_at") {
+          return aCreated - bCreated
+        }
+        if (sortOrder === "-created_at") {
+          return bCreated - aCreated
+        }
+        if (sortOrder === "updated_at") {
+          return aUpdated - bUpdated
+        }
+        if (sortOrder === "-updated_at") {
+          return bUpdated - aUpdated
+        }
+        return aName.localeCompare(bName)
+      })
+      return result
+    } catch (error) {
+      return []
+    }
+  }, [exerciseLibrary, resolvedFilters.searchName, resolvedFilters.category, resolvedFilters.equipment, resolvedFilters.muscle, resolvedFilters.bodyPart, resolvedFilters.target, sortOrder]);
+
+  useEffect(() => {
+    setVisibleExerciseCount(PAGE_SIZE)
+  }, [filteredAndSortedLibrary.length, sortOrder, resolvedFilters.searchName, resolvedFilters.category, resolvedFilters.equipment, resolvedFilters.muscle, resolvedFilters.bodyPart, resolvedFilters.target])
+
+  const visibleExercises = useMemo(
+    () => filteredAndSortedLibrary.slice(0, visibleExerciseCount),
+    [filteredAndSortedLibrary, visibleExerciseCount],
+  )
+
+  const hasMoreVisibleExercises = visibleExerciseCount < filteredAndSortedLibrary.length
+
+  const handleLoadMoreExercises = () => {
+    setVisibleExerciseCount((previousCount) => previousCount + PAGE_SIZE)
+  }
+
+
+  const normalizeExercisesPayload = (data) => {
+    if (Array.isArray(data?.data)) return data.data
+    if (Array.isArray(data?.results)) return data.results
+    if (Array.isArray(data)) return data
+    return []
+  }
+
+  const handleAddSubmit = async (event) => {
+    event.preventDefault()
+    setErrorMessage("")
+    setSuccessMessage("")
+
+    const clientErrors = validateExerciseForm(formValues)
+    if (Object.keys(clientErrors).length > 0) {
+      setFieldErrors(clientErrors)
+      setIsSubmitting(false)
+      return
+    }
+
+    setIsSubmitting(true)
+    setFieldErrors({})
 
     try {
-      const requestConfig = buildRequestConfig()
-      const response = await axios.get(CHOICES_API_URL, requestConfig)
-      const data = response?.data
+      const payload = new FormData()
+      payload.append("name", formValues.name)
+      payload.append("instruction_steps", JSON.stringify(formValues.detail.instruction_steps) || "")
+      payload.append("category", formValues.category)
+      payload.append("equipment", formValues.equipment)
+      payload.append("primary_muscle_group", formValues.primary_muscle_group)
+      payload.append("is_public", String(Boolean(formValues.is_public)))
+      payload.append("body_part", formValues.body_part || "")
+      payload.append("target", formValues.target || "")
+      payload.append("difficulty", formValues.difficulty || "")
+      payload.append("secondary_muscle_group", formValues.secondary_muscle_group || "")
 
-      setCategoryChoices(data?.category)
-      setEquipmentChoices(data?.equipment)
-      setMuscleChoices(data?.primary_muscle_group)
+      if (formValues.image_upload instanceof File) {
+        payload.append("image_upload", formValues.image_upload)
+      }
+      if (formValues.gif_upload instanceof File) {
+        payload.append("gif_upload", formValues.gif_upload)
+      }
 
-      localStorage.setItem(
-        CHOICES_CACHE_KEY,
-        JSON.stringify({
-          categoryChoices: data?.category,
-          equipmentChoices: data?.equipment,
-          muscleChoices: data?.primary_muscle_group,
-          cachedAt: Date.now(),
-        }),
-      )
+      const response = await axios.post(`${API_URL}`, payload, buildRequestConfig())
+      const createdExercise = response?.data?.data ?? response?.data
+      if (createdExercise) {
+        setExerciseLibraryState((prevState) => ({
+          ...prevState,
+          exerciseLibrary: [createdExercise, ...(prevState?.exerciseLibrary || [])],
+        }))
+      }
+
+      setFormValues(getDefaultExerciseFormValues(currentUsername))
+      setSuccessMessage("Exercise added successfully.")
     } catch (error) {
+      const extractedFieldErrors = getFieldErrorsFromResponse(error?.response?.data)
+      if (Object.keys(extractedFieldErrors).length > 0) {
+        setFieldErrors(extractedFieldErrors)
+      }
+
       if (error?.response?.status === 401 || error?.response?.status === 403) {
-        setErrorMessage("Please log in to load exercises and categories.")
+        setErrorMessage("Please log in before adding exercises.")
         return
       }
-      const message = error?.response?.data?.detail || "Unable to load choices. Please refresh and try again."
+      const message =
+        error?.response?.data?.detail?.instruction_steps?.en?.[0] ||
+        "Unable to save exercise. Please check your inputs."
       setErrorMessage(message)
     } finally {
-      setIsChoicesLoading(false)
+      setIsSubmitting(false)
+      setIsAddModalOpen(false)
     }
   }
 
-  loadChoices()
-}, [])
-
-
   const handleAddChange = (event) => {
-    const { name, value, type, checked } = event.target
-    setFormValues((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }))
+    const { name, value, type, checked, files } = event.target
+    const inputValue = type === "textarea" ? value : value;
+    setFormValues((prev) => {
+      if (name === "instruction_steps") {
+        return {
+          ...prev,
+          detail: {
+            ...prev.detail,
+            instruction_steps: {
+              en: inputValue.split(/,\s*/).map(step => step.trim()),
+            },
+          },
+        }
+      }
+      if (name === "image_upload" && files?.[0]) {
+        return {
+          ...prev,
+          [name]: files[0],
+        }
+      }
+      if (name === "gif_upload" && files?.[0]) {
+        return {
+          ...prev,
+          [name]: files[0],
+        }
+      } else {
+        return {
+          ...prev,
+          [name]: inputValue,
+        }
+      }
+    })
     if (fieldErrors[name]) {
       setFieldErrors((prev) => {
         const next = { ...prev }
         delete next[name]
+        return next
+      })
+    }
+    if (fieldErrors.detail?.instruction_steps.en) {
+      setFieldErrors((prev) => {
+        const next = { ...prev }
+        delete next.detail.instruction_steps.en
         return next
       })
     }
@@ -350,70 +643,58 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
     }
   }
 
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    setErrorMessage("")
-    setSuccessMessage("")
-
-    const clientErrors = validateExerciseForm(formValues)
-    if (Object.keys(clientErrors).length > 0) {
-      setFieldErrors(clientErrors)
-      setIsSubmitting(false)
+  const toggleIsAdded = (exerciseId) => {
+    if (!isProgramAddMode) {
       return
     }
 
-    setIsSubmitting(true)
-    setFieldErrors({})
-
-    try {
-      const response = await axios.post(
-        API_URL,
-        {
-          name: formValues.name,
-          description: formValues.description,
-          category: formValues.category,
-          equipment: formValues.equipment,
-          primary_muscle_group: formValues.primary_muscle_group,
-          created_by: currentUsername || formValues.created_by,
-          is_public: formValues.is_public,
-        },
-        buildRequestConfig(),
-      )
-
-      if (response?.data?.data) {
-        setExercises((prev) => [response.data.data, ...prev])
-      }
-
-      setFormValues(getDefaultExerciseFormValues(currentUsername))
-      setSuccessMessage("Exercise added successfully.")
-    } catch (error) {
-      const extractedFieldErrors = getFieldErrorsFromResponse(error?.response?.data)
-      if (Object.keys(extractedFieldErrors).length > 0) {
-        setFieldErrors(extractedFieldErrors)
-      }
-
-      if (error?.response?.status === 401 || error?.response?.status === 403) {
-        setErrorMessage("Please log in before adding exercises.")
-        return
-      }
-      const message =
-        error?.response?.data?.detail ||
-        "Unable to save exercise. Please check your inputs."
-      setErrorMessage(message)
-    } finally {
-      setIsSubmitting(false)
+    if (!exerciseId) {
+      return
     }
+
+    setExerciseIsAdded((previousIds) => {
+      const safeIds = Array.isArray(previousIds) ? previousIds : []
+      if (safeIds.includes(exerciseId)) {
+        return safeIds.filter((id) => id !== exerciseId)
+      }
+      return [...safeIds, exerciseId]
+    })  
   }
 
-  const handleClearFilters = () => {
-    setSearchName("")
-    setOrdering("name")
-    setFilters({
-      category: "",
-      equipment: "",
-      muscle: "",
+  const handleApplySelectedToProgram = () => {
+    if (!Array.isArray(exerciseIsAdded) || exerciseIsAdded.length === 0) {
+      return
+    }
+
+    const nextSearchParams = new URLSearchParams({
+      newProgram: "true",
+      planWeek: String(targetPlanWeek),
+      applyAddedExercises: "true",
     })
-    setVisibleCount(PAGE_SIZE)
+    if (targetPlanWodKey) {
+      nextSearchParams.set("planWodKey", targetPlanWodKey)
+    }
+    navigate(`/programs?${nextSearchParams.toString()}`)
+  }
+
+  const handleReturnToProgramBuilder = () => {
+    const nextSearchParams = new URLSearchParams({
+      newProgram: "true",
+      planWeek: String(targetPlanWeek),
+    })
+    if (targetPlanWodKey) {
+      nextSearchParams.set("planWodKey", targetPlanWodKey)
+    }
+    navigate(`/programs?${nextSearchParams.toString()}`)
+  }
+
+
+  const handleOpenAddModal = () => {
+    setIsAddModalOpen(true)
+  }
+
+  const handleCloseAddModal = () => {
+    setIsAddModalOpen(false)
   }
 
   const handleAddExercise = () => {
@@ -421,7 +702,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
     setFieldErrors({})
     setSuccessMessage("")
     setFormValues(getDefaultExerciseFormValues(currentUsername))
-    
+    setIsAddModalOpen(true)
   }
 
   const handleOpenEditModal = () => {
@@ -452,6 +733,14 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
     setIsDetailsModalOpen(false)
   }
 
+  const toSubTitleCase = (str) => {
+    if (!str) return ""
+    return str
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ")
+  }
+
   const handleEditSubmit = async (event) => {
     event.preventDefault()
     if (!selectedExercise?.id) {
@@ -471,11 +760,11 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
     setEditFieldErrors({})
 
     try {
-      const response = await axios.patch(
+      const response = await axios.put(
         `${API_URL}${selectedExercise.id}/`,
         {
           name: editFormValues.name,
-          description: editFormValues.description,
+          "instruction_steps.en": editFormValues.detail?.instruction_steps.en,
           category: editFormValues.category,
           equipment: editFormValues.equipment,
           primary_muscle_group: editFormValues.primary_muscle_group,
@@ -487,11 +776,12 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
 
       const updatedExercise = response?.data?.data ?? response?.data
       if (updatedExercise) {
-        setExercises((prev) =>
-          prev.map((exercise) =>
+        setExerciseLibraryState((prevState) => ({
+          ...prevState,
+          exerciseLibrary: (prevState?.exerciseLibrary || []).map((exercise) =>
             exercise.id === updatedExercise.id ? updatedExercise : exercise,
           ),
-        )
+        }))
       }
 
       setSuccessMessage("Exercise updated successfully.")
@@ -527,7 +817,10 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
 
     try {
       await axios.delete(`${API_URL}${selectedExercise.id}/`, buildRequestConfig())
-      setExercises((prev) => prev.filter((exercise) => exercise.id !== selectedExercise.id))
+      setExerciseLibraryState((prevState) => ({
+        ...prevState,
+        exerciseLibrary: (prevState?.exerciseLibrary || []).filter((exercise) => exercise.id !== selectedExercise.id),
+      }))
       setSuccessMessage("Exercise deleted successfully.")
     } catch (error) {
       if (error?.response?.status === 401 || error?.response?.status === 403) {
@@ -544,390 +837,545 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
     }
   }
 
-  const handleLoadMore = () => {
-    setVisibleCount((prev) => prev + PAGE_SIZE)
-  }
-
   const handleOpenExerciseDetailsModal = (exerciseId) => {
     setSelectedExerciseId(exerciseId)
     setIsDetailsModalOpen(true)
   }
 
-  const displayedExercises = exerciseLibrary.slice(0, visibleCount)
-  const hasMoreExercises = exerciseLibrary.length > displayedExercises.length
+  function capitalizeFirstLetter(str) {
+    if (!str) return ''; // Handle empty strings safely
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  const currentUsername = userSession?.username || ""
   const selectedExercise = exerciseLibrary.find((exercise) => (exercise.id ?? null) === selectedExerciseId) || null
-  const currentUsername = getStoredUsername()
   const selectedExerciseOwner =
     selectedExercise?.created_by_username ||
     selectedExercise?.username ||
     selectedExercise?.created_by ||
     ""
+
   const canEditSelectedExercise = Boolean(
-    selectedExercise &&
-    currentUsername &&
-    selectedExerciseOwner &&
-    currentUsername === selectedExerciseOwner,
+    (
+      selectedExercise &&
+      currentUsername &&
+      selectedExerciseOwner &&
+      currentUsername === selectedExerciseOwner),
   )
   const canDeleteSelectedExercise = canEditSelectedExercise
 
   useEffect(() => {
-    setVisibleCount(PAGE_SIZE)
-  }, [searchName, ordering, filters])
+    const loadExerciseLibrary = async () => {
+      const config = buildRequestConfig()
+      setExerciseLibraryState((prevState) => ({
+        ...prevState,
+        isExerciseLibraryLoading: true,
+        exerciseLibraryError: '',
+      }))
+      try {
+        const response = await axios.get(EXERCISES_API_URL, config)
+        const nextNode = response?.data?.next
+        setExerciseLibraryState((prevState) => ({
+          ...prevState,
+          isExerciseLibraryLoading: false,
+          exerciseLibraryError: '',
+          exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || []),
+          hasMoreExercises: nextNode !== null,
+        }))
+      } catch (error) {
+        console.error('API or Normalization Error:', error?.response || error?.message || error)
+        setExerciseLibraryState((prevState) => ({
+          ...prevState,
+          isExerciseLibraryLoading: false,
+          exerciseLibrary: [],
+          exerciseLibraryError: 'Unable to load exercise library for workout planning.',
+        }))
+      }
+    }
+    loadExerciseLibrary()
+  }, [resolvedFilters.searchName, sortOrder, resolvedFilters])
 
   useEffect(() => {
     if (exerciseLibrary.length === 0) {
       setSelectedExerciseId(null)
       return
     }
-
-    const hasSelectedExercise = exerciseLibrary.some((exercise) => (exercise.id ?? null) === selectedExerciseId)
-    if (!hasSelectedExercise) {
-      const fallbackId = exerciseLibrary[0]?.id ?? null
-      setSelectedExerciseId(fallbackId)
-    }
-  }, [exerciseLibrary, selectedExerciseId])
-
-  const handleExerciseKeyStroke = (event) => {
-    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
-    if (exerciseLibrary.length === 0) return
-    event.preventDefault()
-    const currentIndex = displayedExercises.findIndex((ex) => (ex.id ?? null) === selectedExerciseId)
-    let nextIndex = currentIndex
-    if (event.key === "ArrowDown") nextIndex = Math.min(currentIndex + 1, displayedExercises.length - 1)
-    else if (event.key === "ArrowUp") nextIndex = Math.max(currentIndex - 1, 0)
-    else if (event.key === "Home") nextIndex = 0
-    else if (event.key === "End") nextIndex = displayedExercises.length - 1
-    if (nextIndex !== currentIndex) {
-      const nextExercise = displayedExercises[nextIndex]
-      setSelectedExerciseId(nextExercise.id ?? null)
-      const optionEl = nextExercise.id
-        ? event.currentTarget.querySelector(`#exercise-option-${nextExercise.id}`)
-        : null
-      optionEl?.focus()
-    }
-  }
+  }, [exerciseLibrary])
 
 
   return (
     <main className="exercise-page" aria-label="Exercise Library">
-        <div className="exercise-backdrop" role="presentation">
-          <section className="exercise-library-panel">
-            <header className="exercise-panel-header">
-              <div className="exercise-panel-header-top">
-                {/* TODO: Fix double header  */}
-                <div>
-                  <h1>Exercise Library</h1>
-                  <p>Browse and manage exercises in the library. Use the search and filter options to find specific exercises.</p>
-                </div>
+      <section className="exercise-library-panel">
+        <header className="exercise-panel-header">
+          <div className="exercise-panel-header-top">
+            <div>
+              <h1>Exercise Library</h1>
+              <p>Browse and manage exercises in the library. Use the search and filter options to find specific exercises.</p>
+            </div>
+            <div id="exercise-add-btn-wrapper">
+              <button className="exercise-add-btn" type="submit" disabled={isAddModalOpen} onClick={() => handleAddExercise()}>
+                <img src={AddIcon} alt="Add Exercise" />
+              </button>
+            </div>
+          </div>
+          <div className="exercise-header-actions">
+            <div className="exercise-counts" aria-live="polite" aria-atomic="true">
+              <span>{filteredAndSortedLibrary ? filteredAndSortedLibrary.length : exerciseLibrary.length} total</span>
+            </div>
+            {isProgramAddMode ? (
+              <div className="exercise-search-actions">
+                <button
+                  type="button"
+                  className="exercise-secondary-btn"
+                  onClick={handleReturnToProgramBuilder}
+                >
+                  Back To Program
+                </button>
+                <button
+                  type="button"
+                  className="exercise-secondary-btn"
+                  onClick={handleApplySelectedToProgram}
+                  disabled={!Array.isArray(exerciseIsAdded) || exerciseIsAdded.length === 0}
+                >
+                  Add Selected ({Array.isArray(exerciseIsAdded) ? exerciseIsAdded.length : 0})
+                </button>
               </div>
-              <div className="exercise-search-header">
-                <h2>Search & Filter</h2>
-                <p>Filter the exercise library by name, category, equipment, or muscle group.</p>
+            ) : null}
+
+          </div>
+        </header>
+        {isExerciseLibraryLoading ? (
+          <p className="exercise-loading-note" role="status">Still loading exercises. Thanks for hanging tight.</p>
+        ) : null}
+        {exercisesErrorMessage ? <p className="exercise-error" role="alert">{exercisesErrorMessage}</p> : null}
+        {successMessage ? <p className="exercise-success" role="status">{successMessage}</p> : null}
+
+        <div
+          className="exercise-list"
+          role={!isExerciseLibraryLoading && exerciseLibrary.length > 0 ? "listbox" : undefined}
+          aria-label={!isExerciseLibraryLoading && exerciseLibrary.length > 0 ? "Exercises" : undefined}
+          aria-busy={isExerciseLibraryLoading}
+        >
+          {isExerciseLibraryLoading ? (
+            Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (
+              <div className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`} aria-hidden="true">
+                <div className="exercise-skeleton exercise-skeleton-title" />
+                <div className="exercise-skeleton exercise-skeleton-line" />
+                <div className="exercise-skeleton exercise-skeleton-line exercise-skeleton-line-short" />
+                <div className="exercise-skeleton exercise-skeleton-line" />
               </div>
-              <div className="exercise-search-grid">
-                <label className="exercise-field exercise-field-wide">
-                  <span>Search by name</span>
+            ))
+          ) : filteredAndSortedLibrary.length === 0 ? (
+            <p className="exercise-empty" role="status">No exercises found.</p>
+          ) : (
+            visibleExercises.map((exercise, index) => {
+
+              const exerciseImageUrl = String(getExerciseImageUrl(exercise))
+              const currentExerciseId = exercise.id ?? null
+              const isExerciseAdded = Array.isArray(exerciseIsAdded)
+                ? exerciseIsAdded.includes(currentExerciseId)
+                : false
+              return (
+                <article
+
+                  className={`exercise-item ${currentExerciseId === selectedExerciseId ? "exercise-item-selected" : ""}`}
+                  key={exercise.id ?? index}
+                  id={exercise.id ? `exercise-option-${exercise.id}` : undefined}
+                  role="option"
+                  aria-selected={currentExerciseId === selectedExerciseId}
+                  tabIndex={currentExerciseId === selectedExerciseId ? 0 : -1}
+                  onClick={() => handleOpenExerciseDetailsModal(currentExerciseId)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault()
+                      handleOpenExerciseDetailsModal(currentExerciseId)
+                    }
+                  }}
+                >
+                  {exerciseImageUrl ? (
+
+                    <div className="exercise-card-image-wrap" aria-hidden="true">
+                      {isProgramAddMode ? (
+                        <AddToProgram isAdded={isExerciseAdded} currentExerciseId={currentExerciseId} onToggle={() => toggleIsAdded(currentExerciseId)} />
+                      ) : null}
+                      <img
+                        src={exerciseImageUrl}
+                        alt=""
+                        loading="lazy"
+                        className="exercise-card-image"
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none"
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="exercise-item-content">
+                    <h3 className="exercise-header-title">{(exercise.title || exercise.name || "Exercise").toUpperCase()}</h3>
+                    <div className="exercise-header">
+                      <p className="exercise-meta"><strong>Visibility:</strong> {capitalizeFirstLetter(exercise.is_public ? "Public" : "Private")}</p>
+                      <p className="exercise-meta"><strong>Category:</strong> {capitalizeFirstLetter(exercise.category)}</p>
+                      <p className="exercise-meta">
+                        <strong>Primary Muscle:</strong> {capitalizeFirstLetter(exercise.primary_muscle_group)}
+                      </p>
+                      <p className="exercise-meta">
+                        <strong>Created by:</strong> {exercise.created_by_username || exercise.username || exercise.created_by || "Unknown"}
+                      </p>
+                    </div>
+                  </div>
+                </article>
+              )
+            })
+          )}
+        </div>
+        {!isExerciseLibraryLoading && hasMoreVisibleExercises ? (
+          <div className="exercise-search-actions">
+            <button type="button" className="exercise-secondary-btn" onClick={handleLoadMoreExercises}>
+              Load More
+            </button>
+          </div>
+        ) : null}
+      </section>
+      <section className="exercise-form-panel">
+        <div className="exercise-search-header">
+          <img src={WODTrackrLogo} alt="WODTrackr Logo" />
+          <h2>Search & Filter</h2>
+          <p>Filter the exercise library by name, category, body part, equipment, muscle group, or target.</p>
+        </div>
+        <div className="exercise-search-grid">
+          <label className="exercise-field exercise-field-wide">
+            <span>Search by name</span>
+            <input
+              type="text"
+              name="name"
+              value={resolvedFilters.searchName || ""}
+              onChange={(event) => handleFilterChange("searchName", event.target.value)}
+              placeholder="Back squat, pull-up, row"
+            />
+          </label>
+
+          <label className="exercise-field">
+            <span>Category</span>
+            <MultiSelect
+              options={categoryChoices}
+              value={resolvedFilters.category || []}
+              onChange={(selectedValues) => handleFilterChange("category", selectedValues)}
+              name="category"
+            />
+          </label>
+
+          <label className="exercise-field">
+            <span>Equipment</span>
+            <MultiSelect
+              options={equipmentChoices}
+              value={resolvedFilters.equipment || []}
+              onChange={(selectedValues) => handleFilterChange("equipment", selectedValues)}
+              name="equipment"
+            />
+          </label>
+
+          <label className="exercise-field">
+            <span>Muscle</span>
+            <MultiSelect
+              options={muscleChoices}
+              value={resolvedFilters.muscle || []}
+              onChange={(selectedValues) => handleFilterChange("muscle", selectedValues)}
+              name="muscle"
+            />
+          </label>
+
+          <label className="exercise-field">
+            <span>Body Part</span>
+            <MultiSelect
+              options={bodyPartChoices}
+              value={resolvedFilters.bodyPart || []}
+              onChange={(selectedValues) => handleFilterChange("bodyPart", selectedValues)}
+              name="body_part"
+            />
+          </label>
+
+          <label className="exercise-field">
+            <span>Target</span>
+            <MultiSelect
+              options={targetChoices}
+              value={resolvedFilters.target || []}
+              onChange={(selectedValues) => handleFilterChange("target", selectedValues)}
+              name="target"
+            />
+          </label>
+
+          <label className="exercise-field exercise-field-wide">
+            <span>Sort by</span>
+            <select
+              name="ordering"
+              value={sortOrder}
+              onChange={(event) => setSortOrder(event.target.value)}
+            >
+              <option value="name">Name (A-Z)</option>
+              <option value="-name">Name (Z-A)</option>
+              <option value="created_at">Created (oldest)</option>
+              <option value="-created_at">Created (newest)</option>
+              <option value="updated_at">Updated (oldest)</option>
+              <option value="-updated_at">Updated (newest)</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="exercise-search-actions">
+          <button type="button" className="exercise-secondary-btn" onClick={() => handleClearFilters()}>
+            Clear Filters
+          </button>
+        </div>
+      </section>
+      {isAddModalOpen ? (
+        <div className="exercise-modal-backdrop">
+          <aside className="exercise-modal" role="dialog" aria-modal="true" aria-labelledby="exercise-modal-title" aria-describedby="exercise-modal-desc" ref={addModalRef}>
+            <header className="exercise-modal-header">
+              <div className="exercise-modal-close-btn-wrapper">
+                <button type="button" className="exercise-btn-base exercise-modal-close-btn" onClick={handleCloseAddModal}>
+                  <svg viewBox="0 0 24 24" width="24" height="24">
+                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <div className="exercise-modal-title-wrapper">
+                <h2 id="exercise-modal-title">Add Exercise</h2>
+                <p id="exercise-modal-desc">Create a new exercise in your library.</p>
+              </div>
+            </header>
+
+            <form className="exercise-form" onSubmit={handleAddSubmit}>
+              {errorMessage ? <p className="exercise-error" role="alert">{errorMessage}</p> : null}
+              <div className="add-exercise-fields-container">
+                <label className="exercise-field">
+                  <span>Name</span>
                   <input
                     type="text"
                     name="name"
-                    value={searchName}
-                    onChange={(event) => setSearchName(event.target.value)}
-                    placeholder="Back squat, pull-up, row"
+                    value={formValues.name}
+                    onChange={handleAddChange}
+                    placeholder="Exercise name"
+                    maxLength={200}
+                    required
                   />
+                  {fieldErrors.name ? <small className="exercise-field-error">{fieldErrors.name}</small> : null}
                 </label>
-
+                <label className="exercise-field">
+                  <span>Instruction Steps</span>
+                  <ul style={{ color: '#666', listStyleType: 'none', margin: '0' }}>
+                    <li style={{ fontStyle: 'italic' }}><span style={{ fontWeight: 'bold', lineHeight: '0', fontSize: '16px' }}>* </span>Separate steps with commas. Don't number steps.</li>
+                  </ul>
+                  <textarea
+                    name="instruction_steps"
+                    value={formValues.detail?.instruction_steps.en}
+                    onChange={handleAddChange}
+                    rows={4}
+                    maxLength={1000}
+                    placeholder="Type instruction steps here..."
+                  />
+                  {fieldErrors.instruction_steps ? (
+                    <small className="exercise-field-error">
+                      {Array.isArray(fieldErrors.instruction_steps) ? fieldErrors.instruction_steps[0] : fieldErrors.instruction_steps}
+                    </small>
+                  ) : null}
+                </label>
+              </div>
+              <div className="add-exercise-fields-container">
                 <label className="exercise-field">
                   <span>Category</span>
                   <select
                     name="category"
-                    value={filters.category}
-                    onChange={(event) =>
-                      setFilters((prev) => ({ ...prev, category: event.target.value }))
-                    }
+                    value={typeof formValues.category === "string" ? formValues.category : ""}
+                    onChange={handleAddChange}
                     disabled={isChoicesLoading}
+                    required
                   >
-                    <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
+                    <option value="">{isChoicesLoading ? "Loading categories..." : "Select category"}</option>
                     {categoryChoices.map((choice) => (
                       <option key={choice.value} value={choice.value}>
                         {choice.label}
                       </option>
                     ))}
                   </select>
+                  {fieldErrors.category ? <small className="exercise-field-error">{fieldErrors.category}</small> : null}
                 </label>
 
                 <label className="exercise-field">
                   <span>Equipment</span>
                   <select
                     name="equipment"
-                    value={filters.equipment}
-                    onChange={(event) =>
-                      setFilters((prev) => ({ ...prev, equipment: event.target.value }))
-                    }
+                    value={formValues.equipment}
+                    onChange={handleAddChange}
                     disabled={isChoicesLoading}
+                    required
                   >
-                    <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
+                    <option value="">{isChoicesLoading ? "Loading equipment..." : "Select equipment"}</option>
                     {equipmentChoices.map((choice) => (
                       <option key={choice.value} value={choice.value}>
                         {choice.label}
                       </option>
                     ))}
                   </select>
+                  {fieldErrors.equipment ? <small className="exercise-field-error">{fieldErrors.equipment}</small> : null}
                 </label>
 
                 <label className="exercise-field">
-                  <span>Muscle</span>
+                  <span>Primary Muscle</span>
                   <select
-                    name="muscle"
-                    value={filters.muscle}
-                    onChange={(event) =>
-                      setFilters((prev) => ({ ...prev, muscle: event.target.value }))
-                    }
+                    name="primary_muscle_group"
+                    value={formValues.primary_muscle_group}
+                    onChange={handleAddChange}
                     disabled={isChoicesLoading}
+                    required
                   >
-                    <option value="">{isChoicesLoading ? "Loading..." : "All"}</option>
+                    <option value="">{isChoicesLoading ? "Loading muscle groups..." : "Select muscle group"}</option>
                     {muscleChoices.map((choice) => (
                       <option key={choice.value} value={choice.value}>
                         {choice.label}
                       </option>
                     ))}
                   </select>
+                  {fieldErrors.primary_muscle_group ? <small className="exercise-field-error">{fieldErrors.primary_muscle_group}</small> : null}
                 </label>
-
-                <label className="exercise-field exercise-field-wide">
-                  <span>Sort by</span>
+                <label className="exercise-field">
+                  <span>Secondary Muscle</span>
                   <select
-                    name="ordering"
-                    value={ordering}
-                    onChange={(event) => setOrdering(event.target.value)}
+                    name="secondary_muscle_group"
+                    value={formValues.secondary_muscle_group}
+                    onChange={handleAddChange}
+                    disabled={isChoicesLoading}
                   >
-                    <option value="name">Name (A-Z)</option>
-                    <option value="-name">Name (Z-A)</option>
-                    <option value="created_at">Created (oldest)</option>
-                    <option value="-created_at">Created (newest)</option>
-                    <option value="updated_at">Updated (oldest)</option>
-                    <option value="-updated_at">Updated (newest)</option>
+                    <option value="">{isChoicesLoading ? "Loading muscle groups..." : "Select muscle group"}</option>
+                    {muscleChoices.map((choice) => (
+                      <option key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </option>
+                    ))}
                   </select>
+                  {fieldErrors.secondary_muscle_group ? <small className="exercise-field-error">{fieldErrors.secondary_muscle_group}</small> : null}
                 </label>
+                <label className="exercise-field">
+                  <span>Image Upload</span>
+                  <input
+                    type="file"
+                    name="image_upload"
+                    accept="image/*"
+                    onChange={handleAddChange}
+                  />
+                  {fieldErrors.image_upload ? <small className="exercise-field-error">{fieldErrors.image_upload}</small> : null}
+                </label>
+                <label className="exercise-field">
+                  <span>Gif Upload</span>
+                  <input
+                    type="file"
+                    name="gif_upload"
+                    accept="image/gif,video/*"
+                    onChange={handleAddChange}
+                  />
+                  {fieldErrors.gif_upload ? <small className="exercise-field-error">{fieldErrors.gif_upload}</small> : null}
+                </label>
+
+
+                <label className="exercise-checkbox">
+                  <input
+                    type="checkbox"
+                    name="is_public"
+                    checked={formValues.is_public}
+                    onChange={handleAddChange}
+                  />
+                  Public exercise
+                </label>
+                {fieldErrors.is_public ? <small className="exercise-field-error">{fieldErrors.is_public}</small> : null}
               </div>
 
-              <div className="exercise-search-actions">
-                <button type="button" className="exercise-secondary-btn" onClick={handleClearFilters}>
-                  Clear Filters
+
+
+              <div className="exercise-form-actions">
+                <button type="submit" className="exercise-primary-btn" disabled={isSubmitting}>
+                  {isSubmitting ? "Adding..." : "Add"}
                 </button>
               </div>
-              <div className="exercise-counts" aria-live="polite" aria-atomic="true">
-                <span>{exerciseLibrary.length} total</span>
-                <span>{displayedExercises.length} shown</span>
-              </div>
-            </header>
-            {isExerciseLibraryLoading ? (
-              <p className="exercise-loading-note" role="status">Still loading exercises. Thanks for hanging tight.</p>
-            ) : null}
-            {errorMessage ? <p className="exercise-error" role="alert">{errorMessage}</p> : null}
-            {successMessage ? <p className="exercise-success" role="status">{successMessage}</p> : null}
-
-            <div
-              className="exercise-list"
-              role={!isExerciseLibraryLoading && exerciseLibrary.length > 0 ? "listbox" : undefined}
-              aria-label={!isExerciseLibraryLoading && exerciseLibrary.length > 0 ? "Exercises" : undefined}
-              aria-busy={isExerciseLibraryLoading}
-            >
-              {console.log("isExerciseLibraryLoading:", isExerciseLibraryLoading, "exerciseLibrary.length:", exerciseLibrary.length)}
-              {isExerciseLibraryLoading ? (
-                Array.from({ length: SKELETON_CARD_COUNT }).map((_, index) => (
-                  <div className="exercise-item exercise-item-skeleton" key={`exercise-skeleton-${index}`} aria-hidden="true">
-                    <div className="exercise-skeleton exercise-skeleton-title" />
-                    <div className="exercise-skeleton exercise-skeleton-line" />
-                    <div className="exercise-skeleton exercise-skeleton-line exercise-skeleton-line-short" />
-                    <div className="exercise-skeleton exercise-skeleton-line" />
-                  </div>
-                ))
-              ) : exerciseLibrary.length === 0 ? (
-                <p className="exercise-empty" role="status">No exercises found.</p>
-              ) : (
-                exerciseLibrary.map((exercise, index) => (
-                  <article
-                    className={`exercise-item ${(exercise.id ?? null) === selectedExerciseId ? "exercise-item-selected" : ""}`}
-                    key={exercise.id ?? index}
-                    id={exercise.id ? `exercise-option-${exercise.id}` : undefined}
-                    role="option"
-                    aria-selected={(exercise.id ?? null) === selectedExerciseId}
-                    tabIndex={(exercise.id ?? null) === selectedExerciseId ? 0 : -1}
-                    onClick={() => handleOpenExerciseDetailsModal(exercise.id ?? null)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault()
-                        handleOpenExerciseDetailsModal(exercise.id ?? null)
-                      }
-                    }}
-                  >
-                    <div className="exercise-header">
-                      <h3>{exercise.name}</h3>
-                      <span>{exercise.category}</span>
-                    </div>
-                    <p className="exercise-meta">
-                      {exercise.equipment} · {exercise.primary_muscle_group}
-                    </p>
-                    <p className="exercise-meta">
-                      Created by {exercise.created_by_username || exercise.username || exercise.created_by || "Unknown"} · {exercise.is_public ? "Public" : "Private"}
-                    </p>
-                    <p className="exercise-meta">
-                      Created {formatTimestamp(exercise.created_at)} · Updated {formatTimestamp(exercise.updated_at)}
-                    </p>
-                  </article>
-                ))
-              )}
-            </div>
-
-            {!isExerciseLibraryLoading && hasMoreExercises ? (
-              <div className="exercise-list-actions">
-                <button type="button" className="exercise-secondary-btn" onClick={handleLoadMore}>
-                  Load More
-                </button>
-              </div>
-            ) : null}
-          </section>
-          <section className="exercise-library-panel">
-            {/* TODO: Change Add Exercise Modal to not be a modal. */}
-            <header className="add-exercise-header">
-              <div>
-                <h2 id="exercise-modal-title">Add Exercise</h2>
-                <p id="exercise-modal-desc">Create a new exercise in your library.</p>
-              </div>
-            </header>
-
-            <form className="exercise-form" onSubmit={handleSubmit} noValidate>
-              {errorMessage ? <p className="exercise-error" role="alert">{errorMessage}</p> : null}
-
-              <label className="exercise-field">
-                <span>Name</span>
-                <input
-                  type="text"
-                  name="name"
-                  value={formValues.name}
-                  onChange={handleAddChange}
-                  placeholder="Exercise name"
-                  maxLength={200}
-                  required
-                />
-                {fieldErrors.name ? <small className="exercise-field-error">{fieldErrors.name}</small> : null}
-              </label>
-
-              <label className="exercise-field">
-                <span>Description</span>
-                <input
-                  type="text"
-                  name="description"
-                  value={formValues.description}
-                  onChange={handleAddChange}
-                  placeholder="Optional details"
-                />
-                {fieldErrors.description ? <small className="exercise-field-error">{fieldErrors.description}</small> : null}
-              </label>
-
-              <label className="exercise-field">
-                <span>Category</span>
-                <select
-                  name="category"
-                  value={formValues.category}
-                  onChange={handleAddChange}
-                  disabled={isChoicesLoading}
-                  required
-                >
-                  <option value="">{isChoicesLoading ? "Loading categories..." : "Select category"}</option>
-                  {categoryChoices.map((choice) => (
-                    <option key={choice.value} value={choice.value}>
-                      {choice.label}
-                    </option>
-                  ))}
-                </select>
-                {fieldErrors.category ? <small className="exercise-field-error">{fieldErrors.category}</small> : null}
-              </label>
-
-              <label className="exercise-field">
-                <span>Equipment</span>
-                <select
-                  name="equipment"
-                  value={formValues.equipment}
-                  onChange={handleAddChange}
-                  disabled={isChoicesLoading}
-                  required
-                >
-                  <option value="">{isChoicesLoading ? "Loading equipment..." : "Select equipment"}</option>
-                  {equipmentChoices.map((choice) => (
-                    <option key={choice.value} value={choice.value}>
-                      {choice.label}
-                    </option>
-                  ))}
-                </select>
-                {fieldErrors.equipment ? <small className="exercise-field-error">{fieldErrors.equipment}</small> : null}
-              </label>
-
-              <label className="exercise-field">
-                <span>Created by</span>
-                <input
-                  type="text"
-                  name="created_by"
-                  value={currentUsername || formValues.created_by}
-                  placeholder="Coach or athlete"
-                  readOnly
-                  aria-readonly="true"
-                />
-                {fieldErrors.created_by ? <small className="exercise-field-error">{fieldErrors.created_by}</small> : null}
-              </label>
-
-              <label className="exercise-field">
-                <span>Muscle</span>
-                <select
-                  name="primary_muscle_group"
-                  value={formValues.primary_muscle_group}
-                  onChange={handleAddChange}
-                  disabled={isChoicesLoading}
-                  required
-                >
-                  <option value="">{isChoicesLoading ? "Loading muscle groups..." : "Select muscle group"}</option>
-                  {muscleChoices.map((choice) => (
-                    <option key={choice.value} value={choice.value}>
-                      {choice.label}
-                    </option>
-                  ))}
-                </select>
-                {fieldErrors.primary_muscle_group ? <small className="exercise-field-error">{fieldErrors.primary_muscle_group}</small> : null}
-              </label>
-
-              <label className="exercise-checkbox">
-                <input
-                  type="checkbox"
-                  name="is_public"
-                  checked={formValues.is_public}
-                  onChange={handleAddChange}
-                />
-                Public exercise
-              </label>
-              {fieldErrors.is_public ? <small className="exercise-field-error">{fieldErrors.is_public}</small> : null}
-
-              <button className="exercise-primary-btn" type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : "Add Exercise"}
-              </button>
             </form>
-          </section>
+            {errorMessage && <p className="exercise-form-error">{errorMessage}</p>}
+            {successMessage && <p className="exercise-form-success">{successMessage}</p>}
+          </aside>
         </div>
+      ) : null}
 
-      {isDetailsModalOpen && selectedExercise ? (
-        <div className="exercise-backdrop" role="presentation" onClick={handleCloseExerciseDetailsModal}>
-          <aside
-            className="exercise-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="exercise-details-modal-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="exercise-modal-header">
-              <div>
-                <h2 id="exercise-details-modal-title">Exercise Details</h2>
-                <p>Select an exercise from the library to review details.</p>
+      <div className={`exercise-backdrop ${isDetailsModalOpen && selectedExercise ? "exercise-backdrop-open" : null}`} role="presentation" onClick={handleCloseExerciseDetailsModal}>
+        <aside
+          className="exercise-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="exercise-details-modal-title"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <header className="exercise-modal-header">
+            <div className="exercise-modal-close-btn-wrapper">
+              <button type="button" className="exercise-btn-base exercise-modal-close-btn" onClick={handleCloseExerciseDetailsModal}>
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <div className="exercise-modal-title-wrapper">
+              <h2 className="exercise-modal-title">{toSubTitleCase(selectedExercise?.name)}</h2>
+            </div>
+          </header>
+          <div className="exercise-modal-content-container">
+            <section className="exercise-details-image-wrap">
+              {(() => {
+                const gifExists = () => selectedExercise?.gif_upload ?? null;
+                const gifUrl = normalizeMediaUrlForFrontend(gifExists());
+                return <img src={gifUrl} alt={selectedExercise?.name} className="exercise-details-card-image" />;
+              })()}
+            </section>
+
+
+            <section className="exercise-details" aria-live="polite">
+              <div className="exercise-meta-group">
+                <div className="exercise-meta-container">
+                  <strong>Category:</strong>
+                  <div className="exercise-meta exercise-meta-line">
+                    {selectedExercise?.category || "N/A"}
+                  </div>
+                  <strong>Equipment:</strong>
+                  <div className="exercise-meta exercise-meta-line">
+                    {selectedExercise?.equipment || "N/A"}
+                  </div>
+                  <strong>Muscle:</strong>
+                  <div className="exercise-meta">
+                    {selectedExercise?.primary_muscle_group || "N/A"}
+                  </div>
+                </div>
               </div>
-              <div className="exercise-header-actions">
+              <div className="exercise-meta-group">
+                <div className="exercise-meta-container">
+                  <strong className="meta-label">Instruction Steps:</strong>
+                  <ExerciseSteps instruction_steps={selectedExercise?.instruction_steps.en || []} />
+                </div>
+              </div>
+              <div className="exercise-meta-group">
+                <div className="exercise-meta-container">
+                  <div className="exercise-meta-column">
+                    <p className="exercise-meta meta-read-only">
+                      <strong>Visibility:</strong> {selectedExercise?.is_public ? "Public" : "Private"}
+                    </p>
+                    <p className="exercise-meta meta-read-only">
+                      <strong>Created by:</strong> {selectedExercise?.created_by_username || selectedExercise?.username || selectedExercise?.created_by || "Unknown"}
+                    </p>
+                  </div>
+                  <div className="exercise-meta-column">
+                    <p className="exercise-meta meta-read-only">
+                      <strong>Created:</strong> {formatTimestamp(selectedExercise?.created_at)}
+                    </p>
+                    <p className="exercise-meta meta-read-only">
+                      <strong>Updated:</strong> {formatTimestamp(selectedExercise?.updated_at)}
+                    </p>
+                  </div>
+                </div>
+
+              </div>
+              <div className="exercise-action-buttons">
                 {canEditSelectedExercise ? (
                   <button
                     type="button"
@@ -935,54 +1383,25 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
                     onClick={handleOpenEditModal}
                     ref={editModalTriggerRef}
                   >
-                    Edit Exercise
+                    Edit
                   </button>
                 ) : null}
-                <button type="button" className="exercise-secondary-btn" onClick={handleCloseExerciseDetailsModal}>
-                  Close
-                </button>
+                {canDeleteSelectedExercise ? (
+                  <button
+                    type="button"
+                    className="exercise-danger-btn"
+                    onClick={handleDeleteExercise}
+                    disabled={isDeleteSubmitting}
+                  >
+                    {isDeleteSubmitting ? "Deleting..." : "Delete"}
+                  </button>
+                ) : null}
               </div>
-            </header>
-          </aside>
-            <section className="exercise-details" aria-live="polite">
-              <h3>{selectedExercise.name}</h3>
-              <p className="exercise-meta">
-                <strong>Category:</strong> {categoryLookup[selectedExercise.category] || selectedExercise.category || "N/A"}
-              </p>
-              <p className="exercise-meta">
-                <strong>Equipment:</strong> {equipmentLookup[selectedExercise.equipment] || selectedExercise.equipment || "N/A"}
-              </p>
-              <p className="exercise-meta">
-                <strong>Muscle:</strong> {selectedExercise.primary_muscle_group || "N/A"}
-              </p>
-              <p className="exercise-meta">
-                <strong>Description:</strong> {selectedExercise.description || "No description provided."}
-              </p>
-              <p className="exercise-meta">
-                <strong>Created by:</strong> {selectedExercise.created_by_username || selectedExercise.username || selectedExercise.created_by || "Unknown"}
-              </p>
-              <p className="exercise-meta">
-                <strong>Visibility:</strong> {selectedExercise.is_public ? "Public" : "Private"}
-              </p>
-              <p className="exercise-meta">
-                <strong>Created:</strong> {formatTimestamp(selectedExercise.created_at)}
-              </p>
-              <p className="exercise-meta">
-                <strong>Updated:</strong> {formatTimestamp(selectedExercise.updated_at)}
-              </p>
-              {canDeleteSelectedExercise ? (
-                <button
-                  type="button"
-                  className="exercise-danger-btn"
-                  onClick={handleDeleteExercise}
-                  disabled={isDeleteSubmitting}
-                >
-                  {isDeleteSubmitting ? "Deleting..." : "Delete Exercise"}
-                </button>
-              ) : null}
             </section>
-        </div>
-      ) : null}
+          </div>
+        </aside>
+
+      </div>
       {isEditModalOpen ? (
         <div
           className="exercise-modal-backdrop"
@@ -1014,7 +1433,7 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
               </button>
             </header>
 
-            <form className="exercise-form" onSubmit={handleEditSubmit} noValidate>
+            <form className="exercise-form" onSubmit={handleEditSubmit}>
               {editErrorMessage ? <p className="exercise-error" role="alert">{editErrorMessage}</p> : null}
 
               <label className="exercise-field">
@@ -1111,7 +1530,6 @@ function Exercises({exerciseLibraryState, setExerciseLibraryState, loadExerciseL
                 </select>
                 {editFieldErrors.primary_muscle_group ? <small className="exercise-field-error">{editFieldErrors.primary_muscle_group}</small> : null}
               </label>
-
               <label className="exercise-checkbox">
                 <input
                   type="checkbox"
