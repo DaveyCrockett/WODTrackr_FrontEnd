@@ -1,6 +1,8 @@
 import axios from "axios"
 import { useEffect, useMemo, useRef, useState } from "react"
+import CalendarEventModal from "./CalendarEventModal"
 import "../CSS/calendar.css"
+import { isDateInSameWeek, saveCalendarEntries } from "../utils/calendarUtils"
 
 const STORAGE_KEY = "wodtrackrCalendarEntries"
 const SCHEDULED_PROGRAMS_KEY = "wodtrackrScheduledPrograms"
@@ -213,6 +215,7 @@ function Calendar() {
   const [selectedDateKey, setSelectedDateKey] = useState(todayKey)
   const [entriesByDate, setEntriesByDate] = useState({})
   const [selectedEntryId, setSelectedEntryId] = useState(null)
+  const [modalEntryId, setModalEntryId] = useState(null)
 
   // Add / Edit form state
   const [panelMode, setPanelMode] = useState("detail") // "detail" | "add" | "edit"
@@ -321,7 +324,7 @@ function Calendar() {
   const persistEntries = (nextEntries) => {
     setEntriesByDate(nextEntries)
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextEntries))
+      saveCalendarEntries(nextEntries)
     } catch {
       // Storage write failure is non-critical.
     }
@@ -329,17 +332,23 @@ function Calendar() {
 
   const selectedEntries = entriesByDate[selectedDateKey] || []
   const selectedEntry = selectedEntries.find((entry) => entry.id === selectedEntryId) || null
+  const modalEntry = selectedEntries.find((entry) => entry.id === modalEntryId) || null
 
   useEffect(() => {
     if (selectedEntries.length === 0) {
       setSelectedEntryId(null)
+      setModalEntryId(null)
       return
     }
     const hasSelectedEntry = selectedEntries.some((entry) => entry.id === selectedEntryId)
     if (!hasSelectedEntry) {
       setSelectedEntryId(null)
     }
-  }, [selectedDateKey, selectedEntries, selectedEntryId])
+    const hasModalEntry = selectedEntries.some((entry) => entry.id === modalEntryId)
+    if (!hasModalEntry) {
+      setModalEntryId(null)
+    }
+  }, [selectedDateKey, selectedEntries, selectedEntryId, modalEntryId])
 
   // Reset panel to detail when date changes
   useEffect(() => {
@@ -431,6 +440,7 @@ function Calendar() {
 
     setSelectedDateKey(nowKey)
     setSelectedEntryId(null)
+    setModalEntryId(null)
     setPanelMode("detail")
     setFormError("")
     setCurrentMonth(new Date(now.getFullYear(), now.getMonth(), 1))
@@ -440,6 +450,7 @@ function Calendar() {
   const selectDate = (dateKey) => {
     setSelectedDateKey(dateKey)
     setSelectedEntryId(null)
+    setModalEntryId(null)
     setPanelMode("detail")
     setFormError("")
   }
@@ -687,12 +698,14 @@ function Calendar() {
                 const hasProgram = entries.some((e) => Boolean(e.programId))
                 const isSelected = selectedDateKey === cell.dateKey
                 const isToday = todayKey === cell.dateKey
+                const isCurrentWeek = isDateInSameWeek(cell.dateValue, today)
 
                 return (
                   <button
                     type="button"
                     key={cell.dateKey}
-                    className={`calendar-cell${isSelected ? " is-selected" : ""}${isToday ? " is-today" : ""}`}
+                    className={`calendar-cell${isSelected ? " is-selected" : ""}${isToday ? " is-today" : ""}${isCurrentWeek ? " is-current-week" : ""}`}
+                    aria-current={isToday ? "date" : undefined}
                     onClick={() => selectDate(cell.dateKey)}
                   >
                     <span className="calendar-day-number">{cell.dateValue.getDate()}</span>
@@ -756,6 +769,7 @@ function Calendar() {
                             } else {
                               selectWeekDay(dateKey)
                               setSelectedEntryId(entry.id)
+                              setModalEntryId(entry.id)
                             }
                           }}
                           title={entry.title}
@@ -826,6 +840,11 @@ function Calendar() {
                       >
                         Delete
                       </button>
+                      {!selectedEntry.programId ? (
+                        <button type="button" className="calendar-detail-modal-btn" onClick={() => setModalEntryId(selectedEntry.id)}>
+                          Open workout details
+                        </button>
+                      ) : null}
                       {selectedEntry.programId ? (
                         <button
                           type="button"
@@ -859,6 +878,8 @@ function Calendar() {
                             setSelectedEntryId(entry.id)
                             if (entry.programId) {
                               handleOpenProgramModal(entry)
+                            } else {
+                              setModalEntryId(entry.id)
                             }
                           }}
                         >
@@ -1133,6 +1154,8 @@ function Calendar() {
           ) : null}
         </aside>
       </div>
+
+      <CalendarEventModal entry={modalEntry} dateLabel={selectedDateLabel} onClose={() => setModalEntryId(null)} />
 
       {/* ── Program event detail modal ── */}
       {programModalEntry ? (

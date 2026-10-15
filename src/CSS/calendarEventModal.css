@@ -1,0 +1,70 @@
+.calendar-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    z-index: 30;
+}
+
+.calendar-modal {
+    width: min(100%, 420px);
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.2);
+    padding: 1rem;
+}
+
+.calendar-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.calendar-modal-header h2 {
+    margin: 0.15rem 0 0;
+    color: #0f172a;
+    font-size: 1.2rem;
+}
+
+.calendar-modal-eyebrow {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.calendar-modal-close,
+.calendar-detail-modal-btn {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0.45rem 0.7rem;
+    background: #ffffff;
+    color: #0f172a;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.calendar-modal-close:hover,
+.calendar-detail-modal-btn:hover {
+    background: #f8fafc;
+}
+
+.calendar-detail-modal-btn {
+    margin-top: 0.75rem;
+}
+
+.calendar-modal-body {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.calendar-modal-date {
+    margin: 0;
+    color: #334155;
+    font-weight: 600;
+}
