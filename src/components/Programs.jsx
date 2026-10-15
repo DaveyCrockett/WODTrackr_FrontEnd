@@ -1577,7 +1577,6 @@ function Programs({
   const [createPlanExercise, setCreatePlanExercise] = useState([])
   const [createPlanWorkoutId, setCreatePlanWorkoutId] = useState("")
   const [createDraggedExercise, setCreateDraggedExercise] = useState(null)
-  const [searchName, setSearchName] = useState("")
   const [sortOrder, setSortOrder] = useState("asc")
   const [filters, setFilters] = useState({ difficulty: [], category: [], goal: [], equipment: [] })
   const [currentPage, setCurrentPage] = useState(1)
@@ -2155,27 +2154,6 @@ function Programs({
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
-  const handleCreateExerciseDragStart = (weekNumber, exerciseId) => {
-    setCreateDraggedExercise({ weekNumber: Number(weekNumber), exerciseId: Number(exerciseId) })
-  }
-
-  const handleCreateExerciseDrop = (targetWeekNumber, beforeExerciseId = null) => {
-    if (!createDraggedExercise) return
-
-    setCreateFormValues((prev) => {
-      const basePlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan)
-      const nextPlan = moveWorkoutPlanExercise(
-        basePlan,
-        createDraggedExercise.weekNumber,
-        Number(targetWeekNumber),
-        createDraggedExercise.exerciseId,
-        beforeExerciseId,
-      )
-      return { ...prev, workout_plan: nextPlan }
-    })
-    setCreateDraggedExercise(null)
-    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
-  }
 
   const validateCreateForm = () => {
     const nextErrors = {}
@@ -2840,11 +2818,6 @@ function Programs({
     setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
-  const handleDetailExerciseDragStart = (weekNumber, exerciseId) => {
-    if (!isDetailsEditMode || !canEditSelectedProgram) return
-    setDetailDraggedExercise({ weekNumber: Number(weekNumber), exerciseId: Number(exerciseId) })
-  }
-
   const handleDetailExerciseDrop = (targetWeekNumber, beforeExerciseId = null) => {
     if (!isDetailsEditMode || !canEditSelectedProgram || !detailDraggedExercise) return
 
@@ -2864,22 +2837,6 @@ function Programs({
   const handleDetailExerciseDragStart = (weekNumber, exerciseId) => {
     if (!isDetailsEditMode || !canEditSelectedProgram) return
     setDetailDraggedExercise({ weekNumber: Number(weekNumber), exerciseId: Number(exerciseId) })
-  }
-
-  const handleDetailExerciseDrop = (targetWeekNumber, beforeExerciseId = null) => {
-    if (!isDetailsEditMode || !canEditSelectedProgram || !detailDraggedExercise) return
-
-    setDetailWorkoutPlan((prev) =>
-      moveWorkoutPlanExercise(
-        prev,
-        detailDraggedExercise.weekNumber,
-        Number(targetWeekNumber),
-        detailDraggedExercise.exerciseId,
-        beforeExerciseId,
-      ),
-    )
-    setDetailDraggedExercise(null)
-    setEditFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
   const getDifficultyLabel = (value) => {
@@ -3460,8 +3417,11 @@ function Programs({
                     onClick={handleAddSavedWorkoutToCreateWeek}
                     disabled={!createPlanWorkoutId || workoutPlan.length === 0}
                   >
+                  <button>
+                    <span className="programs-modal-exercise-picker-icon">+</span>
                     Add Saved Workout
                   </button>
+                  </Link>
 
                   <label className="programs-modal-field">
                     <span>Workout Exercises</span>
@@ -3499,6 +3459,9 @@ function Programs({
                   >
                     Add Workout
                   </button>
+                  <Link
+                    to="#"
+                    className="programs-modal-exercise-picker"
                     onClick={(event) => {
                       if (!createPlanWodKey) {
                         event.preventDefault()
@@ -3549,30 +3512,30 @@ function Programs({
                                       handleUpdateCreateWod(weekEntry.week_number, wodEntry.key, { title: event.target.value })}
                                   />
                                 </label>
-                               <img className="add-WOD-icon" src={addWODIcon} alt="Add WOD Icon" onClick={() => handleAddWodToCreateWeek(weekEntry.week_number)} />
-                          <ul className="programs-plan-exercise-list">
-                            {weekEntry.exercise_ids.map((exerciseId) => (
-                              <li
-                                key={`${weekEntry.week_number}-${exerciseId}`}
-                                draggable
-                                onDragStart={() => handleCreateExerciseDragStart(weekEntry.week_number, exerciseId)}
-                                onDragEnd={() => setCreateDraggedExercise(null)}
-                                onDragOver={(event) => event.preventDefault()}
-                                onDrop={(event) => {
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                  handleCreateExerciseDrop(weekEntry.week_number, exerciseId)
-                                }}
-                              >
-                                <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
-                                <button
-                                  type="button"
-                                  className="programs-plan-remove-btn"
-                                  onClick={() => handleRemoveWodFromCreateWeek(weekEntry.week_number, wodEntry.key)}
-                                >
-                                  Remove WOD
-                                </button>
-                              </div>
+                                <img className="add-WOD-icon" src={addWODIcon} alt="Add WOD Icon" onClick={() => handleAddWodToCreateWeek(weekEntry.week_number)} />
+                                <ul className="programs-plan-exercise-list">
+                                  {weekEntry.exercise_ids.map((exerciseId) => (
+                                  <li
+                                    key={`${weekEntry.week_number}-${exerciseId}`}
+                                    draggable
+                                    onDragStart={() => handleCreateExerciseDragStart(weekEntry.week_number, exerciseId)}
+                                    onDragEnd={() => setCreateDraggedExercise(null)}
+                                    onDragOver={(event) => event.preventDefault()}
+                                    onDrop={(event) => {
+                                      event.preventDefault()
+                                      event.stopPropagation()
+                                      handleCreateExerciseDrop(weekEntry.week_number, exerciseId)
+                                    }}
+                                  >
+                                  <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
+                                  <button
+                                    type="button"
+                                    className="programs-plan-remove-btn"
+                                    onClick={() => handleRemoveWodFromCreateWeek(weekEntry.week_number, wodEntry.key)}
+                                  >
+                                    Remove WOD
+                                  </button>
+                              </div>))}
 
                               {wodEntry.is_rest ? (
                                 <p className="programs-plan-helper">Rest day WOD</p>
