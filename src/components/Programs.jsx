@@ -1621,6 +1621,9 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
     setDetailDraggedExercise(null)
     setEditImageFile(null)
     setEditImagePreview("")
+    setIsSchedulingToCalendar(false)
+    setScheduleStartDate("")
+    setScheduleSuccessMessage("")
     if (editImageInputRef.current) {
       editImageInputRef.current.value = ""
     }
@@ -3140,6 +3143,44 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                     )}
                   </div>
                 </section>
+              ) : null}
+
+              {!isDetailsEditMode && isSchedulingToCalendar ? (
+                <section className="programs-schedule-section" aria-label="Schedule to Calendar">
+                  <h3>Schedule to Calendar</h3>
+                  <p className="programs-plan-helper">
+                    Choose a start date. Each week of the program will be added as a separate calendar entry.
+                  </p>
+                  <label className="programs-modal-field">
+                    <span>Start Date</span>
+                    <input
+                      type="date"
+                      value={scheduleStartDate}
+                      onChange={(e) => setScheduleStartDate(e.target.value)}
+                    />
+                  </label>
+                  <div className="programs-schedule-actions">
+                    <button
+                      type="button"
+                      className="programs-modal-primary-btn"
+                      onClick={handleScheduleProgram}
+                      disabled={!scheduleStartDate}
+                    >
+                      Schedule Program
+                    </button>
+                    <button
+                      type="button"
+                      className="programs-calendar-cancel-btn"
+                      onClick={() => setIsSchedulingToCalendar(false)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </section>
+              ) : null}
+
+              {scheduleSuccessMessage ? (
+                <p className="programs-schedule-success" role="status">{scheduleSuccessMessage}</p>
               ) : null}
 
               <div className="programs-modal-actions">
