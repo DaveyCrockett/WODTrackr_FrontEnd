@@ -3489,7 +3489,7 @@ function Programs({
                   {workoutPlan.length === 0 ? (
                     <p className="programs-plan-helper">Enter duration to start building your weekly workout plan.</p>
                   ) : (
-                    workoutPlan.map((weekEntry) => (
+                    {workoutPlan.map((weekEntry) => (
                       <article
                         key={weekEntry.week_number}
                         className="programs-plan-week-card"
@@ -3499,7 +3499,12 @@ function Programs({
                         <h4>Week {weekEntry.week_number}</h4>
                         {buildWodsFromWeekEntry(weekEntry).length === 0 ? (
                           <p className="programs-plan-helper">No WODs added yet.</p>
-                        ) : (
+                        )) : (
+                          <p className="programs-plan-helper">No WODs added yet.</p>
+                        ))} 
+                      </article>
+                    ))
+                  ) : (
                           buildWodsFromWeekEntry(weekEntry).map((wodEntry, wodIndex) => (
                             <article key={`${weekEntry.week_number}-${wodEntry.key}`} className="programs-plan-week-card">
                               <div className="programs-plan-controls">
@@ -3535,7 +3540,7 @@ function Programs({
                                   >
                                     Remove WOD
                                   </button>
-                              </div>))}
+                              </div>}
 
                               {wodEntry.is_rest ? (
                                 <p className="programs-plan-helper">Rest day WOD</p>
