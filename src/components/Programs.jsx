@@ -1577,12 +1577,6 @@ function Programs({
   const [createPlanExercise, setCreatePlanExercise] = useState([])
   const [createPlanWorkoutId, setCreatePlanWorkoutId] = useState("")
   const [createDraggedExercise, setCreateDraggedExercise] = useState(null)
-<<<<<<< HEAD
-=======
-  const [sortOrder, setSortOrder] = useState("asc")
-  const [filters, setFilters] = useState({ difficulty: [], category: [], goal: [], equipment: [] })
-  const [currentPage, setCurrentPage] = useState(1)
->>>>>>> 54bcd41e2ffb818f8a9d662e7beaecd2a3633fe1
   const [selectedProgramId, setSelectedProgramId] = useState(null)
   const [programDetailsById, setProgramDetailsById] = useState({})
   const [programItemRecordsById, setProgramItemRecordsById] = useState({})
@@ -2131,6 +2125,54 @@ function Programs({
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
+  const handleReorderCreateExercise = (weekNumber, wodKey, exerciseId, direction) => {
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: reorderExerciseInWeekPlan(
+        prev.duration_weeks,
+        prev.workout_plan,
+        weekNumber,
+        wodKey,
+        exerciseId,
+        direction,
+      ),
+    }))
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleDragReorderCreateExercise = (
+    sourceWeekNumber,
+    sourceWodKey,
+    sourceExerciseId,
+    targetWeekNumber,
+    targetWodKey,
+    targetExerciseId = null,
+  ) => {
+    if (!sourceExerciseId) return
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: reorderExerciseInWeekPlanToTarget(
+        prev.duration_weeks,
+        prev.workout_plan,
+        sourceWeekNumber,
+        sourceWodKey,
+        sourceExerciseId,
+        targetWeekNumber,
+        targetWodKey,
+        targetExerciseId,
+      ),
+    }))
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
+  const handleRemoveExerciseFromCreateWeek = (weekNumber, wodKey, exerciseId) => {
+    setCreateFormValues((prev) => ({
+      ...prev,
+      workout_plan: removeExerciseIdFromWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, wodKey, exerciseId),
+    }))
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+  }
+
   const handleCreateExerciseDragStart = (weekNumber, exerciseId) => {
     setCreateDraggedExercise({ weekNumber: Number(weekNumber), exerciseId: Number(exerciseId) })
   }
@@ -2153,8 +2195,6 @@ function Programs({
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
-<<<<<<< HEAD
-=======
 
   const validateCreateForm = () => {
     const nextErrors = {}
@@ -3030,7 +3070,6 @@ function Programs({
     setDetailPlanWorkoutId("")
   }, [selectedProgramId, programDetailsById, selectedProgram, isDetailsEditMode])
 
->>>>>>> 54bcd41e2ffb818f8a9d662e7beaecd2a3633fe1
   return (
     <main className="programs-page" aria-label="Training Programs">
       <header className="programs-top-bar">
@@ -3212,6 +3251,7 @@ function Programs({
       </div>
 
       {isCreateModalOpen ? (
+
         <div className="programs-modal-backdrop" role="presentation" onClick={handleCloseCreateModal}>
           <aside
             className="programs-modal custom-scroll"
@@ -3416,8 +3456,6 @@ function Programs({
                   <Link
                     to={`/exercises?source=new-program&newProgram=true&planWeek=${createPlanWeek}&planWodKey=${createPlanWodKey}`}
                     className="programs-modal-secondary-btn programs-plan-add-btn"
-<<<<<<< HEAD
-=======
                     onClick={handleAddSavedWorkoutToCreateWeek}
                     disabled={!createPlanWorkoutId || workoutPlan.length === 0}
                   >
@@ -3466,7 +3504,6 @@ function Programs({
                   <Link
                     to="#"
                     className="programs-modal-exercise-picker"
->>>>>>> 54bcd41e2ffb818f8a9d662e7beaecd2a3633fe1
                     onClick={(event) => {
                       if (!createPlanWodKey) {
                         event.preventDefault()
@@ -3494,29 +3531,14 @@ function Programs({
                   {workoutPlan.length === 0 ? (
                     <p className="programs-plan-helper">Enter duration to start building your weekly workout plan.</p>
                   ) : (
-<<<<<<< HEAD
                     workoutPlan.map((weekEntry) => (
-                      <article key={weekEntry.week_number} className="programs-plan-week-card">
-=======
-                    {workoutPlan.map((weekEntry) => (
-                      <article
-                        key={weekEntry.week_number}
-                        className="programs-plan-week-card"
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={() => handleCreateExerciseDrop(weekEntry.week_number)}
-                      >
->>>>>>> 54bcd41e2ffb818f8a9d662e7beaecd2a3633fe1
+                      <article key={`create-week-${weekEntry.week_number}`} className="programs-plan-week-card">
                         <h4>Week {weekEntry.week_number}</h4>
                         {buildWodsFromWeekEntry(weekEntry).length === 0 ? (
                           <p className="programs-plan-helper">No WODs added yet.</p>
-                        )) : (
-                          <p className="programs-plan-helper">No WODs added yet.</p>
-                        ))} 
-                      </article>
-                    ))
-                  ) : (
+                        ) : (
                           buildWodsFromWeekEntry(weekEntry).map((wodEntry, wodIndex) => (
-                            <article key={`${weekEntry.week_number}-${wodEntry.key}`} className="programs-plan-week-card">
+                            <article key={`create-${weekEntry.week_number}-${wodEntry.key}`} className="programs-plan-week-card">
                               <div className="programs-plan-controls">
                                 <label className="programs-modal-field">
                                   <span>WOD Title</span>
@@ -3527,8 +3549,30 @@ function Programs({
                                       handleUpdateCreateWod(weekEntry.week_number, wodEntry.key, { title: event.target.value })}
                                   />
                                 </label>
-<<<<<<< HEAD
-                               <img className="add-WOD-icon" src={addWODIcon} alt="Add WOD Icon" onClick={() => handleAddWodToCreateWeek(weekEntry.week_number)} />
+                                <img
+                                  className="add-WOD-icon"
+                                  src={addWODIcon}
+                                  alt="Add WOD Icon"
+                                  onClick={() => handleAddWodToCreateWeek(weekEntry.week_number)}
+                                />
+                                <button
+                                  type="button"
+                                  className="programs-plan-reorder-btn"
+                                  onClick={() => handleReorderCreateWod(weekEntry.week_number, wodEntry.key, "up")}
+                                  disabled={wodIndex === 0}
+                                  aria-label={`Move WOD ${wodEntry.title || "entry"} up`}
+                                >
+                                  <img src={reorderIcon} alt="" aria-hidden="true" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="programs-plan-reorder-btn"
+                                  onClick={() => handleReorderCreateWod(weekEntry.week_number, wodEntry.key, "down")}
+                                  disabled={wodIndex === buildWodsFromWeekEntry(weekEntry).length - 1}
+                                  aria-label={`Move WOD ${wodEntry.title || "entry"} down`}
+                                >
+                                  <img src={reorderIcon} alt="" aria-hidden="true" />
+                                </button>
                                 <button
                                   type="button"
                                   className="programs-plan-remove-btn"
@@ -3537,32 +3581,6 @@ function Programs({
                                   Remove WOD
                                 </button>
                               </div>
-=======
-                                <img className="add-WOD-icon" src={addWODIcon} alt="Add WOD Icon" onClick={() => handleAddWodToCreateWeek(weekEntry.week_number)} />
-                                <ul className="programs-plan-exercise-list">
-                                  {weekEntry.exercise_ids.map((exerciseId) => (
-                                  <li
-                                    key={`${weekEntry.week_number}-${exerciseId}`}
-                                    draggable
-                                    onDragStart={() => handleCreateExerciseDragStart(weekEntry.week_number, exerciseId)}
-                                    onDragEnd={() => setCreateDraggedExercise(null)}
-                                    onDragOver={(event) => event.preventDefault()}
-                                    onDrop={(event) => {
-                                      event.preventDefault()
-                                      event.stopPropagation()
-                                      handleCreateExerciseDrop(weekEntry.week_number, exerciseId)
-                                    }}
-                                  >
-                                  <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
-                                  <button
-                                    type="button"
-                                    className="programs-plan-remove-btn"
-                                    onClick={() => handleRemoveWodFromCreateWeek(weekEntry.week_number, wodEntry.key)}
-                                  >
-                                    Remove WOD
-                                  </button>
-                              </div>}
->>>>>>> 54bcd41e2ffb818f8a9d662e7beaecd2a3633fe1
 
                               {wodEntry.is_rest ? (
                                 <p className="programs-plan-helper">Rest day WOD</p>
@@ -3666,6 +3684,36 @@ function Programs({
                                     >
                                       <img src={reorderIcon} className="programs-plan-reorder-img" alt="" aria-hidden="true" />
                                       <span>{exerciseNameById[exerciseEntry.exercise_id] || `Exercise #${exerciseEntry.exercise_id}`}</span>
+                                      <button
+                                        type="button"
+                                        className="programs-plan-reorder-btn"
+                                        onClick={() =>
+                                          handleReorderCreateExercise(
+                                            weekEntry.week_number,
+                                            wodEntry.key,
+                                            exerciseEntry.exercise_id,
+                                            "up",
+                                          )}
+                                        disabled={exerciseIndex === 0}
+                                        aria-label={`Move ${exerciseNameById[exerciseEntry.exercise_id] || `exercise ${exerciseEntry.exercise_id}`} up`}
+                                      >
+                                        <img src={reorderIcon} alt="" aria-hidden="true" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="programs-plan-reorder-btn"
+                                        onClick={() =>
+                                          handleReorderCreateExercise(
+                                            weekEntry.week_number,
+                                            wodEntry.key,
+                                            exerciseEntry.exercise_id,
+                                            "down",
+                                          )}
+                                        disabled={exerciseIndex === wodEntry.exercise_entries.length - 1}
+                                        aria-label={`Move ${exerciseNameById[exerciseEntry.exercise_id] || `exercise ${exerciseEntry.exercise_id}`} down`}
+                                      >
+                                        <img src={reorderIcon} alt="" aria-hidden="true" />
+                                      </button>
                                       <label className="programs-modal-field">
                                         <span>Sets</span>
                                         <input
@@ -3721,7 +3769,7 @@ function Programs({
                                         type="button"
                                         className="programs-plan-remove-btn"
                                         onClick={() =>
-                                          handleRemoveExerciseFromWorkoutWeek(
+                                          handleRemoveExerciseFromCreateWeek(
                                             weekEntry.week_number,
                                             wodEntry.key,
                                             exerciseEntry.exercise_id,
@@ -3733,7 +3781,6 @@ function Programs({
                                     </li>
                                   ))}
                                 </ul>
-
                               )}
                             </article>
                           ))
