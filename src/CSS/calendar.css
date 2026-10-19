@@ -193,19 +193,6 @@
     background: #ffffff;
 }
 
-.calendar-modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(15, 23, 42, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 999;
-}
-
 .calendar-editor h2 {
     margin: 0 0 0.85rem;
     color: #0f172a;
@@ -606,80 +593,17 @@
     text-overflow: ellipsis;
 }
 
-.calendar-day-view-header {
-    border-bottom: 1px solid #e2e8f0;
-    background: #f8fafc;
-    padding: 0.75rem 0.9rem;
+/* ── Program event modal ───────────────────────── */
+.calendar-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    padding: 1rem;
 }
-
-.calendar-day-view-header p {
-    margin: 0;
-    color: #0f172a;
-    font-weight: 700;
-}
-
-.calendar-day-slots {
-    min-height: 480px;
-    max-height: 560px;
-    overflow-y: auto;
-    padding: 0.5rem 0.75rem 0.75rem;
-    display: grid;
-    gap: 0.45rem;
-    align-content: start;
-}
-
-.calendar-day-slot {
-    display: grid;
-    grid-template-columns: 110px minmax(0, 1fr);
-    gap: 0.55rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    background: #ffffff;
-    padding: 0.45rem 0.55rem;
-    transition: border-color 0.15s ease, background-color 0.15s ease;
-}
-
-.calendar-day-slot.is-drag-over {
-    border-color: #3b82f6;
-    background: #eff6ff;
-}
-
-.calendar-day-slot-label {
-    color: #334155;
-    font-size: 0.84rem;
-    font-weight: 700;
-    align-self: start;
-    padding-top: 0.35rem;
-}
-
-.calendar-day-slot-events {
-    min-height: 2.3rem;
-    display: grid;
-    gap: 0.35rem;
-    align-content: start;
-}
-
-.calendar-day-slot-empty {
-    margin: 0;
-    color: #94a3b8;
-    font-size: 0.8rem;
-    line-height: 2rem;
-}
-
-.calendar-day-slot-unslotted {
-    margin-top: 0.25rem;
-}
-
-.calendar-day-entry {
-    font-size: 0.9rem;
-    padding: 0.55rem 0.65rem;
-}
-
-.calendar-day-entry.is-selected {
-    border-color: #93c5fd;
-    background: #eff6ff;
-}
-
 
 .calendar-modal {
     background: #ffffff;
@@ -819,9 +743,5 @@
 
     .calendar-week-entry-title {
         font-size: 0.7rem;
-    }
-
-    .calendar-day-slot {
-        grid-template-columns: 92px minmax(0, 1fr);
     }
 }

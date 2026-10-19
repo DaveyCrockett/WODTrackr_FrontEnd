@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from "react"
-import "../CSS/multiselect.css"
 
 const getComparableValue = (entry) => {
   if (entry && typeof entry === "object") {
@@ -87,10 +86,11 @@ export default function MultiSelect({ options, value, onChange, disabled, name, 
       </button>
       {open && (
         <div className="multiselect-list" role="listbox">
-          {Array.isArray(options) && options.map((option) => (
+          {options.map((option) => (
             <label key={option.value} className="multiselect-label">
               <input
                 type="checkbox"
+                name={name}
                 value={option.value}
                 checked={selectedKeys.includes(toSelectionKey(option.value))}
                 onChange={() => handleCheckboxChange(option.value)}

@@ -1,8 +1,7 @@
-import { Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom'
-import { useState, useEffect, useMemo } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
 import './CSS/app.css'
-import { ProgramFormProvider } from './components/contexts/ProgramFormContext'
 import Calendar from './components/Calendar'
 import Exercises from './components/Exercises'
 import Help from './components/Help'
@@ -12,58 +11,57 @@ import Profile from './components/Profile'
 import Programs from './components/Programs'
 import Register from './components/Register'
 import Settings from './components/Settings'
-import { buildRequestConfig } from './utils/exerciseUtils'
 
-const CHOICES_API_URL = "/api/wodtrackr/exercises/choices/"
-const PROGRAM_CHOICES_API_URL = "/api/wodtrackr/exercise-programs/choices/"
-const PROGRAM_API_URL = "/api/wodtrackr/exercise-programs/"
-const CHOICES_CACHE_KEY = "wodtrackrExerciseChoices"
-const CHOICES_CACHE_VERSION = 2
-const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
 
-const canonicalizeEquipmentValue = (value) => {
-  const normalized = String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ")
-  if (normalized === "bodyweight") return "body weight"
-  return normalized
-}
+const EXERCISES_API_URL = "/api/wodtrackr/exercises/"
 
-const normalizeChoiceArray = (choices) => {
-  if (!Array.isArray(choices)) return []
 
-  const seen = new Set()
-  const normalized = []
+  const saveUserSession = (data, fallbackUsername) => {
+    const userData = data?.user ?? data ?? {}
+    const authToken =
+      data?.access ??
+      data?.token ??
+      data?.key ??
+      data?.auth_token ??
+      userData?.access ??
+      userData?.token ??
+      userData?.key ??
+      userData?.auth_token ??
+      ""
 
-  for (const choice of choices) {
-    let value = ""
-    let label = ""
+    const refreshToken = data?.refresh ?? userData?.refresh ?? ""
+    const avatarUrl =
+      userData?.avatar_url ??
+      userData?.avatarUrl ??
+      userData?.profile_image ??
+      userData?.profileImage ??
+      null
 
-    if (choice && typeof choice === "object" && !Array.isArray(choice)) {
-      value = String(choice.value ?? "").trim()
-      label = String(choice.label ?? choice.name ?? choice.display_name ?? value).trim()
+    const username =
+      userData?.username ?? userData?.name ?? fallbackUsername ?? "Guest user"
+
+    localStorage.setItem(
+      "wodtrackrUser",
+      JSON.stringify({
+        username,
+        avatarUrl,
+        authToken,
+        refreshToken,
+      })
+    )
+
+    if (authToken) {
+      localStorage.setItem("wodtrackrAuthToken", authToken)
     } else {
-      value = String(choice ?? "").trim()
-      label = value
+      localStorage.removeItem("wodtrackrAuthToken")
     }
 
-    if (!value) continue
-
-    const canonicalValue = canonicalizeEquipmentValue(value)
-    const normalizedValue = canonicalValue || value.toLowerCase()
-    const finalValue = normalizedValue === "body weight" ? "body weight" : value
-    const finalLabel = normalizedValue === "body weight" ? "Body Weight" : label
-
-    const key = normalizedValue
-    if (seen.has(key)) continue
-    seen.add(key)
-
-    normalized.push({ value: finalValue, label: finalLabel || finalValue })
+    if (refreshToken) {
+      localStorage.setItem("wodtrackrRefreshToken", refreshToken)
+    } else {
+      localStorage.removeItem("wodtrackrRefreshToken")
+    }
   }
-
-  return normalized.sort((left, right) => left.label.localeCompare(right.label))
-}
-
-
-
 
 function BillingReturnRedirect({ status }) {
   const location = useLocation()
@@ -77,283 +75,72 @@ function BillingReturnRedirect({ status }) {
   return <Navigate to={`/programs${nextQuery ? `?${nextQuery}` : ''}`} replace />
 }
 
-const normalizeProgramsPayload = (data) => {
-  if (Array.isArray(data?.data)) {
-    return data.data
-  }
-
-  if (Array.isArray(data?.results)) {
-    return data.results
-  }
-
-  if (Array.isArray(data)) {
-    return data
-  }
-
-  return []
-}
-
 function App() {
-  // Read the saved string directly into state on startup
-  const [userSession, setUserSession] = useState(() => {
-    const saved = localStorage.getItem("wodtrackrUser");
-    try {
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
   const [exerciseLibraryState, setExerciseLibraryState] = useState({
-    exerciseLibrary: [],
-    isExerciseLibraryLoading: false,
-    exerciseLibraryError: '',
-    hasMoreExercises: false,
-  })
-  const [filters, setFilters] = useState({
-    searchName: "",
-    difficulty: [],
-    category: [],
-    equipment: [],
-    muscle: [],
-    bodyPart: [],
-    target: [],
-    goal: [],
-  })
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [searchName, setSearchName] = useState("")
-  const [choicesErrorMessage, setChoicesErrorMessage] = useState("")
-  const [sortOrder, setSortOrder] = useState("asc")
-  const [currentPage, setCurrentPage] = useState(1)
-  const [categoryChoices, setCategoryChoices] = useState([])
-  const [goalChoices, setGoalChoices] = useState([])
-  const [difficultyChoices, setDifficultyChoices] = useState([])
-  const [equipmentChoices, setEquipmentChoices] = useState([])
-  const [muscleChoices, setMuscleChoices] = useState([])
-  const [bodyPartChoices, setBodyPartChoices] = useState([])
-  const [targetChoices, setTargetChoices] = useState([])
-  const [isChoicesLoading, setIsChoicesLoading] = useState(false)
-  const [newProgram, setNewProgram] = useState({name: "", exercises: [] })
-  const [programs, setPrograms] = useState([])
-  const [programExercises, setProgramExercises] = useState([])
-  const [programsErrorMessage, setProgramsErrorMessage] = useState("")
-  const [isProgramsLoading, setIsProgramsLoading] = useState(false)
-  const isCreateModalOpen = searchParams.get("newProgram") === "true"
-  const [exerciseIsAdded, setExerciseIsAdded] = useState([]);
- 
-
-
-  const handleFilterChange = (filterName, selectedValues) => {
-    setFilters((prev) => ({
-      ...prev,
-      [filterName]: selectedValues,
-    }))
-    setCurrentPage(1)
-  }
-
-
-  const handleClearFilters = () => {
-    setSortOrder("asc")
-    setFilters({
-      searchName: "",
-      difficulty: [],
-      category: [],
-      equipment: [],
-      muscle: [],
-      bodyPart: [],
-      target: [],
-      goal: [],
+      exerciseLibrary: [],
+      isExerciseLibraryLoading: false,
+      exerciseLibraryError: '',
+      hasMoreExercises: false,
     })
-    setCurrentPage(1)
+
+  const normalizeExercisesPayload = (data) => {
+    if (Array.isArray(data?.data)) return data.data
+    if (Array.isArray(data?.results)) return data.results
+    if (Array.isArray(data)) return data
+    return []
   }
 
-  useEffect(() => {
-    const loadChoices = async () => {
-      setIsChoicesLoading(true)
-      setChoicesErrorMessage("")
-
-      try {
-        const cachedRawValue = localStorage.getItem(CHOICES_CACHE_KEY)
-        if (cachedRawValue) {
-          const parsedCache = JSON.parse(cachedRawValue)
-          const isCacheFresh = Date.now() - (parsedCache?.cachedAt || 0) < CHOICES_CACHE_TTL_MS
-
-          const isCacheCompatible = parsedCache?.version === CHOICES_CACHE_VERSION
-
-          if (isCacheFresh && isCacheCompatible && parsedCache?.categoryChoices?.length > 0 && parsedCache?.equipmentChoices?.length > 0 && parsedCache?.muscleChoices?.length > 0 && parsedCache?.bodyPartChoices?.length > 0 && parsedCache?.targetChoices?.length > 0 && parsedCache?.goalChoices?.length > 0 && parsedCache?.difficultyChoices?.length > 0) {
-            setCategoryChoices(normalizeChoiceArray(parsedCache.categoryChoices))
-            setEquipmentChoices(normalizeChoiceArray(parsedCache.equipmentChoices))
-            setMuscleChoices(normalizeChoiceArray(parsedCache.muscleChoices))
-            setBodyPartChoices(Array.isArray(parsedCache?.bodyPartChoices) ? normalizeChoiceArray(parsedCache.bodyPartChoices) : [])
-            setTargetChoices(Array.isArray(parsedCache?.targetChoices) ? normalizeChoiceArray(parsedCache.targetChoices) : [])
-            setGoalChoices(Array.isArray(parsedCache?.goalChoices) ? normalizeChoiceArray(parsedCache.goalChoices) : [])
-            setDifficultyChoices(Array.isArray(parsedCache?.difficultyChoices) ? normalizeChoiceArray(parsedCache.difficultyChoices) : [])
-            setIsChoicesLoading(false)
-            return
-          }
-        }
-      } catch {
-        localStorage.removeItem(CHOICES_CACHE_KEY)
-      }
-
-      try {
-        const [exerciseChoicesResponse, programChoicesResponse] = await Promise.all([
-          axios.get(CHOICES_API_URL),
-          axios.get(PROGRAM_CHOICES_API_URL).catch(() => ({ data: {} })),
-        ])
-        const exerciseChoicesData = exerciseChoicesResponse?.data || {}
-        const programChoicesData = programChoicesResponse?.data || {}
-
-        const nextCategoryChoices = normalizeChoiceArray(exerciseChoicesData?.category)
-        const nextEquipmentChoices = normalizeChoiceArray(exerciseChoicesData?.equipment)
-        const nextMuscleChoices = Array.isArray(exerciseChoicesData?.muscle_group)
-          ? normalizeChoiceArray(exerciseChoicesData.muscle_group)
-          : Array.isArray(exerciseChoicesData?.primary_muscle_group)
-            ? normalizeChoiceArray(exerciseChoicesData.primary_muscle_group)
-            : []
-        const nextBodyPartChoices = normalizeChoiceArray(exerciseChoicesData?.body_part)
-        const nextTargetChoices = normalizeChoiceArray(exerciseChoicesData?.target)
-        const nextGoalChoices = normalizeChoiceArray(programChoicesData?.goals)
-        const nextDifficultyChoices = normalizeChoiceArray(programChoicesData?.difficulty)
-        setCategoryChoices(nextCategoryChoices)
-        setEquipmentChoices(nextEquipmentChoices)
-        setMuscleChoices(nextMuscleChoices)
-        setBodyPartChoices(nextBodyPartChoices)
-        setTargetChoices(nextTargetChoices)
-        setGoalChoices(nextGoalChoices)
-        setDifficultyChoices(nextDifficultyChoices)
-
-        localStorage.setItem(
-          CHOICES_CACHE_KEY,
-          JSON.stringify({
-            version: CHOICES_CACHE_VERSION,
-            categoryChoices: nextCategoryChoices,
-            equipmentChoices: nextEquipmentChoices,
-            muscleChoices: nextMuscleChoices,
-            bodyPartChoices: nextBodyPartChoices,
-            targetChoices: nextTargetChoices,
-            goalChoices: nextGoalChoices,
-            difficultyChoices: nextDifficultyChoices,
-            cachedAt: Date.now(),
-          }),
-        )
-      } catch (error) {
-        if (error?.response?.status === 401 || error?.response?.status === 403) {
-          setChoicesErrorMessage("Please log in to load exercises and categories.")
-          return
-        }
-        const message = error?.response?.data?.detail || "Unable to load choices. Please refresh and try again."
-        setChoicesErrorMessage(message)
-      } finally {
-        setIsChoicesLoading(false)
-      }
+  const loadExerciseLibrary = async (authToken) => {
+    setExerciseLibraryState((prevState) => ({
+      ...prevState,
+      isExerciseLibraryLoading: true,
+      exerciseLibraryError: '',
+    }))
+    console.log('Loading exercise library...')
+    try {
+      console.log("authToken:", authToken)
+      const config = authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}
+      const response = await axios.get(EXERCISES_API_URL, config)
+      console.log('Exercise library loaded:', response?.data.all_exercises || response?.data || [])
+      const nextNode = response?.data?.next
+      setExerciseLibraryState((prevState) => ({
+        ...prevState,
+        isExerciseLibraryLoading: false,
+        exerciseLibraryError: '',
+        exerciseLibrary: normalizeExercisesPayload(response?.data.all_exercises || response?.data || [] ),
+        hasMoreExercises: nextNode !== null,
+      }))
+    } catch (error) {
+      console.error('API or Normalization Error:', error?.response || error?.message || error)
+      setExerciseLibraryState((prevState) => ({
+        ...prevState,
+        isExerciseLibraryLoading: false,
+        exerciseLibrary: [],
+        exerciseLibraryError: 'Unable to load exercise library for workout planning.',
+      }))
     }
-
-    loadChoices()
-  }, [])
-
-  useEffect(() => {
-     if(!userSession?.authToken) {
-    setPrograms([])
-    setProgramsErrorMessage("")
-    return;
   }
 
-    const loadPrograms = async () => {
-      setIsProgramsLoading(true)
-      setProgramsErrorMessage("")
 
-      try {
-        const response = await axios.get(PROGRAM_API_URL, buildRequestConfig())
-        setPrograms(normalizeProgramsPayload(response?.data))
-      } catch (error) {
-        if (error?.response?.status === 401 || error?.response?.status === 403) {
-          setProgramsErrorMessage("Please log in to load training programs.")
-        } else {
-          const message = error?.response?.data?.detail || "Unable to load programs. Please try again."
-          setProgramsErrorMessage(message)
-        }
-        setPrograms([])
-      } finally {
-        setIsProgramsLoading(false)
-      }
-    }
 
-    loadPrograms()
-  }, [userSession])
   return (
+    <BrowserRouter>
       <Routes>
-        {/* Public Routes */}
-        <Route index path="/login" element={<Login setUserSession={setUserSession} userSession={userSession} />} />
+        <Route index path="/login" element={<Login saveUserSession={saveUserSession} />} />
         <Route path="/register" element={<Register />} />
-        {/* Private/Protected Routes Wrapper */}
-        <Route element={<ProgramFormProvider />}>
-        <Route path="/" element={<Layout userSession={userSession} />}>
+        <Route path="/" element={<Layout />}>
           <Route path="profile" element={<Profile />} />
-          <Route path="exercises" element={<Exercises
-            exerciseIsAdded={exerciseIsAdded}
-            setExerciseIsAdded={setExerciseIsAdded}
-            searchParams={searchParams}
-            setSearchParams={setSearchParams}
-            isCreateModalOpen={isCreateModalOpen}
-            programExercises={programExercises}
-            userSession={userSession}
-            newProgram={newProgram}
-            exerciseLibraryState={exerciseLibraryState}
-            setExerciseLibraryState={setExerciseLibraryState}
-            handleClearFilters={handleClearFilters}
-            sortOrder={sortOrder}
-            setSortOrder={setSortOrder}
-            filters={filters}
-            isChoicesLoading={isChoicesLoading}
-            setIsChoicesLoading={setIsChoicesLoading}
-            categoryChoices={categoryChoices}
-            equipmentChoices={equipmentChoices}
-            muscleChoices={muscleChoices}
-            bodyPartChoices={bodyPartChoices}
-            targetChoices={targetChoices}
-            setFilters={setFilters}
-            handleFilterChange={handleFilterChange}
-          />} />
+          <Route path="exercises" element={<Exercises exerciseLibraryState={exerciseLibraryState} loadExerciseLibrary={loadExerciseLibrary} />} />
           <Route path="calendar" element={<Calendar />} />
-          <Route path="programs" element={<Programs
-            exerciseIsAdded={exerciseIsAdded}
-            setExerciseIsAdded={setExerciseIsAdded}
-            searchParams={searchParams}
-            isCreateModalOpen={isCreateModalOpen}
-            programExercises={programExercises}
-            userSession={userSession}
-            isProgramsLoading={isProgramsLoading}
-            programs={programs}
-            setPrograms={setPrograms}
-            programsErrorMessage={programsErrorMessage}
-            exerciseLibraryState={exerciseLibraryState}
-            setExerciseLibraryState={setExerciseLibraryState}
-            sortOrder={sortOrder}
-            setSortOrder={setSortOrder}
-            handleClearFilters={handleClearFilters}
-            currentPage={currentPage}
-            setCurrentPage={setCurrentPage}
-            filters={filters}
-            isChoicesLoading={isChoicesLoading}
-            setIsChoicesLoading={setIsChoicesLoading}
-            setSearchParams={setSearchParams}
-            goalChoices={goalChoices}
-            difficultyChoices={difficultyChoices}
-            categoryChoices={categoryChoices}
-            equipmentChoices={equipmentChoices}
-            muscleChoices={muscleChoices}
-            choicesErrorMessage={choicesErrorMessage}
-            setFilters={setFilters}
-            handleFilterChange={handleFilterChange}
-          />} />
+          <Route path="programs" element={<Programs exerciseLibraryState={exerciseLibraryState} loadExerciseLibrary={loadExerciseLibrary} />} />
           <Route path="billing/success" element={<BillingReturnRedirect status="success" />} />
           <Route path="billing/cancel" element={<BillingReturnRedirect status="cancel" />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="help" element={<Help />} />
         </Route>
-        </Route>
-        <Route path="help" element={<Help />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+    </BrowserRouter>
   )
 }
 
