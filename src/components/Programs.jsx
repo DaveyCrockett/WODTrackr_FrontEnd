@@ -2840,7 +2840,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                   {workoutPlan.length === 0 ? (
                     <p className="programs-plan-helper">Enter duration to start building your weekly workout plan.</p>
                   ) : (
-                    workoutPlan.map((weekEntry) => (
+                      workoutPlan.map((weekEntry) => (
                       <article key={`create-week-${weekEntry.week_number}`} className="programs-plan-week-card">
                         <h4>Week {weekEntry.week_number}</h4>
                         {weekEntry.exercise_ids.length === 0 ? (
@@ -2896,20 +2896,21 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                                   handleCreateExerciseDrop(weekEntry.week_number, exerciseId)
                                 }}
                               >
-                                <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
-                                <button
-                                  type="button"
-                                  className="programs-plan-remove-btn"
-                                  onClick={() => handleRemoveExerciseFromWorkoutWeek(weekEntry.week_number, exerciseId)}
-                                  aria-label={`Remove ${exerciseNameById[exerciseId] || `exercise ${exerciseId}`} from week ${weekEntry.week_number}`}
-                                >
-                                  Remove
-                                </button>
-                              </div>
+                                <div>
+                                  <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
+                                  <button
+                                    type="button"
+                                    className="programs-plan-remove-btn"
+                                    onClick={() => handleRemoveExerciseFromWorkoutWeek(weekEntry.week_number, exerciseId)}
+                                    aria-label={`Remove ${exerciseNameById[exerciseId] || `exercise ${exerciseId}`} from week ${weekEntry.week_number}`}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>                          
 
                               {wodEntry.is_rest ? (
-                                <p className="programs-plan-helper">Rest day WOD</p>
-                              ) : wodEntry.exercise_entries.length === 0 ? (
+                                  <p className="programs-plan-helper">Rest day WOD</p>
+                                ) : wodEntry.exercise_entries.length === 0 ? (
                                 <p
                                   className="programs-plan-helper"
                                   onDragOver={(event) => {
@@ -3103,20 +3104,20 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                                       >
                                         Remove
                                       </button>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </article>
-                          ))
+                                    </li>))} 
+                                         
+                                </ul>)}
+                                        
+                                </article>
+                                  
                               </li>
-                            ))}
+                             ))} 
                           </ul>
-                        )}
+                          )}                  
                       </article>
-                    ))
-                  )}
+                  
                 </div>
+               }
               </section>
 
               <label className="programs-modal-checkbox">
