@@ -2845,8 +2845,8 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                         <h4>Week {weekEntry.week_number}</h4>
                         {weekEntry.exercise_ids.length === 0 ? (
                           <p className="programs-plan-helper">No workout added yet.</p>
-                          ) : (
-                            buildWodsFromWeekEntry(weekEntry).map((wodEntry, wodIndex) => (
+                        ) : (
+                          buildWodsFromWeekEntry(weekEntry).map((wodEntry, wodIndex) => (
                             <article key={`create-${weekEntry.week_number}-${wodEntry.key}`} className="programs-plan-week-card">
                               <div className="programs-plan-controls">
                                 <label className="programs-modal-field">
@@ -3107,17 +3107,17 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                                     </li>))} 
                                          
                                 </ul>)}
-                                      }    
+                                        
                                 </article>
-                            )))))
                                   
                               </li>
-                          ))}
-                          </ul>  
-                          
-                        </article>                
-                      )))}
+                             ))} 
+                          </ul>
+                          )}                  
+                      </article>
+                  
                 </div>
+               }
               </section>
 
               <label className="programs-modal-checkbox">
@@ -3654,8 +3654,8 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                           ))
                         )}
                       </article>
-                    )))
-                  }
+                    ))
+                  )}
                 </div>
                 </section>
               ) : null}
@@ -3712,7 +3712,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
           </div>
         ) : null}
 
-      </main>
+      </main >
                                   <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
                                   {canEditSelectedProgram && isDetailsEditMode ? (
                                     <button
