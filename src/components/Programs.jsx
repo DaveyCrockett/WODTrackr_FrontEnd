@@ -18,66 +18,6 @@ const DEFAULT_DURATION_MIN = 1
 const DEFAULT_DURATION_MAX = 12
 const PROGRAMS_CHOICES_CACHE_KEY = "wodtrackrProgramChoicesV4"
 const CHOICES_CACHE_TTL_MS = 1000 * 60 * 60 * 12
-const hasMetadataPayload = (value) => Boolean(value && typeof value === "object" && Object.keys(value).length > 0)
-const WEEKDAY_OPTIONS = [
-  { value: 0, label: "Sun" },
-  { value: 1, label: "Mon" },
-  { value: 2, label: "Tue" },
-  { value: 3, label: "Wed" },
-  { value: 4, label: "Thu" },
-  { value: 5, label: "Fri" },
-  { value: 6, label: "Sat" },
-]
-
-export const normalizeApiErrorMessage = (value, fallbackMessage = "") => {
-  const extractMessage = (candidate) => {
-    if (candidate === null || candidate === undefined) return ""
-    if (typeof candidate === "string") return candidate.trim()
-    if (typeof candidate === "number" || typeof candidate === "boolean") return String(candidate)
-    if (Array.isArray(candidate)) {
-      return candidate.map((entry) => extractMessage(entry)).filter(Boolean).join(" ").trim()
-    }
-    if (typeof candidate === "object") {
-      const priorityKeys = ["detail", "message", "error", "name", "non_field_errors"]
-      for (const key of priorityKeys) {
-        const nestedMessage = extractMessage(candidate[key])
-        if (nestedMessage) return nestedMessage
-      }
-      return Object.values(candidate).map((entry) => extractMessage(entry)).filter(Boolean).join(" ").trim()
-    }
-    return ""
-  }
-
-  const message = extractMessage(value)
-  return message || fallbackMessage
-}
-
-const saveCreateProgramDraft = (payload) => {
-  try {
-    sessionStorage.setItem(CREATE_PROGRAM_DRAFT_STORAGE_KEY, JSON.stringify(payload))
-  } catch {
-    // Ignore draft persistence failures.
-  }
-}
-
-const loadCreateProgramDraft = () => {
-  try {
-    const raw = sessionStorage.getItem(CREATE_PROGRAM_DRAFT_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    return parsed && typeof parsed === "object" ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-const clearCreateProgramDraft = () => {
-  try {
-    sessionStorage.removeItem(CREATE_PROGRAM_DRAFT_STORAGE_KEY)
-  } catch {
-    // Ignore draft cleanup failures.
-  }
-}
 
 const normalizeDurationWeeks = (value) => {
   const parsed = Number(value)
@@ -2820,8 +2760,11 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                       ))}
                     </select>
                   </label>
-                  <Link
-                    to={`/exercises?source=new-program&newProgram=true&planWeek=${createPlanWeek}&planWodKey=${createPlanWodKey}`}
+
+                  <button
+                    type="button"
+                  <button
+                    type="button"
                     className="programs-modal-secondary-btn programs-plan-add-btn"
                     onClick={handleAddSavedWorkoutToCreateWeek}
                     disabled={!createPlanWorkoutId || workoutPlan.length === 0}
@@ -2917,28 +2860,31 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                                 <img className="add-WOD-icon" src={addWODIcon} alt="Add WOD Icon" onClick={() => handleAddWodToCreateWeek(weekEntry.week_number)} />
                                 <ul className="programs-plan-exercise-list">
                                   {weekEntry.exercise_ids.map((exerciseId) => (
-                                  <li
-                                    key={`${weekEntry.week_number}-${exerciseId}`}
-                                    draggable
-                                    onDragStart={() => handleCreateExerciseDragStart(weekEntry.week_number, exerciseId)}
-                                    onDragEnd={() => setCreateDraggedExercise(null)}
-                                    onDragOver={(event) => event.preventDefault()}
-                                    onDrop={(event) => {
-                                      event.preventDefault()
-                                      event.stopPropagation()
-                                      handleCreateExerciseDrop(weekEntry.week_number, exerciseId)
-                                    }}
-                                  >
-                                  <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
-                                  <button
-                                    type="button"
-                                    className="programs-plan-remove-btn"
-                                    onClick={() => handleRemoveWodFromCreateWeek(weekEntry.week_number, wodEntry.key)}
-                                  >
-                                    Remove WOD
-                                  </button>
-                              </div>))}
-
+                                    <li
+                                      key={`${weekEntry.week_number}-${exerciseId}`}
+                                      draggable
+                                      onDragStart={() => handleCreateExerciseDragStart(weekEntry.week_number, exerciseId)}
+                                      onDragEnd={() => setCreateDraggedExercise(null)}
+                                      onDragOver={(event) => event.preventDefault()}
+                                      onDrop={(event) => {
+                                        event.preventDefault()
+                                        event.stopPropagation()
+                                        handleCreateExerciseDrop(weekEntry.week_number, exerciseId)
+                                      }}
+                                    >
+                                      <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
+                                      <button
+                                        type="button"
+                                        className="programs-plan-remove-btn"
+                                        onClick={() => handleRemoveWodFromCreateWeek(weekEntry.week_number, wodEntry.key)}
+                                      >
+                                        Remove WOD
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+ 
                               {wodEntry.is_rest ? (
                                   <p className="programs-plan-helper">Rest day WOD</p>
                                 ) : wodEntry.exercise_entries.length === 0 ? (
@@ -3466,40 +3412,60 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                           {buildWodsFromWeekEntry(weekEntry).length === 0 ? (
                             <p className="programs-plan-helper">No WODs added yet.</p>
                           ) : (
-                            <ul className="programs-plan-exercise-list">
-                              {weekEntry.exercise_ids.map((exerciseId) => (
-                                <li
-                                  key={`details-${weekEntry.week_number}-${exerciseId}`}
-                                  draggable={canEditSelectedProgram && isDetailsEditMode}
-                                  onDragStart={() => handleDetailExerciseDragStart(weekEntry.week_number, exerciseId)}
-                                  onDragEnd={() => setDetailDraggedExercise(null)}
-                                  onDragOver={(event) => event.preventDefault()}
-                                  onDrop={(event) => {
-                                    event.preventDefault()
-                                    event.stopPropagation()
-                                    handleDetailExerciseDrop(weekEntry.week_number, exerciseId)
-                                  }}
-                                >
-                                  <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
+                            <>
+                              {buildWodsFromWeekEntry(weekEntry).map((wodEntry, wodIndex) => (
+                                <article key={`details-${weekEntry.week_number}-${wodEntry.key}`} className="programs-plan-week-card">
+                                  <h5>{wodEntry.title}{wodEntry.is_rest ? " (Rest)" : ""}</h5>
                                   {canEditSelectedProgram && isDetailsEditMode ? (
-                            buildWodsFromWeekEntry(weekEntry).map((wodEntry, wodIndex) => (
-                              <article key={`details-${weekEntry.week_number}-${wodEntry.key}`} className="programs-plan-week-card">
-                                <h5>{wodEntry.title}{wodEntry.is_rest ? " (Rest)" : ""}</h5>
-                                {canEditSelectedProgram && isDetailsEditMode ? (
-                                  <div className="programs-plan-controls">
-                                    <button
-                                      type="button"
-                                      className="programs-plan-reorder-btn"
-                                      onClick={() => handleReorderDetailWod(weekEntry.week_number, wodEntry.key, "up")}
-                                      disabled={wodIndex === 0}
-                                      aria-label={`Move WOD ${wodEntry.title || "entry"} up`}
-                                    >
-                                      <img src={reorderIcon} alt="" aria-hidden="true" />
-                                    </button>
+                                    <div className="programs-plan-controls">
+                                      <button
+                                        type="button"
+                                        className="programs-plan-reorder-btn"
+                                        onClick={() => handleReorderDetailWod(weekEntry.week_number, wodEntry.key, "up")}
+                                        disabled={wodIndex === 0}
+                                        aria-label={`Move WOD ${wodEntry.title || "entry"} up`}
+                                      >
+                                        <img src={reorderIcon} alt="" aria-hidden="true" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="programs-plan-reorder-btn"
+                                        onClick={() => handleReorderDetailWod(weekEntry.week_number, wodEntry.key, "down")}
+                                        disabled={wodIndex === buildWodsFromWeekEntry(weekEntry).length - 1}
+                                        aria-label={`Move WOD ${wodEntry.title || "entry"} down`}
+                                      >
+                                        <img src={reorderIcon} alt="" aria-hidden="true" />
+                                      </button>
+                                    </div>
                                   ) : null}
-                                </li>
+                                  {wodEntry.is_rest ? (
+                                    <p className="programs-plan-helper">Rest day WOD</p>
+                                  ) : wodEntry.exercise_entries.length === 0 ? (
+                                    <p className="programs-plan-helper">No exercises in this WOD yet.</p>
+                                  ) : (
+                                    <ul className="programs-plan-exercise-list">
+                                      {wodEntry.exercise_entries.map((exerciseEntry) => (
+                                        <li
+                                          key={`details-${weekEntry.week_number}-${wodEntry.key}-${exerciseEntry.exercise_id}`}
+                                          className="programs-plan-exercise-item"
+                                          draggable={canEditSelectedProgram && isDetailsEditMode}
+                                          onDragStart={() => handleDetailExerciseDragStart(weekEntry.week_number, exerciseEntry.exercise_id)}
+                                          onDragEnd={() => setDetailDraggedExercise(null)}
+                                          onDragOver={(event) => event.preventDefault()}
+                                          onDrop={(event) => {
+                                            event.preventDefault()
+                                            event.stopPropagation()
+                                            handleDetailExerciseDrop(weekEntry.week_number, exerciseEntry.exercise_id)
+                                          }}
+                                        >
+                                          <span>{exerciseNameById[exerciseEntry.exercise_id] || `Exercise #${exerciseEntry.exercise_id}`}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </article>
                               ))}
-                            </ul>
+                            </>
                           )}
                         </article>
                       ))
@@ -3555,10 +3521,6 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                   </button>
                 ) : null}
               </div>
-            </form>
-          </aside>
-        </div>
-      ) : null}
 
       </main>
                                   <span>{exerciseNameById[exerciseId] || `Exercise #${exerciseId}`}</span>
@@ -3617,6 +3579,10 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                 </section>
               ) : null}
 
+              {scheduleSuccessMessage ? (
+                <p className="programs-schedule-success" role="status">{scheduleSuccessMessage}</p>
+              ) : null}
+
               <div className="programs-modal-actions">
                 {!isDetailsEditMode && !isWorkoutPlanUnlocked ? (
                   <button
@@ -3638,20 +3604,14 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                     Edit Program
                   </button>
                 ) : null}
-                {!isDetailsEditMode && canScheduleSelectedProgram ? (
+                {!isDetailsEditMode ? (
                   <button
                     type="button"
                     className="programs-schedule-btn"
-                    onClick={() => {
-                      if (isScheduleModalOpen) {
-                        handleCloseScheduleModal()
-                        return
-                      }
-                      handleOpenScheduleModal()
-                    }}
+                    onClick={handleOpenScheduleModal}
                     disabled={detailLoadingId === selectedProgramId}
                   >
-                    {isScheduleModalOpen ? "Hide Schedule" : "Schedule to Calendar"}
+                    Schedule to Calendar
                   </button>
                 ) : null}
                 {canEditSelectedProgram && isDetailsEditMode ? (
