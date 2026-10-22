@@ -2839,7 +2839,7 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                   {workoutPlan.length === 0 ? (
                     <p className="programs-plan-helper">Enter duration to start building your weekly workout plan.</p>
                   ) : (
-                      workoutPlan.map((weekEntry) => (
+                      {workoutPlan.map((weekEntry) => (
                       <article key={`create-week-${weekEntry.week_number}`} className="programs-plan-week-card">
                         <h4>Week {weekEntry.week_number}</h4>
                         {weekEntry.exercise_ids.length === 0 ? (
@@ -3084,9 +3084,9 @@ function Programs({ exerciseLibraryState, setExerciseLibraryState }) {
                                     </li>))} 
                                          
                                 </ul>)}
-                                      }    
-                                </article>
-                            )))))
+                                  
+                              </article>
+                            )))}))}
                                   
                               </li>
                           ))}
