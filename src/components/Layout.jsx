@@ -1,17 +1,10 @@
-import { Outlet, Navigate } from "react-router-dom"
+import { Outlet } from "react-router-dom"
 import Navbar from "./Navbar"
 
-function Layout({ userSession }) {
-  // Check against the auth token your save function extracts
-  const isAuthenticated = !!userSession?.authToken;
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
-  }
-
+function Layout() {
   return (
     <div className="app-shell">
-      <Navbar userSession={userSession} />
+      <Navbar />
       <main className="app-content">
         <Outlet />
       </main>
