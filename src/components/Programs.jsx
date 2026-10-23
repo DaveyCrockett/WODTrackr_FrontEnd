@@ -1927,6 +1927,7 @@ function Programs({
     setFilters({ difficulty: [], category: [], equipment: [] })
     setCurrentPage(1)
   }
+  
 
   const handleAddSavedWorkoutToCreateWeek = () => {
     const weekNumber = Number(createPlanWeek)
