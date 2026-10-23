@@ -1928,7 +1928,7 @@ function Programs({
     setCurrentPage(1)
   }
   
-
+ /* TODO: Handle adding saved workout to create week by linking to Exercise Page. */
   const handleAddSavedWorkoutToCreateWeek = () => {
     const weekNumber = Number(createPlanWeek)
     const selectedWorkout = workoutById.get(String(createPlanWorkoutId))
@@ -4075,53 +4075,6 @@ function Programs({
                           buildWodsFromWeekEntry(weekEntry).map((wodEntry, wodIndex) => (
                             <article key={`details-${weekEntry.week_number}-${wodEntry.key}`} className="programs-plan-week-card">
                               <h5>{wodEntry.title}{wodEntry.is_rest ? " (Rest)" : ""}</h5>
-                              {canEditSelectedProgram && isDetailsEditMode ? (
-                                <div className="programs-plan-controls">
-                                  <button
-                                    type="button"
-                                    className="programs-plan-reorder-btn"
-                                    onClick={() => handleReorderDetailWod(weekEntry.week_number, wodEntry.key, "up")}
-                                    disabled={wodIndex === 0}
-                                    aria-label={`Move WOD ${wodEntry.title || "entry"} up`}
-                                  >
-                                    <img src={reorderIcon} alt="" aria-hidden="true" />
-                                  </button>
-                                  
-                                </div>
-                              ) : null}
-                              {wodEntry.is_rest ? (
-                                <p className="programs-plan-helper">Rest day WOD</p>
-                              ) : wodEntry.exercise_entries.length === 0 ? (
-                                <p
-                                  className="programs-plan-helper"
-                                  onDragOver={(event) => {
-                                    if (!canEditSelectedProgram || !isDetailsEditMode) return
-                                    event.preventDefault()
-                                    event.dataTransfer.dropEffect = "move"
-                                  }}
-                                  onDrop={(event) => {
-                                    if (!canEditSelectedProgram || !isDetailsEditMode) return
-                                    event.preventDefault()
-                                    event.stopPropagation()
-                                    try {
-                                      const dragPayload = JSON.parse(event.dataTransfer.getData("text/plain") || "null")
-                                      if (!dragPayload) return
-                                      handleDragReorderDetailExercise(
-                                        dragPayload.weekNumber,
-                                        dragPayload.wodKey,
-                                        dragPayload.exerciseId,
-                                        weekEntry.week_number,
-                                        wodEntry.key,
-                                        null,
-                                      )
-                                    } catch {
-                                      return
-                                    }
-                                  }}
-                                >
-                                  No exercises added yet. Drag an exercise here.
-                                </p>
-                              ) : (
                                 /* TODO: implement this instead of above.*/
                                 <ul
                                   className="programs-plan-exercise-list"
@@ -4284,7 +4237,7 @@ function Programs({
                                     </li>
                                   ))}
                                 </ul>
-                              )}
+                              
                             </article>
                           ))
                         )}
