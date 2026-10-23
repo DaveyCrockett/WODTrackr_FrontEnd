@@ -1929,7 +1929,7 @@ function Programs({
   }
   
  /* TODO: Handle adding saved workout to create week by linking to Exercise Page. */
-  const handleAddSavedWorkoutToCreateWeek = () => {
+const handleAddSavedWorkoutToCreateWeek = () => {
     const weekNumber = Number(createPlanWeek)
     const selectedWorkout = workoutById.get(String(createPlanWorkoutId))
     const workoutExerciseIds = Array.isArray(selectedWorkout?.exercise_ids)
@@ -1938,17 +1938,19 @@ function Programs({
     if (!Number.isFinite(weekNumber) || workoutExerciseIds.length === 0) return
 
     setCreateFormValues((prev) => {
-      const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
-        if (weekEntry.week_number !== weekNumber) return weekEntry
-        return {
-          ...weekEntry,
-          exercise_ids: [...new Set([...weekEntry.exercise_ids, ...workoutExerciseIds])],
-        }
-      })
+      const nextPlan = addExerciseIdsToWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, workoutExerciseIds)
       return { ...prev, workout_plan: nextPlan }
     })
     setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
     setCreatePlanWorkoutId("")
+  }
+
+  const handleRemoveExerciseFromWorkoutWeek = (weekNumber, exerciseId) => {
+    setCreateFormValues((prev) => {
+      const nextPlan = removeExerciseIdFromWeekPlan(prev.duration_weeks, prev.workout_plan, weekNumber, exerciseId)
+      return { ...prev, workout_plan: nextPlan }
+    })
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
   }
 
   const handleOpenCreateModal = () => {
@@ -3477,7 +3479,7 @@ function Programs({
                       ))}
                     </select>
                   </label>
-                  <button
+                  {/* <button
                     type="button"
                     className="programs-modal-secondary-btn programs-plan-add-btn"
                     onClick={handleAddSavedWorkoutToCreateWeek}
@@ -3485,10 +3487,10 @@ function Programs({
                   >
                     <span className="programs-modal-exercise-picker-icon"></span>
                     <img src={ExerciseIcon} alt="Exercise Library Icon" />
-                  </button>
+                  </button> */}
                   <Link
-                    to="#"
-                    className="programs-modal-exercise-picker"
+                    to="/exercises"
+                    className="programs-modal-exercise-picker-icon"
                     onClick={(event) => {
                       if (!createPlanWodKey) {
                         event.preventDefault()

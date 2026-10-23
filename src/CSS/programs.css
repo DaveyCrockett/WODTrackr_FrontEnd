@@ -963,6 +963,31 @@
   top: -0.25rem;
 }
 
+.programs-modal-exercise-picker-icon {
+  display: inline-block;
+  padding: .25rem;
+  width: 3rem;
+  height: 3rem;
+  cursor: pointer;
+  background: #1d4ed8;
+  border-radius: 8px;
+}
+
+.programs-modal-exercise-picker-icon:hover {
+  transform: scale(1.1);
+  cursor: pointer;
+}
+
+.programs-modal-exercise-picker-icon:active {
+  transform: scale(0.95);
+}
+
+.programs-modal-exercise-picker-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .add-WOD-icon:hover {
   transform: scale(1.1);
   cursor: pointer;
