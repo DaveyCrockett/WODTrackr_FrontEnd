@@ -2429,6 +2429,8 @@ function Programs({
     setIsDetailsEditMode(true)
   }
 
+  
+
   const handleViewDetails = async (programId) => {
     setSelectedProgramId(programId)
     setIsDetailsEditMode(false)
