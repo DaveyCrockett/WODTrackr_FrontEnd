@@ -1928,6 +1928,28 @@ function Programs({
     setCurrentPage(1)
   }
 
+  const handleAddSavedWorkoutToCreateWeek = () => {
+    const weekNumber = Number(createPlanWeek)
+    const selectedWorkout = workoutById.get(String(createPlanWorkoutId))
+    const workoutExerciseIds = Array.isArray(selectedWorkout?.exercise_ids)
+      ? selectedWorkout.exercise_ids.map((exerciseId) => Number(exerciseId)).filter((exerciseId) => Number.isFinite(exerciseId))
+      : []
+    if (!Number.isFinite(weekNumber) || workoutExerciseIds.length === 0) return
+
+    setCreateFormValues((prev) => {
+      const nextPlan = buildWorkoutPlanForDuration(prev.duration_weeks, prev.workout_plan).map((weekEntry) => {
+        if (weekEntry.week_number !== weekNumber) return weekEntry
+        return {
+          ...weekEntry,
+          exercise_ids: [...new Set([...weekEntry.exercise_ids, ...workoutExerciseIds])],
+        }
+      })
+      return { ...prev, workout_plan: nextPlan }
+    })
+    setCreateFieldErrors((prev) => ({ ...prev, workout_plan: "" }))
+    setCreatePlanWorkoutId("")
+  }
+
   const handleOpenCreateModal = () => {
     clearCreateProgramDraft()
     setCreateFormValues(EMPTY_PROGRAM_FORM_VALUES)
