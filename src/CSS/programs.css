@@ -828,11 +828,17 @@
   justify-content: center;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  width: 100%;
-  height: 100%;
+  width: 2rem;
+  height: 2rem;
   background: #ffffff;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.programs-plan-reorder-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .programs-plan-reorder-btn:hover:not(:disabled) {
@@ -991,6 +997,31 @@
 .add-WOD-icon:hover {
   transform: scale(1.1);
   cursor: pointer;
+}
+
+.add-exercise-to-program {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: contain;
+  cursor: pointer;
+  background-image: url('../assets/add-exercise.png');
+  background-size: cover;
+  background-position: center;
+}
+
+.add-exercise-to-program.added {
+  background-image: url('../assets/checkMark.png');
+}
+
+.add-exercise-to-program:hover {
+  transform: rotate(90deg);
+  cursor: pointer;
+  background-image: url('../assets/add-exercise-hover.png');
+}
+
+.add-exercise-to-program:disabled {
+  opacity: 0.7;
+  cursor: none;
 }
 
 .programs-calendar-btn {

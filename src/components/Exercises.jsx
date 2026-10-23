@@ -375,8 +375,7 @@ function Exercises({
   const [exercisesErrorMessage, setExercisesErrorMessage] = useState("")
   const [visibleExerciseCount, setVisibleExerciseCount] = useState(PAGE_SIZE)
   const [activeCardId, setActiveCardId] = useState(null)
-  const isProgramAddMode =
-    routeSearchParams.get("source") === "new-program" && routeSearchParams.get("newProgram") === "true"
+  const isProgramAddMode = routeSearchParams.get("source") === "new-program" && routeSearchParams.get("newProgram") === "true"
   const requestedPlanWeek = Number(routeSearchParams.get("planWeek") || 1)
   const targetPlanWeek = Number.isFinite(requestedPlanWeek) && requestedPlanWeek > 0 ? requestedPlanWeek : 1
   const targetPlanWodKey = String(routeSearchParams.get("planWodKey") || "")
@@ -971,6 +970,7 @@ function Exercises({
             visibleExercises.map((exercise, index) => {
 
               const exerciseImageUrl = String(getExerciseImageUrl(exercise))
+              console.log("Exercise", exerciseImageUrl)
               const currentExerciseId = exercise.id ?? null
               const isExerciseAdded = Array.isArray(exerciseIsAdded)
                 ? exerciseIsAdded.includes(currentExerciseId)
@@ -992,9 +992,11 @@ function Exercises({
                     }
                   }}
                 >
+                  {console.log("ExerciseImageUrl", exerciseImageUrl)}
                   {exerciseImageUrl ? (
-
+                    
                     <div className="exercise-card-image-wrap" aria-hidden="true">
+                      {console.log("ProgramAddMode", isProgramAddMode)}
                       {isProgramAddMode ? (
                         <AddToProgram isAdded={isExerciseAdded} currentExerciseId={currentExerciseId} onToggle={() => toggleIsAdded(currentExerciseId)} />
                       ) : null}

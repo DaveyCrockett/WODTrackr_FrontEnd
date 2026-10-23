@@ -3479,15 +3479,6 @@ const handleAddSavedWorkoutToCreateWeek = () => {
                       ))}
                     </select>
                   </label>
-                  {/* <button
-                    type="button"
-                    className="programs-modal-secondary-btn programs-plan-add-btn"
-                    onClick={handleAddSavedWorkoutToCreateWeek}
-                    disabled={!createPlanWorkoutId || workoutPlan.length === 0}
-                  >
-                    <span className="programs-modal-exercise-picker-icon"></span>
-                    <img src={ExerciseIcon} alt="Exercise Library Icon" />
-                  </button> */}
                   <Link
                     to="/exercises"
                     className="programs-modal-exercise-picker-icon"
