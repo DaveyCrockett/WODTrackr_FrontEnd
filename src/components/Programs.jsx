@@ -3483,45 +3483,8 @@ function Programs({
                     onClick={handleAddSavedWorkoutToCreateWeek}
                     disabled={!createPlanWorkoutId || workoutPlan.length === 0}
                   >
-                    <span className="programs-modal-exercise-picker-icon">+</span>
-                    Add Saved Workout
-                  </button>
-
-                  <label className="programs-modal-field">
-                    <span>Workout Exercises</span>
-                    {exerciseOptions.map((exercise) => (
-                      <label key={exercise.id} className="exercise-label">
-                        <input
-                          key={exercise.id}
-                          type="checkbox"
-                          name={"plan_exercises"}
-                          value={String(exercise.id)}
-                          checked={createPlanExercise.includes(String(exercise.id))}
-                          onChange={(event) => {
-                            const selectedIds = event.target.checked
-                              ? [...createPlanExercise, String(exercise.id)]
-                              : createPlanExercise.filter((id) => id !== String(exercise.id))
-                            setCreatePlanExercise(selectedIds)
-                          }}
-                          disabled={exerciseOptions.length === 0 || workoutPlan.length === 0}
-                        />
-                        <div className="multiselect-option">{exercise.title}</div>
-                      </label>
-                    ))}
-                  </label>
-
-                  <button
-                    type="button"
-                    className="programs-modal-secondary-btn programs-plan-add-btn"
-                    onClick={() =>
-                      handleAddWorkoutToPlanWeek(
-                        Number(createPlanWeek),
-                        createPlanExercise.map((exerciseId) => Number(exerciseId)).filter((exerciseId) => Number.isFinite(exerciseId)),
-                      )
-                    }
-                    disabled={createPlanExercise.length === 0 || workoutPlan.length === 0}
-                  >
-                    Add Workout
+                    <span className="programs-modal-exercise-picker-icon"></span>
+                    <img src={ExerciseIcon} alt="Exercise Library Icon" />
                   </button>
                   <Link
                     to="#"
@@ -3562,6 +3525,15 @@ function Programs({
                           buildWodsFromWeekEntry(weekEntry).map((wodEntry, wodIndex) => (
                             <article key={`create-${weekEntry.week_number}-${wodEntry.key}`} className="programs-plan-week-card">
                               <div className="programs-plan-controls">
+                                <button
+                                  type="button"
+                                  className="programs-plan-reorder-btn"
+                                  onClick={() => handleReorderCreateWod(weekEntry.week_number, wodEntry.key, "down")}
+                                  disabled={wodIndex === buildWodsFromWeekEntry(weekEntry).length - 1}
+                                  aria-label={`Move WOD ${wodEntry.title || "entry"} down`}
+                                >
+                                  <img src={reorderIcon} alt="" aria-hidden="true" />
+                                </button>
                                 <label className="programs-modal-field">
                                   <span>WOD Title</span>
                                   <input
@@ -3699,7 +3671,6 @@ function Programs({
                                         }
                                       }}
                                     >
-                                      <img src={reorderIcon} className="programs-plan-reorder-img" alt="" aria-hidden="true" />
                                       <span>{exerciseNameById[exerciseEntry.exercise_id] || `Exercise #${exerciseEntry.exercise_id}`}</span>
                                       <button
                                         type="button"
@@ -3713,21 +3684,6 @@ function Programs({
                                           )}
                                         disabled={exerciseIndex === 0}
                                         aria-label={`Move ${exerciseNameById[exerciseEntry.exercise_id] || `exercise ${exerciseEntry.exercise_id}`} up`}
-                                      >
-                                        <img src={reorderIcon} alt="" aria-hidden="true" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="programs-plan-reorder-btn"
-                                        onClick={() =>
-                                          handleReorderCreateExercise(
-                                            weekEntry.week_number,
-                                            wodEntry.key,
-                                            exerciseEntry.exercise_id,
-                                            "down",
-                                          )}
-                                        disabled={exerciseIndex === wodEntry.exercise_entries.length - 1}
-                                        aria-label={`Move ${exerciseNameById[exerciseEntry.exercise_id] || `exercise ${exerciseEntry.exercise_id}`} down`}
                                       >
                                         <img src={reorderIcon} alt="" aria-hidden="true" />
                                       </button>
@@ -4100,7 +4056,7 @@ function Programs({
                         onClick={handleAddSavedWorkoutToDetailWeek}
                         disabled={!detailPlanWorkoutId || !detailPlanWodKey || detailsWorkoutPlan.length === 0}
                       >
-                        Add Saved Workout
+                        {}
                       </button>
                     </div>
                   ) : null}
@@ -4115,6 +4071,7 @@ function Programs({
                         {buildWodsFromWeekEntry(weekEntry).length === 0 ? (
                           <p className="programs-plan-helper">No WODs added yet.</p>
                         ) : (
+                          /* TODO: Delete this below. Pretty sure its old and implement next TODO */
                           buildWodsFromWeekEntry(weekEntry).map((wodEntry, wodIndex) => (
                             <article key={`details-${weekEntry.week_number}-${wodEntry.key}`} className="programs-plan-week-card">
                               <h5>{wodEntry.title}{wodEntry.is_rest ? " (Rest)" : ""}</h5>
@@ -4129,15 +4086,7 @@ function Programs({
                                   >
                                     <img src={reorderIcon} alt="" aria-hidden="true" />
                                   </button>
-                                  <button
-                                    type="button"
-                                    className="programs-plan-reorder-btn"
-                                    onClick={() => handleReorderDetailWod(weekEntry.week_number, wodEntry.key, "down")}
-                                    disabled={wodIndex === buildWodsFromWeekEntry(weekEntry).length - 1}
-                                    aria-label={`Move WOD ${wodEntry.title || "entry"} down`}
-                                  >
-                                    <img src={reorderIcon} alt="" aria-hidden="true" />
-                                  </button>
+                                  
                                 </div>
                               ) : null}
                               {wodEntry.is_rest ? (
@@ -4173,6 +4122,7 @@ function Programs({
                                   No exercises added yet. Drag an exercise here.
                                 </p>
                               ) : (
+                                /* TODO: implement this instead of above.*/
                                 <ul
                                   className="programs-plan-exercise-list"
                                   onDragOver={(event) => {
