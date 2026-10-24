@@ -375,7 +375,7 @@ function Exercises({
   const [exercisesErrorMessage, setExercisesErrorMessage] = useState("")
   const [visibleExerciseCount, setVisibleExerciseCount] = useState(PAGE_SIZE)
   const [activeCardId, setActiveCardId] = useState(null)
-  const isProgramAddMode = routeSearchParams.get("source") === "new-program" && routeSearchParams.get("newProgram") === "true"
+  const isProgramAddMode = routeSearchParams.get("newProgram") === "true"
   const requestedPlanWeek = Number(routeSearchParams.get("planWeek") || 1)
   const targetPlanWeek = Number.isFinite(requestedPlanWeek) && requestedPlanWeek > 0 ? requestedPlanWeek : 1
   const targetPlanWodKey = String(routeSearchParams.get("planWodKey") || "")
@@ -387,6 +387,9 @@ function Exercises({
   const editModalTriggerRef = useRef(null)
   const addModalPreviouslyOpen = useRef(false)
   const editModalPreviouslyOpen = useRef(false)
+  console.log('newProgram query param:', routeSearchParams.get("newProgram") === "true")
+  
+  console.log('isProgramAddMode after initialization:', isProgramAddMode)
 
   const resolvedExerciseLibraryState = exerciseLibraryState ?? {
     exerciseLibrary: [],

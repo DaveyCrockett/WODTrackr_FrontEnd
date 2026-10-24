@@ -1973,6 +1973,7 @@ const handleAddSavedWorkoutToCreateWeek = () => {
     }
     setHasHydratedCreateDraft(true)
     openCreateModal()
+    console.log('searchParams on open create modal:', searchParams.newProgram)
   }
 
 
@@ -2026,13 +2027,6 @@ const handleAddSavedWorkoutToCreateWeek = () => {
     })
   }, [isCreateModalOpen, hasHydratedCreateDraft, createFormValues, createPlanWeek, createPlanWodKey])
 
-  const handleOpenExercisePicker = () => {
-    saveCreateProgramDraft({
-      createFormValues,
-      createPlanWeek,
-      createPlanWodKey,
-    })
-  }
 
   useEffect(() => {
     if (!isCreateModalOpen) {
@@ -3487,7 +3481,6 @@ const handleAddSavedWorkoutToCreateWeek = () => {
                         event.preventDefault()
                         return
                       }
-                      handleOpenExercisePicker()
                     }}
                     aria-disabled={!createPlanWodKey}
                   >

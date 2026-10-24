@@ -8,9 +8,12 @@ function AddToProgram({ isAdded, onToggle, currentExerciseId }) {
   };
 
   return (
+    
     <div 
+      
       className={`add-exercise-to-program ${isAdded ? 'added' : ''}`} onClick={(e) => handleAddClick(e)} disabled={!currentExerciseId}
     >
+      {console.log('AddToProgram rendered with isAdded:', isAdded)}
     </div>
   );
 }
